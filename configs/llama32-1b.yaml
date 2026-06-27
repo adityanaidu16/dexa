@@ -1,0 +1,39 @@
+# First real cluster run: Llama-3.2-1B sanity check.
+# Llama-arch -> the exact compact-decode path works as-is.
+# Note: meta-llama models are gated on HF (set HF_TOKEN), or use an ungated
+# mirror e.g. `unsloth/Llama-3.2-1B-Instruct`.
+name: llama32-1b
+backend: hf
+model: meta-llama/Llama-3.2-1B-Instruct
+device: cuda
+dtype: bfloat16
+out_dir: benchmarks/out/llama32-1b
+plots: true
+
+# Cost model for reporting GPU-seconds / $ (tune to your hardware).
+cost:
+  name: a100-80g/1B
+  prefill_tok_per_s: 30000
+  decode_tok_per_s: 200
+  gpu_dollars_per_hour: 1.80
+  kv_bytes_per_token: 65536
+
+niah:
+  enabled: true
+  task: niah_single
+  lengths: [2000, 8000]
+  ratios: [8, 16, 32, 64, 128]
+  seeds: 8
+  ref_strategy: self_study
+  n_ref: 256
+  compactors: [attention_matching, heavy_hitter, snapkv, recent_window, random_subset]
+  am: {alloc: sensitivity, ridge: 0.05}
+
+agentic:
+  enabled: true
+  turns: 24
+  turn_tokens: 500
+  budget: 1000
+  seeds: 4
+  n_facts: 8
+  strategies: [full_kv, truncate_recent, "dexa:attention_matching", "dexa:heavy_hitter"]

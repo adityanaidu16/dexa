@@ -1,0 +1,21 @@
+# Local CPU smoke test: validates the full config -> run -> report -> plot path
+# on the small cached model before you spend GPU-hours. Runs in a few minutes.
+name: smoke-cpu
+backend: hf
+model: HuggingFaceTB/SmolLM2-360M-Instruct
+device: cpu
+dtype: float32
+out_dir: benchmarks/out/smoke-cpu
+plots: true
+
+niah:
+  enabled: true
+  task: niah_single
+  lengths: [400]
+  ratios: [8, 32, 128]
+  seeds: 2
+  ref_strategy: self_study
+  n_ref: 128
+
+agentic:
+  enabled: false   # keep the smoke test fast

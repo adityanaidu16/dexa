@@ -241,9 +241,40 @@ def random_samples(
     return samples
 
 
+# Config keys -> CLI dest names (only these are read from a --config YAML/JSON).
+_CONFIG_KEYS = {
+    "model": "model",
+    "device": "device",
+    "dtype": "dtype",
+    "n_latents": "n_latents",
+    "context_len": "context_len",
+    "answer_len": "answer_len",
+    "n_samples": "n_samples",
+    "steps": "steps",
+    "lr": "lr",
+    "seed": "seed",
+}
+
+
+def _resolve_device(device: str) -> str:
+    """Honor the requested device, falling back to CPU when CUDA is absent."""
+    if device.startswith("cuda") and not torch.cuda.is_available():
+        print(f"NOTE: '{device}' requested but CUDA is unavailable; using CPU.")
+        return "cpu"
+    return device
+
+
 def main(argv: Optional[list[str]] = None) -> None:
-    ap = argparse.ArgumentParser(description="Train STILL perceivers (CPU demo).")
+    ap = argparse.ArgumentParser(
+        description="Train STILL perceivers. Defaults run a tiny-model CPU smoke "
+        "test; pass --config configs/still-train.yaml for a real run."
+    )
+    # --device defaults to cuda and falls back to cpu automatically, which keeps
+    # the no-config invocation a CPU smoke run on a machine without a GPU.
+    ap.add_argument("--config", default=None, help="YAML/JSON of hyperparameters (configs/still-train.yaml)")
     ap.add_argument("--model", default="hf-internal-testing/tiny-random-LlamaForCausalLM")
+    ap.add_argument("--device", default="cuda", help="cuda | cpu (cuda falls back to cpu if unavailable)")
+    ap.add_argument("--dtype", default="auto", help="auto | float32 | bfloat16 | float16 ('auto' => f32 on cpu, bf16 on gpu)")
     ap.add_argument("--n-latents", type=int, default=4)
     ap.add_argument("--context-len", type=int, default=12)
     ap.add_argument("--answer-len", type=int, default=4)
@@ -251,13 +282,35 @@ def main(argv: Optional[list[str]] = None) -> None:
     ap.add_argument("--steps", type=int, default=50)
     ap.add_argument("--lr", type=float, default=1e-3)
     ap.add_argument("--seed", type=int, default=0)
+
+    # Two-pass parse so config values override the built-in defaults while an
+    # explicit CLI flag still overrides the config.
+    pre, _ = ap.parse_known_args(argv)
+    if pre.config:
+        from dexa.bench.config import _load_raw
+
+        raw = _load_raw(pre.config) or {}
+        unknown = set(raw) - set(_CONFIG_KEYS)
+        if unknown:
+            raise ValueError(f"unknown still-train config keys: {sorted(unknown)}")
+        ap.set_defaults(**{_CONFIG_KEYS[k]: v for k, v in raw.items()})
     args = ap.parse_args(argv)
 
-    print(
-        "NOTE: this is a CPU smoke run on a tiny model. Full STILL training "
-        "(real models, long contexts, many documents) needs the cluster."
-    )
-    backend = HFBackend(model_name=args.model, device="cpu", dtype="float32")
+    device = _resolve_device(str(args.device))
+    dtype = args.dtype
+    if dtype == "auto":
+        dtype = "float32" if device == "cpu" else "bfloat16"
+
+    if args.config is None:
+        print(
+            "NOTE: no --config given -> tiny-model smoke defaults. Full STILL "
+            "training (real models, long contexts, many documents) needs the "
+            "cluster; see configs/still-train.yaml and docs/CLUSTER.md."
+        )
+    print(f"==> model={args.model} device={device} dtype={dtype} "
+          f"n_latents={args.n_latents} steps={args.steps}", flush=True)
+
+    backend = HFBackend(model_name=args.model, device=device, dtype=dtype)
     perceivers = build_perceivers(backend, args.n_latents)
     samples = random_samples(
         backend,

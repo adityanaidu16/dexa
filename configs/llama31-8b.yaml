@@ -1,0 +1,48 @@
+# Scale-up run: Llama-3.1-8B. Llama-arch, so the exact compact-decode path works
+# as-is on the HFBackend (faithful, single-GPU).
+#
+# THROUGHPUT NOTE: for an 8B-class model the path to fast, multi-GPU runs is the
+# vLLM backend with tensor parallelism. Set `backend: vllm` and launch with
+# `--tensor-parallel-size N` on the cluster (see docs/CLUSTER.md "Scaling up").
+# Keep `backend: hf` for the faithful, deterministic eval used in the paper.
+#
+# Note: meta-llama models are gated on HF (set HF_TOKEN), or use an ungated
+# mirror e.g. `unsloth/Meta-Llama-3.1-8B-Instruct`.
+name: llama31-8b
+backend: hf
+model: meta-llama/Llama-3.1-8B-Instruct
+device: cuda
+dtype: bfloat16
+out_dir: benchmarks/out/llama31-8b
+plots: true
+
+# Cost model for reporting GPU-seconds / $ (tune to your hardware).
+# kv_bytes_per_token scaled from the 1B config by layers*kv_heads*head_dim.
+cost:
+  name: a100-80g/8B
+  prefill_tok_per_s: 9000
+  decode_tok_per_s: 70
+  gpu_dollars_per_hour: 1.80
+  kv_bytes_per_token: 262144
+
+niah:
+  enabled: true
+  task: niah_single
+  # Longer contexts: 8B comfortably handles the 32k regime where the
+  # extreme-compression (128x) AM win is most interesting to verify at scale.
+  lengths: [4000, 16000, 32000]
+  ratios: [8, 16, 32, 64, 128]
+  seeds: 8
+  ref_strategy: self_study
+  n_ref: 256
+  compactors: [attention_matching, heavy_hitter, snapkv, recent_window, random_subset]
+  am: {alloc: sensitivity, ridge: 0.05}
+
+agentic:
+  enabled: true
+  turns: 24
+  turn_tokens: 500
+  budget: 1000
+  seeds: 4
+  n_facts: 8
+  strategies: [full_kv, truncate_recent, "dexa:attention_matching", "dexa:heavy_hitter"]

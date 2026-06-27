@@ -1,0 +1,32 @@
+# STILL perceiver distillation hyperparameters.
+#
+# Consumed by `python -m dexa.compaction.still.train --config configs/still-train.yaml`.
+# Every key here maps 1:1 to a CLI flag of the trainer; an explicit CLI flag
+# overrides the value set here, which in turn overrides the trainer's built-in
+# (tiny-model CPU smoke) defaults. See docs/CLUSTER.md "STILL training".
+#
+# NOTE: the in-repo trainer distills against synthetic random token samples,
+# which exercises the full loop but is not a real distillation corpus. The
+# loop/optimizer/loss are identical to a full run; swap in a real document
+# sampler for production training on the cluster.
+
+# Frozen base model to distill against (ungated; swap for your target model).
+model: HuggingFaceTB/SmolLM2-360M-Instruct
+
+# Device + dtype. device defaults to cuda and falls back to cpu automatically
+# if CUDA is unavailable. dtype "auto" => float32 on CPU, bfloat16 on GPU.
+device: cuda
+dtype: auto
+
+# Perceiver capacity: number of compact latent slots learned per layer.
+n_latents: 64
+
+# Synthetic-sample shape (context tokens distilled, answer tokens scored).
+context_len: 2048
+answer_len: 64
+n_samples: 32
+
+# Optimization.
+steps: 500
+lr: 0.001
+seed: 0

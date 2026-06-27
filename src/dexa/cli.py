@@ -68,6 +68,13 @@ def _cmd_bench(args) -> int:
     return 0
 
 
+def _cmd_run(args) -> int:
+    from dexa.bench.run import run_config_file
+
+    run_config_file(args.config)
+    return 0
+
+
 def _float_list(s: str) -> list[float]:
     return [float(x) for x in s.split(",") if x.strip()]
 
@@ -95,6 +102,10 @@ def build_parser() -> argparse.ArgumentParser:
     b.add_argument("--no-plots", action="store_true", help="skip matplotlib plots")
     b.add_argument("--no-accuracy", action="store_true", help="skip greedy-generate accuracy")
     b.set_defaults(func=_cmd_bench)
+
+    r = sub.add_parser("run", help="run a config-driven benchmark (the cluster entrypoint)")
+    r.add_argument("--config", required=True, help="path to a YAML/JSON RunConfig")
+    r.set_defaults(func=_cmd_run)
     return p
 
 

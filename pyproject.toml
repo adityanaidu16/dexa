@@ -21,10 +21,15 @@ torch = [
     "torch>=2.2",
     "transformers>=4.44",
 ]
-# Benchmark reporting.
+# Benchmark reporting + config-driven runs.
 bench = [
     "matplotlib>=3.7",
     "rich>=13.0",
+    "pyyaml>=6.0",
+]
+# GPU cluster deployment (install alongside a CUDA torch build).
+gpu = [
+    "vllm>=0.6",
 ]
 dev = [
     "pytest>=8.0",

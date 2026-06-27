@@ -8,6 +8,13 @@ context raw (STILL-style: compress old, keep recent), so memory stays flat and
 late-turn recall stays high.
 """
 
+from dexa.memory.store import TierSpec, TieredCacheStore, default_tiers
 from dexa.memory.working_memory import MemorySnapshot, WorkingMemory
 
-__all__ = ["WorkingMemory", "MemorySnapshot"]
+__all__ = [
+    "WorkingMemory",
+    "MemorySnapshot",
+    "TieredCacheStore",
+    "TierSpec",
+    "default_tiers",
+]

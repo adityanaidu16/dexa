@@ -2,6 +2,23 @@
 
 Open-source inference-state engine. Turns ephemeral KV cache into persistent, mutable, versioned, governed state.
 
+> **Implementation status (v0.1).** The current prototype is **compaction-first**:
+> it treats a chunk of context as a *compact* KV cache (much smaller keys/values +
+> per-key attention biases) that preserves the model's behavior. This is the
+> [Attention Matching](https://arxiv.org/abs/2602.16284) / Cartridges / STILL line
+> of work, and it directly attacks the memory wall and long-horizon agentic
+> context. Built so far: a model-backend abstraction (HF backend with an *exact*
+> compact-decode path; a vLLM adapter for the cluster), the Attention Matching
+> compactor + selection baselines (H2O/SnapKV/recent/random), a STILL-style
+> amortized perceiver, a bounded iterative **working memory** for agent loops, an
+> LMCache-style reuse+tiering baseline, and a benchmark harness. See
+> [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and
+> [`docs/RESULTS.md`](docs/RESULTS.md) (honest results, incl. where the win is and
+> isn't). Headline: on SmolLM2-360M needle-recall, Attention Matching is the only
+> method that survives **128× compression** (recall 0.90 vs H2O 0.43), while at
+> moderate ratios all good methods tie. The DAG / segment-dependency design below
+> is the original framing and a candidate later substrate, not what's built today.
+
 ## What it is
 
 Dexa is a library + sidecar that interposes between your inference engine (vLLM, SGLang, Dynamo, TensorRT-LLM) and the storage hierarchy. It does not serve tokens — it owns the lifecycle of the engine's state.

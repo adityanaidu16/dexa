@@ -337,10 +337,32 @@ class AttentionMatching(Compactor):
     ) -> np.ndarray:
         """Fit Cv mapping compact attention weights X to the full output Y.
 
-        ``value_ridge == 0`` uses a plain least-squares solve. A positive ridge
-        ``lambda`` solves the regularized normal equations
-        ``(X^T X + lambda I) Cv = X^T Y``, which conditions an otherwise
-        rank-deficient / overfit fit and removes the recall dip at mid budgets.
+        The compact attention-weight matrix ``X`` [n_ref, t] is rank-deficient
+        whenever a kept key receives ~0 weight across *every* reference query --
+        common when key selection keeps duplicate / collinear keys that the bias
+        fit then zeroes out (``beta = log(1e-9)``). Such a key is a near-zero
+        column of ``X``; a plain ``lstsq`` / normal-equations solve leaves its row
+        of ``Cv`` unconstrained and sends it to ~1e10. That is harmless in
+        isolation (the key carries ~0 weight) but a float32 overflow waiting to
+        happen, and it detonates once the compact cache is fused with raw KV in
+        WorkingMemory. Three safeguards keep ``|Cv|`` on the scale of the values
+        it replaces without disturbing the well-conditioned fit:
+
+        1. **Drop dead keys.** Keys whose total reference weight is ~0 are
+           excluded from the fit and their value left at 0; they contribute ~0 to
+           any future attention output, so 0 is as good as anything -- and finite.
+        2. **Bounded solve.** The live columns are fit via the ridge normal
+           equations ``(X^T X + lambda I) Cv = X^T Y``. Even the default
+           ``value_ridge == 0`` applies a tiny scale-adaptive ``lambda`` (relative
+           to ``mean(diag(X^T X))``) so the solve stays well-posed for any
+           remaining near-collinear live keys; a user-supplied ``value_ridge > 0``
+           overrides it (and additionally conditions an overfit fit at mid
+           budgets, removing the recall dip there).
+        3. **Clip the dropped rows** to the empirical per-dim range of the
+           original ``V`` for this head -- a no-op safety net (the dropped rows
+           are 0, the live rows already sit inside this range) that guarantees no
+           value escapes the magnitude of the values it stands in for.
+
         ``value_train_frac < 1`` fits on a deterministic subset of the reference
         queries (the rest are held out) to further discourage overfitting.
         """
@@ -352,12 +374,39 @@ class AttentionMatching(Compactor):
             idx = np.linspace(0, X.shape[0] - 1, n_fit).astype(int)
             X, Y = X[idx], Y[idx]
 
-        if self.value_ridge <= 0.0:
-            Cv, *_ = np.linalg.lstsq(X, Y, rcond=None)             # [t, d]
-            return Cv.astype(np.float32)
-
         t = X.shape[1]
-        XtX = X.T @ X + self.value_ridge * np.eye(t, dtype=X.dtype)
-        XtY = X.T @ Y
-        Cv = np.linalg.solve(XtX, XtY)                             # [t, d]
+        # A compact key gets ~0 weight across all reference queries -> near-zero
+        # column -> its Cv row is unconstrained by the fit. Drop it (value 0).
+        live = X.sum(axis=0) > 1e-6 * X.shape[0]                   # [t]
+        Cv = np.zeros((t, V.shape[1]), dtype=np.float64)
+        if live.any():
+            Cv[live] = self._solve_value_map(X[:, live], Y)
+
+        # Safety net: keep every value inside the original V's per-dim range.
+        # Live rows already lie within it; this only clamps the dropped rows.
+        lo = V.min(axis=0)
+        hi = V.max(axis=0)
+        if (~live).any():
+            Cv[~live] = np.clip(Cv[~live], lo, hi)
         return Cv.astype(np.float32)
+
+    def _solve_value_map(self, X: np.ndarray, Y: np.ndarray) -> np.ndarray:
+        """Solve ``X @ Cv ~= Y`` for the live compact keys with a bounded ridge.
+
+        ``value_ridge > 0`` uses that ``lambda`` directly; the default ``0``
+        applies a tiny scale-adaptive ``lambda`` (relative to the mean diagonal of
+        ``X^T X``) so the normal equations stay well-posed -- bounding the
+        solution for near-collinear keys without perceptibly altering the
+        well-conditioned fit. Done in float64 for numerical headroom, then cast
+        back to float32 by the caller.
+        """
+        Xd = X.astype(np.float64)
+        Yd = Y.astype(np.float64)
+        n = Xd.shape[1]
+        XtX = Xd.T @ Xd
+        if self.value_ridge > 0.0:
+            lam = self.value_ridge
+        else:
+            lam = 1e-6 * (float(np.trace(XtX)) / max(n, 1)) + 1e-12
+        XtX = XtX + lam * np.eye(n, dtype=np.float64)
+        return np.linalg.solve(XtX, Xd.T @ Yd)

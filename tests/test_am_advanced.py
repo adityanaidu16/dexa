@@ -144,6 +144,58 @@ def test_train_frac_runs(backend, context):
     assert am_cos < rnd_cos
 
 
+# --- ill-conditioned value fit (dead compact keys) ------------------------
+def test_value_fit_stays_finite_with_dead_keys():
+    """Repeated tokens make several kept keys collinear; the bias fit zeroes all
+    but one (``beta = log(1e-9)``), so those keys get ~0 attention weight across
+    every reference query -- a near-zero column of the value-fit matrix ``X``.
+
+    Regression: a plain lstsq/normal-equations solve sent those unconstrained
+    ``Cv`` rows to ~1e10 (float32 overflow). The fit must drop / bound them so
+    the compact values stay finite and on the scale of the original ``V``.
+    """
+    be = FakeBackend(n_layers=1, n_q_heads=2, n_kv_heads=1, head_dim=8)
+    rng = np.random.default_rng(0)
+    # Heavy repetition -> many duplicate (collinear) keys.
+    token_ids = [7] * 40 + [9] * 40 + [int(x) for x in rng.integers(0, 4, size=40)]
+    cache = be.prefill(token_ids)
+    ref = be.reference_queries([7, 9, 1, 2, 3])
+
+    # Budget big enough that key selection keeps several of the duplicates.
+    am = AttentionMatching().compact(
+        cache, CompactionBudget(tokens_per_head=20), ref_queries=ref
+    )
+
+    v_absmax = max(float(np.abs(l.value).max()) for l in cache.layers)
+    for cl in am.layers:
+        for cv in cl.values:
+            assert np.isfinite(cv).all(), "compact values must be finite"
+            # No value may escape ~the magnitude of the V it stands in for. The
+            # pre-fix overflow was ~10 orders larger (~1e10 vs ~1), so a 10x
+            # bound is a strict, hash-seed-robust regression guard.
+            assert float(np.abs(cv).max()) <= 10.0 * v_absmax
+
+
+def test_value_fit_no_overflow_warnings():
+    """Compaction over a duplicate-heavy context must not raise float overflow
+    warnings from the value fit."""
+    be = FakeBackend(n_layers=2, n_q_heads=4, n_kv_heads=2, head_dim=8)
+    rng = np.random.default_rng(1)
+    token_ids = [3] * 60 + [11] * 60 + [int(x) for x in rng.integers(0, 6, size=60)]
+    cache = be.prefill(token_ids)
+    ref = be.reference_queries([3, 11, 0, 1, 2, 4])
+
+    old = np.seterr(over="raise", invalid="raise")
+    try:
+        am = AttentionMatching().compact(
+            cache, CompactionBudget(ratio=6.0), ref_queries=ref
+        )
+    finally:
+        np.seterr(**old)
+    assert isinstance(am, CompactCache)
+    assert all(np.isfinite(v).all() for l in am.layers for v in l.values)
+
+
 # --- self-study reference queries (HF, guarded) ---------------------------
 def test_self_study_reference_queries_smoke():
     pytest.importorskip("torch")

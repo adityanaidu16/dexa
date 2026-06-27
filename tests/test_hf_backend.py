@@ -116,6 +116,33 @@ def test_generate_and_score_shapes(backend):
 
 
 @pytest.mark.torch
+def test_bf16_decode_no_overflow():
+    """Regression: the mask/padded-bias sentinel must fit the active dtype.
+    float32's min overflows bfloat16, which crashed score()/generate() on GPU
+    (bf16) even though the float32 CPU tests passed."""
+    from dexa.compaction.base import CompactionBudget
+    from dexa.compaction.baselines import build
+
+    be = HFBackend(model_name=MODEL, device="cpu", dtype="bfloat16")
+    tokens = be.tokenize("the magic number for alpha is 4242 over the green hills today")
+    full = be.prefill(tokens)
+    refs = be.reference_queries(tokens, strategy="self", n_per_head=8)
+    prompt = be.tokenize("what is the magic number")
+    gold = be.tokenize("4242")
+
+    lp_full = be.score(full, prompt, gold)               # the line that crashed
+    assert np.all(np.isfinite(lp_full)) and lp_full.shape == (len(gold),)
+
+    comp = build("attention_matching", value_ridge=0.05).compact(
+        full, CompactionBudget(ratio=4.0), ref_queries=refs)
+    lp_comp = be.score(comp, prompt, gold)               # exercises padded beta = sentinel
+    assert np.all(np.isfinite(lp_comp))
+
+    gen = be.generate(comp, prompt, max_new_tokens=3)
+    assert len(gen) == 3
+
+
+@pytest.mark.torch
 def test_reference_queries_shapes(backend):
     tokens = backend.tokenize("reference query capture test sentence here now")
     s = backend.spec

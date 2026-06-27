@@ -97,6 +97,10 @@ class HFBackend(ModelBackend):
         self.model_name = model_name
         self.device = torch.device(device)
         self._torch_dtype = getattr(torch, dtype)
+        # dtype-aware "-inf" sentinel for masks/padded biases. float32's min
+        # (-3.40e38) overflows bf16 (max ~3.39e38), so derive it from the active
+        # dtype; exp(this) == 0 after softmax for any float dtype.
+        self._neg = float(torch.finfo(self._torch_dtype).min)
 
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.model = AutoModelForCausalLM.from_pretrained(
@@ -325,7 +329,7 @@ class HFBackend(ModelBackend):
         for li in range(s.n_layers):
             k_full = np.zeros((s.n_kv_heads, phys, s.head_dim), dtype=np.float32)
             v_full = np.zeros((s.n_kv_heads, phys, s.head_dim), dtype=np.float32)
-            beta_kv = np.full((s.n_kv_heads, phys), _NEG, dtype=np.float32)
+            beta_kv = np.full((s.n_kv_heads, phys), self._neg, dtype=np.float32)
             if isinstance(context, KVCache):
                 lk = context.layers[li]
                 t = lk.key.shape[1]
@@ -369,7 +373,7 @@ class HFBackend(ModelBackend):
         #   * new-token columns: causal.
         mask = torch.zeros(1, 1, q_len, kv_len, dtype=self._torch_dtype, device=self.device)
         causal = torch.triu(
-            torch.full((q_len, q_len), _NEG, dtype=self._torch_dtype, device=self.device),
+            torch.full((q_len, q_len), self._neg, dtype=self._torch_dtype, device=self.device),
             diagonal=1,
         )
         mask[0, 0, :, phys:] = causal

@@ -69,9 +69,17 @@ def _cmd_bench(args) -> int:
 
 
 def _cmd_run(args) -> int:
-    from dexa.bench.run import run_config_file
+    from dexa.bench.config import load_config
+    from dexa.bench.run import run_config
 
-    run_config_file(args.config)
+    cfg = load_config(args.config)
+    if args.model:
+        cfg.model = args.model
+    if args.out_dir:
+        cfg.out_dir = args.out_dir
+    if args.device:
+        cfg.device = args.device
+    run_config(cfg)
     return 0
 
 
@@ -105,6 +113,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     r = sub.add_parser("run", help="run a config-driven benchmark (the cluster entrypoint)")
     r.add_argument("--config", required=True, help="path to a YAML/JSON RunConfig")
+    r.add_argument("--model", default=None, help="override the config's model (e.g. an ungated mirror)")
+    r.add_argument("--out-dir", default=None, dest="out_dir", help="override the config's out_dir")
+    r.add_argument("--device", default=None, help="override the config's device (cuda|cpu)")
     r.set_defaults(func=_cmd_run)
     return p
 

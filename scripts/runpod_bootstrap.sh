@@ -55,20 +55,38 @@ echo "==> pip install -e '.[hf,bench]' (reusing base torch)"
 $PY -m pip install -q --upgrade pip
 $PY -m pip install -q -e '.[hf,bench]'
 
-# --- HF auth for gated models --------------------------------------------
-if [ -n "${HF_TOKEN:-}" ]; then
-  echo "==> hf login via HF_TOKEN"
-  $PY -m huggingface_hub.commands.huggingface_cli login --token "$HF_TOKEN" --add-to-git-credential 2>/dev/null \
-    || $PY -c "from huggingface_hub import login; login('${HF_TOKEN}')"
+# --- HF auth for gated models (non-fatal: most runs use ungated mirrors) ---
+if [ -n "${HF_TOKEN:-}" ] && [ "${HF_TOKEN}" != "hf_xxx" ]; then
+  echo "==> validating HF_TOKEN"
+  if $PY -c "from huggingface_hub import login; login('${HF_TOKEN}')" 2>/dev/null; then
+    echo "   hf login ok"
+  else
+    echo "   WARNING: HF_TOKEN invalid — ignoring it. Use an ungated model" >&2
+    echo "   (e.g. configs point at meta-llama; pass --model unsloth/Llama-3.2-1B-Instruct)." >&2
+    unset HF_TOKEN
+  fi
+elif [ "${HF_TOKEN:-}" = "hf_xxx" ]; then
+  echo "==> HF_TOKEN is the placeholder 'hf_xxx' — ignoring. Use an ungated mirror via --model." >&2
+  unset HF_TOKEN
 fi
 
 echo "==> environment ready. HF_HOME=$HF_HOME"
 $PY -m pytest -q tests/test_config_run.py 2>/dev/null && echo "   (config runner self-check ok)" || true
 
 # --- run ------------------------------------------------------------------
+# If no valid HF token, default to the ungated mirror so gated meta-llama configs
+# still run out of the box. Override with MODEL=... (or "" to use the config's).
+MODEL_ARG=()
+if [ -n "${MODEL:-}" ]; then
+  MODEL_ARG=(--model "$MODEL")
+elif [ -z "${HF_TOKEN:-}" ]; then
+  MODEL_ARG=(--model "unsloth/Llama-3.2-1B-Instruct")
+  echo "==> no HF token: defaulting to ungated --model unsloth/Llama-3.2-1B-Instruct"
+fi
+
 if [ -n "$CONFIG" ]; then
-  echo "==> dexa run --config $CONFIG"
-  $PY -m dexa.cli run --config "$CONFIG"
+  echo "==> dexa run --config $CONFIG ${MODEL_ARG[*]:-}"
+  $PY -m dexa.cli run --config "$CONFIG" "${MODEL_ARG[@]}"
   echo "==> done. results in $(grep -E '^out_dir:' "$CONFIG" | awk '{print $2}')"
 else
   echo "==> setup only (CONFIG empty). Run e.g.: python -m dexa.cli run --config configs/llama32-1b.yaml"

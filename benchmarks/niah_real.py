@@ -42,7 +42,18 @@ def _sum_logprob(backend, cache, prompt_ids, gold_ids) -> float:
     return float(np.sum(backend.score(cache, prompt_ids, gold_ids)))
 
 
-def run(model: str, length: int, ratios: list[float], seeds: int, out_dir: Path) -> dict:
+def run(
+    model: str,
+    length: int,
+    ratios: list[float],
+    seeds: int,
+    out_dir: Path,
+    *,
+    ref_strategy: str = "self_study",
+    am_alloc: str = "sensitivity",
+    am_ridge: float = 0.05,
+    n_ref: int = 256,
+) -> dict:
     from dexa.engine.hf_backend import HFBackend
 
     print(f"loading {model} ...", flush=True)
@@ -50,8 +61,15 @@ def run(model: str, length: int, ratios: list[float], seeds: int, out_dir: Path)
     spec = backend.spec
     print(f"  spec: {spec.n_layers}L {spec.n_q_heads}q/{spec.n_kv_heads}kv "
           f"head_dim={spec.head_dim}", flush=True)
+    print(f"  ref_strategy={ref_strategy} am_alloc={am_alloc} am_ridge={am_ridge}", flush=True)
 
     methods = ["attention_matching", "heavy_hitter", "snapkv", "recent_window", "random_subset"]
+
+    def make(name):
+        if name == "attention_matching":
+            return build_compactor(name, budget_alloc=am_alloc, value_ridge=am_ridge)
+        return build_compactor(name)
+
     rows: list[dict] = []
 
     for seed in range(seeds):
@@ -63,7 +81,7 @@ def run(model: str, length: int, ratios: list[float], seeds: int, out_dir: Path)
 
         t0 = time.time()
         full = backend.prefill(ctx)
-        refs = backend.reference_queries(ctx, strategy="repeat_prefill", n_per_head=256)
+        refs = backend.reference_queries(ctx, strategy=ref_strategy, n_per_head=n_ref)
         print(f"  prefill+refs {time.time()-t0:.1f}s", flush=True)
 
         ceiling = _sum_logprob(backend, full, prompt, gold)
@@ -79,7 +97,7 @@ def run(model: str, length: int, ratios: list[float], seeds: int, out_dir: Path)
         for ratio in ratios:
             budget = CompactionBudget(ratio=ratio)
             for m in methods:
-                comp = build_compactor(m)
+                comp = make(m)
                 tc = time.time()
                 kwargs = {"ref_queries": refs} if comp.needs_ref_queries else {}
                 cache = comp.compact(full, budget, **kwargs)
@@ -120,9 +138,16 @@ def main() -> None:
     ap.add_argument("--ratios", default="4,8,16")
     ap.add_argument("--seeds", type=int, default=3)
     ap.add_argument("--out-dir", default="benchmarks/out")
+    ap.add_argument("--ref-strategy", default="self_study",
+                    choices=["self_study", "repeat_prefill", "self"])
+    ap.add_argument("--am-alloc", default="sensitivity", choices=["uniform", "sensitivity"])
+    ap.add_argument("--am-ridge", type=float, default=0.05)
+    ap.add_argument("--n-ref", type=int, default=256)
     args = ap.parse_args()
     ratios = [float(x) for x in args.ratios.split(",")]
-    run(args.model, args.length, ratios, args.seeds, Path(args.out_dir))
+    run(args.model, args.length, ratios, args.seeds, Path(args.out_dir),
+        ref_strategy=args.ref_strategy, am_alloc=args.am_alloc,
+        am_ridge=args.am_ridge, n_ref=args.n_ref)
 
 
 if __name__ == "__main__":

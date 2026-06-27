@@ -48,6 +48,24 @@ def _softmax(logits: np.ndarray, axis: int = -1) -> np.ndarray:
     return e / np.clip(e.sum(axis=axis, keepdims=True), 1e-12, None)
 
 
+def _nnls_robust(A: np.ndarray, b: np.ndarray) -> np.ndarray:
+    """Non-negative least squares that never raises.
+
+    ``scipy.optimize.nnls`` can hit its iteration cap on ill-conditioned mass
+    matrices (e.g. self-study reference queries produce near-collinear columns).
+    We give it a generous budget and, if it still fails to converge, fall back
+    to a clipped ordinary least-squares solution -- always non-negative, always
+    a usable answer for the ``beta = log(w)`` step downstream.
+    """
+    maxiter = max(50, 20 * A.shape[1])
+    try:
+        w, _ = nnls(A, b, maxiter=maxiter)
+        return w
+    except RuntimeError:
+        w, *_ = np.linalg.lstsq(A, b, rcond=None)
+        return np.clip(w, 0.0, None)
+
+
 class AttentionMatching(Compactor):
     """Flagship compactor: fit compact keys/values/biases to reference queries.
 
@@ -56,15 +74,45 @@ class AttentionMatching(Compactor):
     key_selection:
         ``"highest_attention"`` (default) -- RMS attention importance top-t.
         ``"omp"`` -- greedy orthogonal matching pursuit on the mass residual.
+    budget_alloc:
+        ``"uniform"`` (default) -- every kv-head gets the same token budget.
+        ``"sensitivity"`` -- distribute a per-layer token budget across kv-heads
+        by sensitivity (paper Algorithm 4): concentrated-attention heads get
+        fewer keys, diffuse heads get more. Total budget per layer is preserved.
+    value_ridge:
+        Tikhonov (ridge) regularization strength ``lambda`` for the value fit.
+        ``0.0`` (default) reproduces the plain ``lstsq`` solve; ``>0`` solves the
+        ridge normal equations ``(X^T X + lambda I) Cv = X^T Y`` which fixes the
+        ill-conditioned / overfit value fit at some budgets.
+    value_train_frac:
+        Fraction of reference queries used to *fit* the value map; the remainder
+        is held out (unused here but reserved for lambda selection). ``1.0``
+        (default) fits on all queries.
     """
 
     name = "attention_matching"
     needs_ref_queries = True
 
-    def __init__(self, key_selection: str = "highest_attention") -> None:
+    def __init__(
+        self,
+        key_selection: str = "highest_attention",
+        *,
+        budget_alloc: str = "uniform",
+        value_ridge: float = 0.0,
+        value_train_frac: float = 1.0,
+    ) -> None:
         if key_selection not in ("highest_attention", "omp"):
             raise ValueError(f"unknown key_selection {key_selection!r}")
+        if budget_alloc not in ("uniform", "sensitivity"):
+            raise ValueError(f"unknown budget_alloc {budget_alloc!r}")
+        if value_ridge < 0:
+            raise ValueError("value_ridge must be >= 0")
+        if not (0.0 < value_train_frac <= 1.0):
+            raise ValueError("value_train_frac must be in (0, 1]")
         self.key_selection = key_selection
+        self.budget_alloc = budget_alloc
+        self.value_ridge = float(value_ridge)
+        self.value_train_frac = float(value_train_frac)
 
     # --- public API -------------------------------------------------------
     def compact(
@@ -81,6 +129,7 @@ class AttentionMatching(Compactor):
         scale = 1.0 / np.sqrt(spec.head_dim)
         T = cache.seq_len
         t = min(budget.target_t(T), T)
+        min_t = min(budget.min_tokens, T)
         positions = cache.positions
 
         layers: list[CompactLayer] = []
@@ -88,6 +137,18 @@ class AttentionMatching(Compactor):
             K_all = cache.layers[l].key       # [n_kv_heads, T, d]
             V_all = cache.layers[l].value     # [n_kv_heads, T, d]
             Q_all = ref_queries.layers[l]     # [n_q_heads, n_ref, d]
+
+            # Aggregate reference queries per kv-head (GQA) once.
+            Qs = [
+                np.concatenate(
+                    [Q_all[qh] for qh in range(spec.n_q_heads) if spec.kv_head_of(qh) == h],
+                    axis=0,
+                ).astype(np.float32)
+                for h in range(spec.n_kv_heads)
+            ]
+
+            # STEP 0: distribute the layer's token budget across kv-heads.
+            t_per_head = self._allocate_budget(Qs, K_all, t, T, min_t, scale)
 
             keys: list[np.ndarray] = []
             values: list[np.ndarray] = []
@@ -97,12 +158,9 @@ class AttentionMatching(Compactor):
             for h in range(spec.n_kv_heads):
                 K = K_all[h].astype(np.float32)   # [T, d]
                 V = V_all[h].astype(np.float32)   # [T, d]
-                # Aggregate every q-head that maps to this kv-head (GQA).
-                q_heads = [qh for qh in range(spec.n_q_heads) if spec.kv_head_of(qh) == h]
-                Q = np.concatenate([Q_all[qh] for qh in q_heads], axis=0).astype(np.float32)
-                # [n_ref_total, d]
+                Q = Qs[h]                         # [n_ref_total, d]
 
-                Ck, Cv, beta, S = self._fit_head(Q, K, V, t, scale)
+                Ck, Cv, beta, S = self._fit_head(Q, K, V, t_per_head[h], scale)
                 keys.append(Ck.astype(np.float32))
                 values.append(Cv.astype(np.float32))
                 biases.append(beta.astype(np.float32))
@@ -115,8 +173,63 @@ class AttentionMatching(Compactor):
             layers=layers,
             logical_length=T,
             method="attention_matching",
-            meta={"key_selection": self.key_selection, "target_t": t},
+            meta={
+                "key_selection": self.key_selection,
+                "target_t": t,
+                "budget_alloc": self.budget_alloc,
+                "value_ridge": self.value_ridge,
+            },
         )
+
+    # --- step 0: per-head budget allocation -------------------------------
+    def _allocate_budget(
+        self,
+        Qs: list[np.ndarray],   # per kv-head [n_ref, d]
+        K_all: np.ndarray,      # [n_kv_heads, T, d]
+        t: int,
+        T: int,
+        min_t: int,
+        scale: float,
+    ) -> list[int]:
+        """Return a per-kv-head token budget summing to ``t * n_kv_heads``.
+
+        ``uniform`` gives every head ``t``. ``sensitivity`` runs a cheap greedy
+        allocation (Algorithm 4): the marginal value of giving a head one more
+        key is the next-largest entry of its sorted attention-importance vector.
+        Selecting the globally-largest marginal values respects the per-head
+        prefix structure (importances are sorted descending), so concentrated
+        heads -- whose importance collapses after a few keys -- receive fewer
+        tokens while diffuse heads receive more. ``min_t`` is honored per head.
+        """
+        n_kv = len(Qs)
+        if self.budget_alloc == "uniform" or t >= T:
+            return [t] * n_kv
+
+        total = t * n_kv
+        min_t = max(1, min(min_t, t))
+        # Per-head importance (descending), measured like ``highest_attention``.
+        imp: list[np.ndarray] = []
+        for h in range(n_kv):
+            full_logits = (Qs[h] @ K_all[h].T) * scale          # [n_ref, T]
+            A = _softmax(full_logits, axis=-1)
+            importance = np.sqrt(np.mean(A ** 2, axis=0))        # [T]
+            imp.append(np.sort(importance)[::-1])                # descending
+
+        alloc = [min_t] * n_kv
+        remaining = total - min_t * n_kv
+        if remaining <= 0:
+            return [min(a, T) for a in alloc]
+
+        # Pool marginal values at ranks >= min_t across heads; take the top
+        # ``remaining`` (capping each head at T). ``(value, head)`` pairs.
+        cands: list[tuple[float, int]] = []
+        for h in range(n_kv):
+            for r in range(min_t, T):
+                cands.append((float(imp[h][r]), h))
+        cands.sort(key=lambda x: -x[0])
+        for _value, h in cands[:remaining]:
+            alloc[h] += 1
+        return [min(a, T) for a in alloc]
 
     # --- per-head fit -----------------------------------------------------
     def _fit_head(
@@ -149,7 +262,7 @@ class AttentionMatching(Compactor):
         # STEP 2: bias fit (NNLS mass matching).
         beta = self._fit_bias(Q, Ck, full_logits, scale)
 
-        # STEP 3: value fit (least squares).
+        # STEP 3: value fit (ridge-regularized least squares).
         Cv = self._fit_values(Q, Ck, K, V, beta, scale)
 
         return Ck, Cv, beta, S
@@ -187,7 +300,7 @@ class AttentionMatching(Compactor):
             j = int(np.argmax(corr))
             selected.append(j)
             A = Phi[:, selected]
-            w, _ = nnls(A, m)
+            w = _nnls_robust(A, m)
             residual = m - A @ w
 
         return np.array(selected, dtype=int)
@@ -208,13 +321,13 @@ class AttentionMatching(Compactor):
         A_mat = np.exp(compact_logits - c)          # [n_ref, t]
         m = np.exp(full_logits - c).sum(axis=1)     # [n_ref]
 
-        w, _ = nnls(A_mat, m)
+        w = _nnls_robust(A_mat, m)
         beta = np.log(np.clip(w, 1e-9, None))
         return beta.astype(np.float32)
 
     # --- step 3 -----------------------------------------------------------
-    @staticmethod
     def _fit_values(
+        self,
         Q: np.ndarray,    # [n_ref, d]
         Ck: np.ndarray,   # [t, d]
         K: np.ndarray,    # [T, d]
@@ -222,8 +335,29 @@ class AttentionMatching(Compactor):
         beta: np.ndarray,  # [t]
         scale: float,
     ) -> np.ndarray:
-        """Least squares: Cv = argmin ||X Cv - Y||, X compact weights, Y full out."""
+        """Fit Cv mapping compact attention weights X to the full output Y.
+
+        ``value_ridge == 0`` uses a plain least-squares solve. A positive ridge
+        ``lambda`` solves the regularized normal equations
+        ``(X^T X + lambda I) Cv = X^T Y``, which conditions an otherwise
+        rank-deficient / overfit fit and removes the recall dip at mid budgets.
+        ``value_train_frac < 1`` fits on a deterministic subset of the reference
+        queries (the rest are held out) to further discourage overfitting.
+        """
         X = _softmax((Q @ Ck.T) * scale + beta[None, :], axis=-1)  # [n_ref, t]
         Y = _softmax((Q @ K.T) * scale, axis=-1) @ V               # [n_ref, d]
-        Cv, *_ = np.linalg.lstsq(X, Y, rcond=None)                 # [t, d]
+
+        if self.value_train_frac < 1.0 and X.shape[0] > Ck.shape[0]:
+            n_fit = max(Ck.shape[0], int(round(self.value_train_frac * X.shape[0])))
+            idx = np.linspace(0, X.shape[0] - 1, n_fit).astype(int)
+            X, Y = X[idx], Y[idx]
+
+        if self.value_ridge <= 0.0:
+            Cv, *_ = np.linalg.lstsq(X, Y, rcond=None)             # [t, d]
+            return Cv.astype(np.float32)
+
+        t = X.shape[1]
+        XtX = X.T @ X + self.value_ridge * np.eye(t, dtype=X.dtype)
+        XtY = X.T @ Y
+        Cv = np.linalg.solve(XtX, XtY)                             # [t, d]
         return Cv.astype(np.float32)

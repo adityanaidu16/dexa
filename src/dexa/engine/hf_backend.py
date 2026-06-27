@@ -164,6 +164,16 @@ class HFBackend(ModelBackend):
         return KVCache(spec=s, layers=layers, positions=positions, token_ids=token_ids)
 
     # --- reference queries ------------------------------------------------
+    #: fixed self-study prompts: synthetic "questions" whose post-RoPE queries
+    #: better cover how a real question attends back over the context than the
+    #: repeat-prefill heuristic (Attention Matching paper, self-study).
+    _SELF_STUDY_PROMPTS = (
+        "Summarize the key facts.",
+        "List every specific detail mentioned.",
+        "What questions could be asked about this?",
+        "Repeat the important numbers and names.",
+    )
+
     def reference_queries(
         self,
         token_ids: list[int],
@@ -174,6 +184,9 @@ class HFBackend(ModelBackend):
         token_ids = list(token_ids)
         T = len(token_ids)
         s = self._spec
+
+        if strategy == "self_study":
+            return self._self_study_queries(token_ids, n_per_head=n_per_head)
 
         if strategy == "repeat_prefill":
             sep = [self._sep_token()]
@@ -187,6 +200,23 @@ class HFBackend(ModelBackend):
         else:
             raise ValueError(f"unknown reference-query strategy: {strategy!r}")
 
+        layers = self._post_rope_queries(full, ref_slice)
+        layers = [self._subsample(q, n_per_head) for q in layers]
+        return RefQueries(spec=s, layers=layers)
+
+    @staticmethod
+    def _subsample(q: np.ndarray, n_per_head: int) -> np.ndarray:
+        """Evenly subsample the query axis (axis=1) to at most ``n_per_head``."""
+        if q.shape[1] > n_per_head:
+            idx = np.linspace(0, q.shape[1] - 1, n_per_head).astype(int)
+            q = q[:, idx]
+        return np.ascontiguousarray(q)
+
+    def _post_rope_queries(self, full: list[int], ref_slice: slice) -> list[np.ndarray]:
+        """Recompute post-RoPE queries ``q = RoPE(q_proj(input_layernorm(h)))``
+        over ``full`` and slice the query axis to ``ref_slice``. Returns a list
+        per layer of ``[n_q_heads, n_sliced, head_dim]`` numpy arrays."""
+        s = self._spec
         L = len(full)
         position_ids = torch.arange(L, device=self.device).unsqueeze(0)
         with torch.no_grad():
@@ -207,12 +237,65 @@ class HFBackend(ModelBackend):
                 q = layer.self_attn.q_proj(normed)       # [1, L, n_q*d]
                 q = q.view(1, L, s.n_q_heads, s.head_dim).transpose(1, 2)  # [1, n_q, L, d]
                 q, _ = apply_rotary_pos_emb(q, q, cos, sin)  # post-RoPE queries
-                q = q[0, :, ref_slice, :].to(torch.float32).cpu().numpy()  # [n_q, T, d]
-                if q.shape[1] > n_per_head:
-                    idx = np.linspace(0, q.shape[1] - 1, n_per_head).astype(int)
-                    q = q[:, idx]
+                q = q[0, :, ref_slice, :].to(torch.float32).cpu().numpy()  # [n_q, n, d]
                 layers.append(np.ascontiguousarray(q))
+        return layers
+
+    def _self_study_queries(self, token_ids: list[int], *, n_per_head: int) -> RefQueries:
+        """Generate short synthetic continuations of the context under several
+        fixed prompts, then collect the post-RoPE queries at the prompt+generated
+        positions. These positions sit just after the context (logical positions
+        ``T..``), so their RoPE phase relative to the cached keys matches a real
+        follow-up question. Aggregate across prompts and subsample per head."""
+        s = self._spec
+        T = len(token_ids)
+        sep = [self._sep_token()]
+        n_gen = 16
+
+        chunks: list[list[np.ndarray]] = [[] for _ in range(s.n_layers)]
+        for prompt in self._SELF_STUDY_PROMPTS:
+            p_ids = self.tokenizer(prompt, add_special_tokens=False)["input_ids"]
+            primer = token_ids + sep + list(p_ids)
+            gen = self._greedy_continuation(primer, n_gen)
+            full = primer + gen
+            # reference positions: the prompt + generated tokens (after context).
+            ref_slice = slice(T + len(sep), len(full))
+            per_layer = self._post_rope_queries(full, ref_slice)
+            for li in range(s.n_layers):
+                chunks[li].append(per_layer[li])
+
+        layers: list[np.ndarray] = []
+        for li in range(s.n_layers):
+            q = np.concatenate(chunks[li], axis=1)        # [n_q, sum_n, d]
+            layers.append(self._subsample(q, n_per_head))
         return RefQueries(spec=s, layers=layers)
+
+    def _greedy_continuation(self, prefix: list[int], n_new: int) -> list[int]:
+        """Greedily decode ``n_new`` tokens after ``prefix`` (no dexa bias)."""
+        L = len(prefix)
+        position_ids = torch.arange(L, device=self.device).unsqueeze(0)
+        with torch.no_grad():
+            out = self.model(
+                input_ids=self._ids(prefix),
+                position_ids=position_ids,
+                use_cache=True,
+            )
+            cache = out.past_key_values
+            last = out.logits[0, -1]
+            generated: list[int] = []
+            for step in range(n_new):
+                nxt = int(torch.argmax(last).item())
+                generated.append(nxt)
+                pos = torch.tensor([[L + step]], device=self.device)
+                out = self.model(
+                    input_ids=self._ids([nxt]),
+                    position_ids=pos,
+                    past_key_values=cache,
+                    use_cache=True,
+                )
+                cache = out.past_key_values
+                last = out.logits[0, -1]
+        return generated
 
     def _sep_token(self) -> int:
         for attr in ("bos_token_id", "eos_token_id"):

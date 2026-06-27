@@ -1,0 +1,32 @@
+# Quick-look 8B run (~10-20 min on an A100-80G).
+# Trades absolute-recall fidelity for speed to validate the pipeline + see the
+# method ordering fast: cheaper reference queries (repeat_prefill, no generation),
+# fewer reference queries (n_ref 64 -> ~4x smaller NNLS/lstsq), one context length,
+# high-ratio regime only, agentic off. For the publishable numbers use
+# llama31-8b-fast.yaml (self_study) or llama31-8b.yaml (full).
+name: llama31-8b-turbo
+backend: hf
+model: meta-llama/Llama-3.1-8B-Instruct   # override: --model unsloth/Llama-3.1-8B-Instruct (ungated)
+device: cuda
+dtype: bfloat16
+out_dir: benchmarks/out/llama31-8b-turbo
+plots: true
+
+cost:
+  name: a100-80g/8B
+  prefill_tok_per_s: 9000
+  kv_bytes_per_token: 262144
+
+niah:
+  enabled: true
+  task: niah_single
+  lengths: [8000]
+  ratios: [16, 32, 64, 128]
+  seeds: 3
+  ref_strategy: repeat_prefill   # cheap (no autoregressive generation)
+  n_ref: 64                       # ~4x smaller compaction matrices
+  compactors: [attention_matching, heavy_hitter, snapkv, recent_window, random_subset]
+  am: {alloc: sensitivity, ridge: 0.05}
+
+agentic:
+  enabled: false

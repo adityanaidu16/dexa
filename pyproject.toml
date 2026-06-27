@@ -27,6 +27,12 @@ bench = [
     "rich>=13.0",
     "pyyaml>=6.0",
 ]
+# HF stack WITHOUT torch — for environments where a CUDA torch is already
+# present (e.g. RunPod PyTorch pods). Use: pip install -e '.[hf,bench]'
+hf = [
+    "transformers>=4.44",
+    "accelerate>=0.30",
+]
 # GPU cluster deployment (install alongside a CUDA torch build).
 gpu = [
     "vllm>=0.6",

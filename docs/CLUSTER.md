@@ -8,6 +8,36 @@ nodes and SLURM. For what the numbers mean and the honest caveats, read
 
 ---
 
+## 0. RunPod quickstart (cheapest path, ~$10–30 total)
+
+RunPod pods ship with CUDA torch preinstalled, so you do **not** run
+`setup_env.sh` there — use the RunPod bootstrap, which reuses the base torch and
+caches models on the persistent `/workspace` volume.
+
+1. Create a **GPU Pod** from a **PyTorch** template. GPU pick:
+   - `configs/llama32-1b.yaml` / `llama32-3b.yaml`: any 16–24 GB GPU (RTX 4090, L4).
+   - `configs/llama31-8b.yaml` (16–32k context): **48 GB** (L40S ~\$0.8/hr) or
+     **A100-80G** (~\$1.7/hr) — the self-study reference pass needs headroom.
+2. Open the pod's web terminal and run:
+   ```bash
+   cd /workspace
+   # gated meta-llama models need a token (or swap to an ungated mirror, see §2):
+   export HF_TOKEN=hf_xxx
+   wget -qO- https://raw.githubusercontent.com/adityanaidu16/dexa/main/scripts/runpod_bootstrap.sh | bash
+   ```
+   That clones the repo, installs `.[hf,bench]` on top of the pod's torch, sets
+   `HF_HOME=/workspace/hf` + `HF_HUB_DISABLE_XET=1`, and runs
+   `configs/llama32-1b.yaml`. Override the run with `CONFIG=configs/llama31-8b.yaml`
+   (or `CONFIG=` to set up only).
+3. Results land in `benchmarks/out/<name>/` (`REPORT.md`, `niah_frontier.png`,
+   `*.json`). Pull them off the pod with `runpodctl send` or the web file browser.
+
+A full sweep (1B + 3B + 8B) is a few GPU-hours — well under \$100. **Stop the pod
+when done** so you stop paying. Manual setup (if you'd rather not use the
+bootstrap) is the same as §1 but skip the torch install.
+
+---
+
 ## 1. Prerequisites
 
 - A Linux node with an NVIDIA GPU and a recent driver.

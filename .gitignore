@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.dexa_store/
+benchmarks/out/
+*.pt
+*.npz
+*.png
+!docs/**/*.png
+.DS_Store

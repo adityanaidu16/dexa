@@ -1,0 +1,39 @@
+# Fast first-pass 8B run (~30-60 min on an A100-80G).
+# Trims the heavy/saturated cells from llama31-8b.yaml: drops the 8x ratio and
+# the 32k length (both are slow — Attention Matching compaction is CPU-bound and
+# scales with t = context/ratio — and 8x is in the saturated tie regime anyway).
+# Use this to see the frontier quickly, then run the full llama31-8b.yaml.
+name: llama31-8b-fast
+backend: hf
+model: meta-llama/Llama-3.1-8B-Instruct   # override with --model unsloth/Llama-3.1-8B-Instruct (ungated)
+device: cuda
+dtype: bfloat16
+out_dir: benchmarks/out/llama31-8b-fast
+plots: true
+
+cost:
+  name: a100-80g/8B
+  prefill_tok_per_s: 9000
+  decode_tok_per_s: 120
+  gpu_dollars_per_hour: 1.80
+  kv_bytes_per_token: 262144
+
+niah:
+  enabled: true
+  task: niah_single
+  lengths: [8000, 16000]
+  ratios: [16, 32, 64, 128]      # the discriminating regime; 8x is saturated + slow
+  seeds: 4
+  ref_strategy: self_study
+  n_ref: 256
+  compactors: [attention_matching, heavy_hitter, snapkv, recent_window, random_subset]
+  am: {alloc: sensitivity, ridge: 0.05}
+
+agentic:
+  enabled: true
+  turns: 12
+  turn_tokens: 500
+  budget: 1000
+  seeds: 2
+  n_facts: 8
+  strategies: [full_kv, truncate_recent, "dexa:attention_matching", "dexa:heavy_hitter"]

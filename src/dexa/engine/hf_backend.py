@@ -29,6 +29,8 @@ Key design points
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+
 import numpy as np
 import torch
 
@@ -146,13 +148,45 @@ class HFBackend(ModelBackend):
         return self.model.model.rotary_emb(dummy, position_ids)
 
     # --- prefill ----------------------------------------------------------
+    @contextmanager
+    def _attn_impl(self, impl: str):
+        """Temporarily switch the model's attention implementation.
+
+        The full-context forwards (prefill, reference queries, self-study
+        generation) are O(n^2) in memory under eager attention — a 32k context
+        materializes a multi-hundred-GB attention matrix and OOMs. They don't
+        need the per-key bias, so we run them under memory-efficient ``sdpa``.
+        Only the compact-*decode* path (tiny cache) needs the eager+bias kernel.
+        Restores the previous impl on exit."""
+        cfgs = [self.model.config]
+        getter = getattr(self.model.config, "get_text_config", None)
+        if getter is not None:
+            try:
+                tc = getter()
+                if tc is not None and tc is not self.model.config:
+                    cfgs.append(tc)
+            except Exception:
+                pass
+        for layer in self.model.model.layers:
+            c = getattr(layer.self_attn, "config", None)
+            if c is not None and c not in cfgs:
+                cfgs.append(c)
+        saved = [(c, getattr(c, "_attn_implementation", None)) for c in cfgs]
+        try:
+            for c in cfgs:
+                c._attn_implementation = impl
+            yield
+        finally:
+            for c, v in saved:
+                c._attn_implementation = v
+
     def prefill(self, token_ids: list[int], *, position_offset: int = 0) -> KVCache:
         token_ids = list(token_ids)
         T = len(token_ids)
         s = self._spec
         position_ids = torch.arange(position_offset, position_offset + T,
                                     device=self.device).unsqueeze(0)
-        with torch.no_grad():
+        with torch.no_grad(), self._attn_impl("sdpa"):
             out = self.model(
                 input_ids=self._ids(token_ids),
                 position_ids=position_ids,
@@ -223,7 +257,7 @@ class HFBackend(ModelBackend):
         s = self._spec
         L = len(full)
         position_ids = torch.arange(L, device=self.device).unsqueeze(0)
-        with torch.no_grad():
+        with torch.no_grad(), self._attn_impl("sdpa"):
             out = self.model(
                 input_ids=self._ids(full),
                 position_ids=position_ids,
@@ -278,7 +312,7 @@ class HFBackend(ModelBackend):
         """Greedily decode ``n_new`` tokens after ``prefix`` (no dexa bias)."""
         L = len(prefix)
         position_ids = torch.arange(L, device=self.device).unsqueeze(0)
-        with torch.no_grad():
+        with torch.no_grad(), self._attn_impl("sdpa"):
             out = self.model(
                 input_ids=self._ids(prefix),
                 position_ids=position_ids,

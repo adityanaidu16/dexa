@@ -1,0 +1,32 @@
+# Decisive validation of the long-context AM fix (~12-18 min on A100-80G).
+# Uses self_study refs (the only strategy whose queries attend the needle at
+# long context). Sets AM to select ~purely by attention mass (mass_frac 0.9) =
+# H2O's keys + AM's bias/value fit, to ISOLATE selection vs fit:
+#   - AM recovers toward H2O at 8000  -> selection was the issue, fix works.
+#   - AM still ~floor while H2O works -> same keys, so it's the VALUE FIT.
+# Includes a length=3000 control where AM is known-good.
+name: validate-8b
+backend: hf
+model: meta-llama/Llama-3.1-8B-Instruct   # override: --model unsloth/Llama-3.1-8B-Instruct
+device: cuda
+dtype: bfloat16
+out_dir: benchmarks/out/validate-8b
+plots: true
+
+cost:
+  name: a100-80g/8B
+  kv_bytes_per_token: 262144
+
+niah:
+  enabled: true
+  task: niah_single
+  lengths: [3000, 8000]
+  ratios: [16, 32, 128]
+  seeds: 2
+  ref_strategy: self_study
+  n_ref: 256
+  compactors: [attention_matching, heavy_hitter, snapkv, recent_window, random_subset]
+  am: {alloc: sensitivity, ridge: 0.05, mass_frac: 0.9, recent_frac: 0.1}
+
+agentic:
+  enabled: false

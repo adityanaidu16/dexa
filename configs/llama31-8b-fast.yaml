@@ -27,7 +27,7 @@ niah:
   ref_strategy: self_study
   n_ref: 256
   compactors: [attention_matching, heavy_hitter, snapkv, recent_window, random_subset]
-  am: {alloc: sensitivity, ridge: 0.05}
+  am: {alloc: sensitivity, ridge: 0.05, mass_frac: 0.5, recent_frac: 0.1}
 
 agentic:
   enabled: true

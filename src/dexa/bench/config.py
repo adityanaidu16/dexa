@@ -26,7 +26,9 @@ class NiahSuite:
     compactors: list[str] = field(default_factory=lambda: [
         "attention_matching", "heavy_hitter", "snapkv", "recent_window", "random_subset",
     ])
-    am: dict = field(default_factory=lambda: {"alloc": "sensitivity", "ridge": 0.05})
+    am: dict = field(default_factory=lambda: {
+        "alloc": "sensitivity", "ridge": 0.05, "mass_frac": 0.5, "recent_frac": 0.1,
+    })
 
 
 @dataclass

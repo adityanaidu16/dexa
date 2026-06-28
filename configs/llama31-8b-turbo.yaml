@@ -26,7 +26,7 @@ niah:
   ref_strategy: repeat_prefill   # cheap (no autoregressive generation)
   n_ref: 64                       # ~4x smaller compaction matrices
   compactors: [attention_matching, heavy_hitter, snapkv, recent_window, random_subset]
-  am: {alloc: sensitivity, ridge: 0.05}
+  am: {alloc: sensitivity, ridge: 0.05, mass_frac: 0.5, recent_frac: 0.1}
 
 agentic:
   enabled: false

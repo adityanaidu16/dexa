@@ -216,3 +216,37 @@ def test_self_study_reference_queries_smoke():
         assert q.shape[2] == s.head_dim
         assert 1 <= q.shape[1] <= 16
         assert np.isfinite(q).all()
+
+
+def test_hybrid_selection_keeps_high_mass_keys():
+    """Mass-aware selection must keep top-attention-mass keys (H2O criterion)
+    that pure-importance selection can drop — the long-context needle fix.
+    Also checks the recent-window and the dedup/backfill to exactly t keys."""
+    import numpy as np
+    from dexa.compaction.attention_matching import AttentionMatching, _softmax
+
+    rng = np.random.default_rng(0)
+    full_logits = rng.standard_normal((8, 12)).astype(np.float32)
+    A = _softmax(full_logits, axis=-1)
+    mass = A.sum(axis=0)
+    importance = np.sqrt((A ** 2).mean(axis=0))
+    t, T = 4, 12
+
+    # mass_frac=1.0 -> exactly the top-t by mass
+    am_mass = AttentionMatching(mass_frac=1.0)
+    S = am_mass._select_hybrid(full_logits, t, T)
+    assert len(S) == t and len(set(S)) == t
+    assert set(S.tolist()) == set(np.argsort(mass)[::-1][:t].tolist())
+
+    # recent_frac=1.0 -> exactly the last t positions
+    am_recent = AttentionMatching(recent_frac=1.0)
+    Sr = am_recent._select_hybrid(full_logits, t, T)
+    assert set(Sr.tolist()) == set(range(T - t, T))
+
+    # hybrid: a recent slot + a mass slot + importance backfill, all distinct, len t
+    am_hy = AttentionMatching(mass_frac=0.5, recent_frac=0.25)
+    Sh = am_hy._select_hybrid(full_logits, t, T)
+    assert len(Sh) == t and len(set(Sh.tolist())) == t
+    assert (T - 1) in set(Sh.tolist())  # the most-recent position is reserved
+    top_mass = set(np.argsort(mass)[::-1][:2].tolist())
+    assert top_mass & set(Sh.tolist())  # at least one top-mass key kept

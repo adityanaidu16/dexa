@@ -34,6 +34,8 @@ def _make_compactor(name: str, am_opts: dict):
             name,
             budget_alloc=am_opts.get("alloc", "sensitivity"),
             value_ridge=am_opts.get("ridge", 0.05),
+            mass_frac=am_opts.get("mass_frac", 0.5),
+            recent_frac=am_opts.get("recent_frac", 0.1),
         )
     return build_compactor(name)
 

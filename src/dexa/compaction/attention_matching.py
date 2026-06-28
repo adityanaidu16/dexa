@@ -100,6 +100,8 @@ class AttentionMatching(Compactor):
         budget_alloc: str = "uniform",
         value_ridge: float = 0.0,
         value_train_frac: float = 1.0,
+        mass_frac: float = 0.0,
+        recent_frac: float = 0.0,
     ) -> None:
         if key_selection not in ("highest_attention", "omp"):
             raise ValueError(f"unknown key_selection {key_selection!r}")
@@ -109,10 +111,21 @@ class AttentionMatching(Compactor):
             raise ValueError("value_ridge must be >= 0")
         if not (0.0 < value_train_frac <= 1.0):
             raise ValueError("value_train_frac must be in (0, 1]")
+        if not (0.0 <= mass_frac <= 1.0):
+            raise ValueError("mass_frac must be in [0, 1]")
+        if not (0.0 <= recent_frac <= 1.0):
+            raise ValueError("recent_frac must be in [0, 1]")
         self.key_selection = key_selection
         self.budget_alloc = budget_alloc
         self.value_ridge = float(value_ridge)
         self.value_train_frac = float(value_train_frac)
+        # Hybrid selection: reserve part of the budget for highest-attention-MASS
+        # keys (H2O-style, robust to query distance at long context) and a small
+        # recent window; the remainder goes to AM's importance ranking. Pure
+        # importance selection (mass_frac=recent_frac=0) drops rare-but-critical
+        # keys (e.g. a far needle) at long context — see docs/RESULTS.md.
+        self.mass_frac = float(mass_frac)
+        self.recent_frac = float(recent_frac)
 
     # --- public API -------------------------------------------------------
     def compact(
@@ -251,7 +264,9 @@ class AttentionMatching(Compactor):
         full_logits = (Q @ K.T) * scale          # [n_ref, T]
 
         # STEP 1: key selection.
-        if self.key_selection == "omp":
+        if self.mass_frac > 0.0 or self.recent_frac > 0.0:
+            S = self._select_hybrid(full_logits, t, T)
+        elif self.key_selection == "omp":
             S = self._select_omp(full_logits, t)
         else:
             S = self._select_highest_attention(full_logits)[:t]
@@ -275,6 +290,40 @@ class AttentionMatching(Compactor):
         importance = np.sqrt(np.mean(A ** 2, axis=0))  # [T]
         order = np.argsort(importance)[::-1]
         return order
+
+    def _select_hybrid(self, full_logits: np.ndarray, t: int, T: int) -> np.ndarray:
+        """Budget split across: recent window, top attention-MASS keys (H2O-style,
+        robust to query distance), and AM importance for the remainder.
+
+        Mass selection is what keeps a rare-but-high-mass key (a far needle) that
+        importance (RMS) alone drops at long context. The union is deduped and
+        backfilled by importance so exactly ``t`` keys are returned."""
+        A = _softmax(full_logits, axis=-1)            # [n_ref, T]
+        importance = np.sqrt(np.mean(A ** 2, axis=0))  # [T]
+        mass = A.sum(axis=0)                           # [T]  (H2O criterion)
+
+        chosen: list[int] = []
+        seen: set[int] = set()
+
+        def take(order: np.ndarray, k: int) -> None:
+            for idx in order:
+                if k <= 0:
+                    break
+                i = int(idx)
+                if i not in seen:
+                    seen.add(i)
+                    chosen.append(i)
+                    k -= 1
+
+        n_recent = min(int(round(self.recent_frac * t)), t)
+        n_mass = min(int(round(self.mass_frac * t)), t - n_recent)
+        # recent window (most recent positions)
+        take(np.arange(T - 1, -1, -1), n_recent)
+        # highest attention mass
+        take(np.argsort(mass)[::-1], n_mass)
+        # remainder by importance
+        take(np.argsort(importance)[::-1], t - len(chosen))
+        return np.array(chosen, dtype=int)
 
     @staticmethod
     def _select_omp(full_logits: np.ndarray, t: int) -> np.ndarray:

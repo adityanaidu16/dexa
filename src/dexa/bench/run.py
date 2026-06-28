@@ -46,7 +46,7 @@ def run_config(cfg: RunConfig) -> dict:
         agentic = run_agentic(
             backend, strategies=a.strategies, n_turns=a.turns, turn_tokens=a.turn_tokens,
             budget_tokens=a.budget, n_facts=a.n_facts, seeds=a.seeds,
-            ref_strategy=a.ref_strategy, cost=cost,
+            ref_strategy=a.ref_strategy, am_opts=a.am, cost=cost,
             out_path=str(out / "agentic.json"), verbose=True,
         )
         results["agentic"] = agentic

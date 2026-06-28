@@ -1,0 +1,33 @@
+# Long-horizon agentic workload: a 20-turn agent loop accumulating ~8k tokens of
+# context, with facts planted in early turns and probed at the end. Compares:
+#   full_kv         - keep everything (unbounded memory: the memory wall)
+#   truncate_recent - hard recent-window to budget (forgets early facts)
+#   dexa:*          - bounded WorkingMemory: compact old chunks, keep recent raw
+# The story: dexa holds a BOUNDED memory while keeping late-turn recall high,
+# where full_kv grows without bound and truncation forgets. Uses the fixed
+# mass-aware AM (mass_frac=1.0) so facts survive compaction. ~20-35 min on A100.
+name: agentic-8b
+backend: hf
+model: meta-llama/Llama-3.1-8B-Instruct   # override: --model unsloth/Llama-3.1-8B-Instruct
+device: cuda
+dtype: bfloat16
+out_dir: benchmarks/out/agentic-8b
+plots: true
+
+cost:
+  name: a100-80g/8B
+  kv_bytes_per_token: 262144
+
+niah:
+  enabled: false
+
+agentic:
+  enabled: true
+  turns: 20
+  turn_tokens: 400        # ~8000 tokens total by the last turn
+  budget: 1200            # bounded working-memory budget (forces compaction)
+  seeds: 2
+  n_facts: 8
+  ref_strategy: repeat_prefill   # cheap per-chunk refs (chunks are short)
+  strategies: [full_kv, truncate_recent, "dexa:attention_matching", "dexa:heavy_hitter"]
+  am: {alloc: sensitivity, ridge: 0.05, mass_frac: 1.0, recent_frac: 0.0}

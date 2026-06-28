@@ -194,9 +194,20 @@ def _run_dexa(
     keep_recent: int,
     ref_strategy: str,
     ref_bank_cap: int,
+    am_opts: Optional[dict] = None,
 ) -> dict:
     """WorkingMemory with the named compactor: bounded, iteratively compacted."""
-    comp = _registry_build(compactor_name)
+    if compactor_name == "attention_matching":
+        ao = am_opts or {}
+        comp = _registry_build(
+            compactor_name,
+            budget_alloc=ao.get("alloc", "sensitivity"),
+            value_ridge=ao.get("ridge", 0.05),
+            mass_frac=ao.get("mass_frac", 1.0),
+            recent_frac=ao.get("recent_frac", 0.0),
+        )
+    else:
+        comp = _registry_build(compactor_name)
     wm = WorkingMemory(
         backend,
         comp,
@@ -230,6 +241,7 @@ def run_agentic(
     seeds: int = 1,
     ref_strategy: str = "repeat_prefill",
     ref_bank_cap: int = 64,
+    am_opts: Optional[dict] = None,
     cost: Optional[CostModel] = None,
     out_path: Optional[str] = DEFAULT_OUT,
     verbose: bool = True,
@@ -268,7 +280,8 @@ def run_agentic(
 
         for strat in strategies:
             run = _run_strategy(
-                backend, strat, traj, budget_tokens, keep_recent, ref_strategy, ref_bank_cap
+                backend, strat, traj, budget_tokens, keep_recent, ref_strategy,
+                ref_bank_cap, am_opts,
             )
             peak_tokens = run["peak_tokens"]
             for p in traj.probes:
@@ -310,7 +323,8 @@ def run_agentic(
     return result
 
 
-def _run_strategy(backend, strat, traj, budget, keep_recent, ref_strategy, ref_bank_cap) -> dict:
+def _run_strategy(backend, strat, traj, budget, keep_recent, ref_strategy, ref_bank_cap,
+                  am_opts=None) -> dict:
     if strat == "full_kv":
         return _run_full_kv(backend, traj)
     if strat == "truncate_recent":
@@ -318,7 +332,7 @@ def _run_strategy(backend, strat, traj, budget, keep_recent, ref_strategy, ref_b
     if strat.startswith("dexa:"):
         comp_name = strat.split(":", 1)[1]
         return _run_dexa(
-            backend, traj, comp_name, budget, keep_recent, ref_strategy, ref_bank_cap
+            backend, traj, comp_name, budget, keep_recent, ref_strategy, ref_bank_cap, am_opts
         )
     raise ValueError(f"unknown strategy {strat!r}")
 

@@ -43,6 +43,9 @@ class AgenticSuite:
     strategies: list[str] = field(default_factory=lambda: [
         "full_kv", "truncate_recent", "dexa:attention_matching", "dexa:heavy_hitter",
     ])
+    am: dict = field(default_factory=lambda: {
+        "alloc": "sensitivity", "ridge": 0.05, "mass_frac": 1.0, "recent_frac": 0.0,
+    })
 
 
 @dataclass

@@ -1,0 +1,28 @@
+# Harden the extreme-compression win: MULTI-needle + 16k context + more seeds.
+# If AM's value-synthesis edge survives multiple needles and 16000 tokens (not
+# just single-needle/8k), the result is solid. ~30-50 min on A100-80G.
+name: harden-8b
+backend: hf
+model: meta-llama/Llama-3.1-8B-Instruct   # override: --model unsloth/Llama-3.1-8B-Instruct
+device: cuda
+dtype: bfloat16
+out_dir: benchmarks/out/harden-8b
+plots: true
+
+cost:
+  name: a100-80g/8B
+  kv_bytes_per_token: 262144
+
+niah:
+  enabled: true
+  task: niah_multikey            # several needles, ask one (tests selectivity)
+  lengths: [8000, 16000]
+  ratios: [128, 256, 512, 1024]
+  seeds: 6
+  ref_strategy: self_study
+  n_ref: 256
+  compactors: [attention_matching, heavy_hitter, snapkv, recent_window, random_subset]
+  am: {alloc: sensitivity, ridge: 0.05, mass_frac: 1.0, recent_frac: 0.0}
+
+agentic:
+  enabled: false

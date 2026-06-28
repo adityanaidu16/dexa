@@ -1,5 +1,43 @@
 # Dexa Results
 
+## Update (2026-06-28): validated on Llama-3.1-8B — where AM actually wins
+
+Running on a real 8B model at 8000-token context exposed, then resolved, the
+core question. Honest summary of the arc:
+
+1. **Pure-importance key selection collapses at long context.** Attention
+   Matching was healthy at <=3000 tokens but fell to ~0.04 needle-recall at 8000
+   (flat across ratios), while H2O/SnapKV stayed ~0.95. Cause: a rare far-back
+   needle gets ~0 importance under reference queries; mass-based selection keeps
+   it. Fix: **mass-aware hybrid selection** (`mass_frac`/`recent_frac`).
+2. **At moderate compression (16-128x) all good methods tie** (~0.95) — the
+   single-needle task saturates; no method "wins" and AM is *not* better here.
+3. **At extreme compression (>=256x) AM wins, with a widening gap.** With
+   `mass_frac=1.0` (AM selects H2O's *exact* keys, so the only difference is
+   AM's bias+value synthesis):
+
+   | ratio | AM | H2O | SnapKV | AM-H2O | AM paired-win |
+   |------:|---:|----:|-------:|-------:|--------------:|
+   |  128x | 0.96 | 0.90 | 0.90 | +0.05 | 4/4 |
+   |  256x | 0.94 | 0.89 | 0.89 | +0.05 | 4/4 |
+   |  512x | 0.95 | 0.86 | 0.87 | +0.09 | 4/4 |
+   | 1024x | 0.96 | 0.81 | 0.78 | +0.16 | 4/4 |
+
+   AM holds ~0.95 while selection declines to ~0.80; at 1024x an 8000-token
+   context is held in ~8 compact tokens. The gap is **purely AM's value
+   synthesis** (same keys as H2O). This is the defensible "better context
+   management" result — **AM's edge is at extreme compression, not moderate.**
+
+Caveats (to make it publication-grade): single model, single-needle, 8k context,
+4 seeds. Broaden to multi-needle, multiple models, longer contexts, more seeds.
+AM also costs ~5x H2O (self-study refs + NNLS + lstsq) — justified at extreme
+ratios, not at moderate ones. Reproduce: `dexa run --config configs/extreme-8b.yaml`.
+
+The original (small-model) sections below are kept for the record; the 8B run
+above supersedes their headline.
+
+---
+
 This document reports what the benchmarks actually show, including the places
 where an honest reading contradicts the optimistic one. Three result sets are
 relevant:

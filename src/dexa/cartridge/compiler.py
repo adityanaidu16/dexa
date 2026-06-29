@@ -27,13 +27,10 @@ from transformers import DynamicCache
 
 from dexa.cartridge.artifact import Cartridge
 
-_DEFAULT_SELFSTUDY = (
-    "Summarize the key facts in the text.",
-    "List the specific names, numbers, and definitions mentioned.",
-    "What questions could be asked about this text, and what are the answers?",
-    "Explain the most important details in the text.",
-    "Repeat the important entities and their relationships.",
-    "What would someone need to remember from this text?",
+_QGEN_LEADS = (
+    "Write one specific factual question about this part of the document.",
+    "Ask a question about a name, number, or detail mentioned in this part.",
+    "What is an important factual question someone might ask about this part?",
 )
 
 
@@ -55,9 +52,9 @@ class CartridgeCompiler:
         t: int = 64,
         steps: int = 120,
         lr: float = 0.02,
-        n_selfstudy: int = 6,
+        n_selfstudy: int = 16,
         answer_len: int = 24,
-        selfstudy_prompts: Optional[list[str]] = None,
+        selfstudy: str = "qa",
         max_corpus_tokens: Optional[int] = None,
         verbose: bool = True,
     ) -> Cartridge:
@@ -89,30 +86,17 @@ class CartridgeCompiler:
         self._t = t
         self._T = T
 
-        # 3. self-study: distill the corpus's OWN content. Sample spans spread
-        #    across the corpus; with the full corpus in context the teacher
-        #    "repeats" each span with high confidence, and we train the cartridge
-        #    to reproduce that — so every fact in the corpus enters the training
-        #    signal (generic prompts don't surface specific facts and overfit).
-        span_len = max(8, answer_len)
-        n_items = max(1, n_selfstudy)
-        starts = np.linspace(0, max(0, T - span_len), n_items).astype(int)
-        items = []  # (q_ids, teacher_logprobs [span, vocab])
-        seen = set()
-        for st in starts:
-            st = int(st)
-            if st in seen:
-                continue
-            seen.add(st)
-            q_ids = list(corpus_ids[st:st + span_len])
-            if len(q_ids) < 2:
-                continue
-            with torch.no_grad():
-                t_logits = self.backend._decode_logits(full, q_ids)  # teacher: full corpus, repeat span
-            t_lp = torch.log_softmax(t_logits.float(), dim=-1).detach()  # [span, vocab]
-            items.append((q_ids, t_lp))
+        # 3. self-study: build (query, teacher answer-distribution) items.
+        if selfstudy == "qa":
+            items = self._selfstudy_qa(full, corpus_ids, n_selfstudy, answer_len, verbose)
+        elif selfstudy == "corpus_span":
+            items = self._selfstudy_corpus_span(full, corpus_ids, n_selfstudy, answer_len)
+        else:
+            raise ValueError(f"unknown selfstudy {selfstudy!r}")
         if not items:
             raise RuntimeError("self-study produced no training items")
+        if verbose:
+            print(f"[cartridge] self-study: {len(items)} items ({selfstudy})", flush=True)
 
         # 4. train.
         opt = torch.optim.Adam(self._k + self._v, lr=lr)
@@ -120,10 +104,10 @@ class CartridgeCompiler:
         for step in range(steps):
             opt.zero_grad()
             total = 0.0
-            for q_ids, t_lp in items:
-                s_logits = self._student_logits(q_ids)          # [span, vocab] (grad)
-                s_lp = torch.log_softmax(s_logits.float(), dim=-1)
-                # KL(teacher || student) averaged over span positions + vocab.
+            for q_ids, t_lp, span in items:
+                s_logits = self._student_logits(q_ids)          # [q_len, vocab] (grad)
+                s_lp = torch.log_softmax(s_logits[-span:].float(), dim=-1)
+                # KL(teacher || student) over the answer span, averaged.
                 kl = (t_lp.exp() * (t_lp - s_lp)).sum(-1).mean()
                 kl.backward()
                 total += float(kl.detach())
@@ -139,6 +123,79 @@ class CartridgeCompiler:
             meta={"t": t, "T": T, "steps": steps, "lr": lr, "n_selfstudy": len(items),
                   "method": "cartridge", "model": s.name},
         )
+
+    # --------------------------------------------------------- self-study
+    def _newline_id(self) -> Optional[int]:
+        ids = self.tokenizer("\n", add_special_tokens=False)["input_ids"]
+        return ids[-1] if ids else None
+
+    @staticmethod
+    def _truncate_at(ids: list[int], stop: Optional[int]) -> list[int]:
+        if stop is not None and stop in ids:
+            return ids[: ids.index(stop)]
+        return list(ids)
+
+    def _selfstudy_qa(self, full, corpus_ids, n, answer_len, verbose) -> list:
+        """Corpus-conditioned synthetic Q&A self-study (the Cartridges method).
+
+        For chunks spread across the corpus, the teacher (full corpus in context)
+        writes a question about that chunk and answers it; we distill the student
+        (cartridge) to match the teacher's ANSWER distribution given the question.
+        Chunk-conditioning yields diverse, fact-bearing questions covering the
+        whole corpus even with greedy decoding. (This is the distribution that
+        matters — corpus-LM distillation reproduces the corpus but hurts QA.)"""
+        T = len(corpus_ids)
+        n = max(1, n)
+        chunk = max(16, T // n)
+        starts = np.linspace(0, max(0, T - chunk), n).astype(int)
+        nl = self._newline_id()
+        alead = self.tokenizer("\nAnswer:", add_special_tokens=False)["input_ids"]
+        items = []
+        for i, st in enumerate(starts):
+            st = int(st)
+            snippet = self.backend.detokenize(list(corpus_ids[st:st + 16]))
+            lead_txt = (f"\n\n{_QGEN_LEADS[i % len(_QGEN_LEADS)]} "
+                        f"Part: \"{snippet}\"\nQuestion:")
+            lead = self.tokenizer(lead_txt, add_special_tokens=False)["input_ids"]
+            q = self._truncate_at(self.backend.generate(full, lead, max_new_tokens=20), nl)
+            if len(q) < 2:
+                continue
+            prefix = list(q) + list(alead)
+            a = self._truncate_at(
+                self.backend.generate(full, prefix, max_new_tokens=answer_len), nl)
+            if len(a) < 1:
+                continue
+            query = prefix + list(a)
+            span = len(a)
+            with torch.no_grad():
+                t_logits = self.backend._decode_logits(full, query)
+            t_lp = torch.log_softmax(t_logits[-span:].float(), dim=-1).detach()
+            items.append((query, t_lp, span))
+            if verbose and i < 3:
+                print(f"    Q={self.backend.detokenize(q)[:50]!r} "
+                      f"A={self.backend.detokenize(a)[:30]!r}", flush=True)
+        return items
+
+    def _selfstudy_corpus_span(self, full, corpus_ids, n, span_len) -> list:
+        """Ablation: distill the corpus's own spans (encodes content but HURTS QA
+        — kept for comparison; see docs/CARTRIDGES.md)."""
+        T = len(corpus_ids)
+        span_len = max(8, span_len)
+        starts = np.linspace(0, max(0, T - span_len), max(1, n)).astype(int)
+        items, seen = [], set()
+        for st in starts:
+            st = int(st)
+            if st in seen:
+                continue
+            seen.add(st)
+            q_ids = list(corpus_ids[st:st + span_len])
+            if len(q_ids) < 2:
+                continue
+            with torch.no_grad():
+                t_logits = self.backend._decode_logits(full, q_ids)
+            t_lp = torch.log_softmax(t_logits.float(), dim=-1).detach()
+            items.append((q_ids, t_lp, len(q_ids)))
+        return items
 
     # ---------------------------------------------------------- grad forward
     def _student_logits(self, q_ids: list[int]) -> torch.Tensor:

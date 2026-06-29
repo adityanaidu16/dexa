@@ -12,29 +12,52 @@ core question. Honest summary of the arc:
    it. Fix: **mass-aware hybrid selection** (`mass_frac`/`recent_frac`).
 2. **At moderate compression (16-128x) all good methods tie** (~0.95) — the
    single-needle task saturates; no method "wins" and AM is *not* better here.
-3. **At extreme compression (>=256x) AM wins, with a widening gap.** With
-   `mass_frac=1.0` (AM selects H2O's *exact* keys, so the only difference is
-   AM's bias+value synthesis):
+3. **Single-needle, extreme compression: AM wins with a widening gap** (4 seeds,
+   8k, `mass_frac=1.0` so AM uses H2O's *exact* keys — gap is purely AM's
+   bias+value synthesis). `configs/extreme-8b.yaml`:
 
    | ratio | AM | H2O | SnapKV | AM-H2O | AM paired-win |
    |------:|---:|----:|-------:|-------:|--------------:|
    |  128x | 0.96 | 0.90 | 0.90 | +0.05 | 4/4 |
-   |  256x | 0.94 | 0.89 | 0.89 | +0.05 | 4/4 |
    |  512x | 0.95 | 0.86 | 0.87 | +0.09 | 4/4 |
    | 1024x | 0.96 | 0.81 | 0.78 | +0.16 | 4/4 |
 
-   AM holds ~0.95 while selection declines to ~0.80; at 1024x an 8000-token
-   context is held in ~8 compact tokens. The gap is **purely AM's value
-   synthesis** (same keys as H2O). This is the defensible "better context
-   management" result — **AM's edge is at extreme compression, not moderate.**
+4. **Multi-needle hardening REVERSES this at moderate ratios — the honest
+   picture.** On the harder multi-needle task (6 seeds, 8k+16k,
+   `configs/harden-8b.yaml`, same `mass_frac=1.0`):
 
-Caveats (to make it publication-grade): single model, single-needle, 8k context,
-4 seeds. Broaden to multi-needle, multiple models, longer contexts, more seeds.
-AM also costs ~5x H2O (self-study refs + NNLS + lstsq) — justified at extreme
-ratios, not at moderate ones. Reproduce: `dexa run --config configs/extreme-8b.yaml`.
+   | ratio | AM | H2O | SnapKV | AM-H2O | AM win |
+   |------:|---:|----:|-------:|-------:|-------:|
+   |  128x | 0.53 | **0.82** | 0.86 | -0.29 | 25% |
+   |  256x | 0.53 | 0.60 | 0.60 | -0.06 | 67% |
+   |  512x | 0.55 | **0.41** | 0.42 | +0.14 | 92% |
+   | 1024x | 0.51 | **0.33** | 0.32 | +0.18 | 92% |
 
-The original (small-model) sections below are kept for the record; the 8B run
-above supersedes their headline.
+   There is a **crossover near 256-512x**. AM degrades *gracefully* (flat ~0.5
+   across ratios); selection *collapses* (0.82 -> 0.33). Below the crossover
+   **selection wins, by a lot** (128x: 0.82 vs 0.53); above it AM wins. Crucially,
+   at 128x AM uses the *same keys* as H2O yet scores worse — so when budget is
+   ample, **AM's synthesis actively hurts**: it blends multiple needles to
+   minimize *average* reconstruction error, sacrificing per-needle fidelity.
+   Single-needle hid this (one needle = trivial to synthesize).
+
+**Honest bottom line.** AM is a **specialized tool for the extreme-compression
+regime (>=512x)**, where it degrades gracefully while selection collapses — but
+its absolute ceiling on multi-fact recall is mediocre (~0.5), and at the ratios
+people actually use (8-128x) **H2O is better AND ~5x cheaper**. "Attention
+Matching is a better general-purpose compactor" is **not supported**; "AM holds
+up best under extreme compression" is. Design implication: a working-memory
+layer should pick the compactor by regime (H2O at moderate, AM at extreme),
+which argues for differentiating Dexa on the **system layer** (bounded working
+memory, versioning, governance) rather than the compaction algorithm.
+
+Still open (needs GPU): the **long-horizon agentic** result
+(`configs/agentic-8b.yaml`) — does bounded working-memory hold late-recall over
+many turns vs unbounded full-KV / lossy truncation? That is the more robust
+value proposition and was not yet run.
+
+The original (small-model) sections below are kept for the record; the 8B runs
+above supersede their headline.
 
 ---
 

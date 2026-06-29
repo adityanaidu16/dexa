@@ -34,8 +34,16 @@ fi
 cd dexa
 git pull --ff-only || true
 
-# --- python deps on top of the pod's preinstalled CUDA torch --------------
-PY="${PYTHON:-python}"
+# --- python: a venv ON the persistent /workspace volume -------------------
+# Installing into the container's system python is wiped on every pod reset.
+# A venv with --system-site-packages lives on /workspace (persists) while still
+# reusing the pod image's CUDA torch, so a reset needs no reinstall.
+SYS_PY="${PYTHON:-python}"
+if [ ! -x .venv/bin/python ]; then
+  echo "==> creating persistent venv (.venv, --system-site-packages)"
+  $SYS_PY -m venv .venv --system-site-packages
+fi
+PY=".venv/bin/python"
 echo "==> torch check (must already be CUDA-enabled on a RunPod PyTorch pod)"
 $PY - <<'PYEOF'
 import sys
@@ -50,10 +58,15 @@ except ImportError:
     sys.exit(1)
 PYEOF
 
-# Install Dexa + the HF/bench stack WITHOUT reinstalling torch (reuse the pod's).
-echo "==> pip install -e '.[hf,bench]' (reusing base torch)"
-$PY -m pip install -q --upgrade pip
-$PY -m pip install -q -e '.[hf,bench]'
+# Install Dexa + the HF/bench stack into the venv WITHOUT reinstalling torch.
+# Skip if already importable (persisted venv from a previous boot).
+if $PY -c "import dexa, transformers" 2>/dev/null; then
+  echo "==> deps already present in persistent venv (skipping install)"
+else
+  echo "==> pip install -e '.[hf,bench]' into .venv (reusing base torch)"
+  $PY -m pip install -q --upgrade pip
+  $PY -m pip install -q -e '.[hf,bench]'
+fi
 
 # --- HF auth for gated models (non-fatal: most runs use ungated mirrors) ---
 if [ -n "${HF_TOKEN:-}" ] && [ "${HF_TOKEN}" != "hf_xxx" ]; then

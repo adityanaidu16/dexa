@@ -106,6 +106,62 @@ def run_persist_bench(
     return {"rows": rows, "summary": summary}
 
 
+def run_compaction_persist_bench(
+    backend,
+    *,
+    length: int = 2000,
+    ratios=(8, 32, 128),
+    compactor: str = "recent_window",
+    store: Optional[SessionStore] = None,
+    verbose: bool = True,
+) -> dict:
+    """Persist a long context RAW vs COMPACTED at several ratios; report state
+    size + reload time. This is why compaction matters for portable state:
+    moving an 8B 200k-token session means moving GBs of KV — compaction shrinks
+    it ~ratio×, so reload (and cross-GPU/spot migration) gets ~ratio× cheaper.
+    Quality is the separate compaction tradeoff (keep recent raw, compact cold).
+    """
+    import time as _t
+
+    from dexa.compaction.base import CompactionBudget
+    from dexa.compaction.baselines import build
+    from dexa.session.state import load_compactcache, save_compactcache
+
+    store = store or SessionStore()
+    ctx = _make_context(backend, length)
+    T = len(ctx)
+    full = backend.prefill(ctx)
+
+    m = store.save("raw", full)
+    (_, raw_load) = store.load("raw")
+    store.delete("raw")
+    raw_mb = m["nbytes"] / 1e6
+    rows = [{"ratio": 1, "t": T, "state_mb": raw_mb, "reload_ms": raw_load * 1e3,
+             "size_reduction": 1.0, "reload_speedup": 1.0}]
+
+    comp = build(compactor)
+    for r in ratios:
+        cc = comp.compact(full, CompactionBudget(ratio=float(r)))
+        p = save_compactcache(cc, store.root / f"comp{r}")
+        sz = p.stat().st_size
+        t0 = _t.perf_counter()
+        load_compactcache(p)
+        ls = _t.perf_counter() - t0
+        p.unlink()
+        rows.append({
+            "ratio": int(r), "t": cc.layers[0].keys[0].shape[0],
+            "state_mb": sz / 1e6, "reload_ms": ls * 1e3,
+            "size_reduction": raw_mb / (sz / 1e6),
+            "reload_speedup": raw_load / ls if ls > 0 else float("inf"),
+        })
+        if verbose:
+            print(f"  ratio={int(r):>4}x  state={sz/1e6:8.1f}MB  reload={ls*1e3:7.1f}ms  "
+                  f"({raw_mb/(sz/1e6):.0f}x smaller, {raw_load/ls if ls>0 else 0:.0f}x faster reload)",
+                  flush=True)
+    return {"rows": rows, "length": T, "model": backend.spec.name,
+            "raw_state_mb": raw_mb}
+
+
 def report_persist(results: dict) -> str:
     rows = results["rows"]
     lines = ["", "Persist-and-resume (cold re-prefill vs Dexa state reload)", ""]

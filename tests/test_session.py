@@ -52,3 +52,25 @@ def test_persist_bench_lossless_and_speedup(tmp_path):
     for r in res["rows"]:
         assert r["identical_output"] is True
         assert r["state_mb"] > 0 and r["resume_ms"] >= 0
+
+
+def test_compactcache_roundtrip_and_compaction_persist(tmp_path):
+    from dexa.compaction.baselines import build
+    from dexa.compaction.base import CompactionBudget
+    from dexa.session.state import save_compactcache, load_compactcache
+    from dexa.bench.persist import run_compaction_persist_bench
+
+    be = FakeBackend(n_layers=2, n_q_heads=4, n_kv_heads=2, head_dim=8)
+    kv = be.prefill(be.tokenize(" ".join(f"w{i}" for i in range(64))))
+    cc = build("recent_window").compact(kv, CompactionBudget(ratio=4.0))
+    p = save_compactcache(cc, tmp_path / "cc.npz")
+    cc2 = load_compactcache(p)
+    assert len(cc2.layers) == len(cc.layers)
+    assert np.array_equal(cc2.layers[0].keys[0], cc.layers[0].keys[0])
+    assert cc2.logical_length == cc.logical_length
+
+    res = run_compaction_persist_bench(be, length=128, ratios=(4, 16),
+                                       store=SessionStore(tmp_path / "cp"), verbose=False)
+    rows = {r["ratio"]: r for r in res["rows"]}
+    assert rows[1]["size_reduction"] == 1.0
+    assert rows[16]["size_reduction"] > rows[4]["size_reduction"] > 1.0  # more compaction -> smaller

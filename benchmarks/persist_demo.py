@@ -71,6 +71,29 @@ def _cmd_save(args):
           f"{args.session}")
 
 
+def _cmd_compaction(args):
+    """Raw vs compacted persisted-state size + reload, at realistic 8B KV dims
+    (numpy FakeBackend -> fast, no model/GPU; sizes are real)."""
+    from dexa.engine.fake import FakeBackend
+    from dexa.bench.persist import run_compaction_persist_bench
+    from dexa.session.store import SessionStore
+    from dexa.core.types import CostModel
+    # 8B-like KV geometry (Llama-3.1-8B: 32 layers, 8 kv heads, head_dim 128).
+    be = FakeBackend(n_layers=32, n_q_heads=32, n_kv_heads=8, head_dim=128)
+    ratios = [int(x) for x in args.ratios.split(",")]
+    res = run_compaction_persist_bench(
+        be, length=args.length, ratios=ratios,
+        store=SessionStore(args.store_dir), compactor=args.compactor)
+    # project absolute sizes for a real 8B at long contexts (pure arithmetic).
+    cost = CostModel(kv_bytes_per_token=res["raw_state_mb"] * 1e6 / res["length"])
+    print(f"\nProjected raw 8B state (bf16 ~= fp32/2 of below):")
+    for L in (8000, 32000, 128000, 200000):
+        gb = cost.kv_bytes(L) / 1e9
+        print(f"  {L:>7} tokens: raw ~{gb:6.1f} GB  |  at 32x compaction ~{gb/32*1e3:6.0f} MB")
+    print("\n(reload/migration time scales with size -> compaction makes moving a\n"
+          " long session across GPUs / restoring after preemption ~ratio× cheaper.)")
+
+
 def _cmd_resume(args):
     from dexa.session.store import SessionStore
     be = _backend(args)
@@ -105,8 +128,14 @@ def main():
         else:
             p.add_argument("--length", type=int, default=2000)
             p.add_argument("--session", default="demo")
+    pc = sub.add_parser("compaction")
+    pc.add_argument("--store-dir", default=".dexa_sessions")
+    pc.add_argument("--length", type=int, default=2000)
+    pc.add_argument("--ratios", default="8,32,128")
+    pc.add_argument("--compactor", default="recent_window")
     args = ap.parse_args()
-    {"bench": _cmd_bench, "save": _cmd_save, "resume": _cmd_resume}[args.cmd](args)
+    {"bench": _cmd_bench, "save": _cmd_save, "resume": _cmd_resume,
+     "compaction": _cmd_compaction}[args.cmd](args)
 
 
 if __name__ == "__main__":

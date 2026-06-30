@@ -33,7 +33,11 @@ hf = [
     "transformers>=4.44",
     "accelerate>=0.30",
 ]
-# GPU cluster deployment (install alongside a CUDA torch build).
+# vLLM integration (the KV-connector plugin) — install alongside a CUDA torch.
+vllm = [
+    "vllm>=0.6",
+]
+# GPU cluster deployment (alias).
 gpu = [
     "vllm>=0.6",
 ]

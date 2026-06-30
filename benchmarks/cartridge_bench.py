@@ -45,15 +45,22 @@ def main() -> None:
     ap.add_argument("--rag-k", type=int, default=3)
     ap.add_argument("--chunk-tokens", type=int, default=128)
     ap.add_argument("--n-decode", type=int, default=32, help="decoded tokens/query for the cost model")
-    ap.add_argument("--device", default="cpu")
-    ap.add_argument("--dtype", default="float32")
+    ap.add_argument("--device", default="auto", help="auto|cuda|cpu (auto -> cuda if available)")
+    ap.add_argument("--dtype", default="auto", help="auto|bfloat16|float32 (auto -> bf16 on cuda)")
     ap.add_argument("--out-dir", default="benchmarks/out")
     args = ap.parse_args()
 
+    import torch
     from dexa.engine.hf_backend import HFBackend
 
-    print(f"loading {args.model} ...", flush=True)
-    backend = HFBackend(model_name=args.model, device=args.device, dtype=args.dtype)
+    device = args.device
+    if device == "auto":
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+    dtype = args.dtype
+    if dtype == "auto":
+        dtype = "bfloat16" if device == "cuda" else "float32"
+    print(f"loading {args.model} on {device}/{dtype} ...", flush=True)
+    backend = HFBackend(model_name=args.model, device=device, dtype=dtype)
     s = backend.spec
     print(f"  spec: {s.n_layers}L {s.n_q_heads}q/{s.n_kv_heads}kv head_dim={s.head_dim}", flush=True)
 

@@ -11,3 +11,4 @@ benchmarks/out/
 *.png
 !docs/**/*.png
 .DS_Store
+.dexa_sessions/

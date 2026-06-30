@@ -1,23 +1,29 @@
 # Dexa
 
-Open-source inference-state engine. Turns ephemeral KV cache into persistent, mutable, versioned, governed state.
+**Persistent, portable inference state for open-model agents.** Keep an agent's KV cache as a server-side object, resume it on *any* GPU — after a restart, a replica move, or a spot preemption — with **~0 re-prefill and identical output**, and compact the cold tail so long sessions stay cheap. Built for open models on vLLM: the statefulness frontier providers give you for free, and self-hosters don't have.
 
-> **Implementation status (v0.1).** The current prototype is **compaction-first**:
-> it treats a chunk of context as a *compact* KV cache (much smaller keys/values +
-> per-key attention biases) that preserves the model's behavior. This is the
-> [Attention Matching](https://arxiv.org/abs/2602.16284) / Cartridges / STILL line
-> of work, and it directly attacks the memory wall and long-horizon agentic
-> context. Built so far: a model-backend abstraction (HF backend with an *exact*
-> compact-decode path; a vLLM adapter for the cluster), the Attention Matching
-> compactor + selection baselines (H2O/SnapKV/recent/random), a STILL-style
-> amortized perceiver, a bounded iterative **working memory** for agent loops, an
-> LMCache-style reuse+tiering baseline, and a benchmark harness. See
-> [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and
-> [`docs/RESULTS.md`](docs/RESULTS.md) (honest results, incl. where the win is and
-> isn't). Headline: on SmolLM2-360M needle-recall, Attention Matching is the only
-> method that survives **128× compression** (recall 0.90 vs H2O 0.43), while at
-> moderate ratios all good methods tie. The DAG / segment-dependency design below
-> is the original framing and a candidate later substrate, not what's built today.
+> **Status (v0.1, honest).** The wedge — **persistent + portable session state** — is validated end-to-end: resuming a session from saved state is **14–25× faster than re-prefilling, bit-identical (lossless), and survives a full process restart** (save in one process, resume in a fresh one). Measured on SmolLM2/CPU; the gap grows with context length and model size. Try it in 2 commands below.
+>
+> Compaction (Attention Matching / Cartridges / STILL — [`docs/RESULTS.md`](docs/RESULTS.md), [`docs/CARTRIDGES.md`](docs/CARTRIDGES.md)) is built and benchmarked, but it is the **optimization that shrinks the persisted state**, not the headline: we found high-ratio compaction loses multi-fact fidelity, so the design keeps recent context raw and compacts only the cold tail. Productizing the stateful path *inside* vLLM is the next build. The DAG / mutation design further down is the original vision and a later substrate.
+
+## Why
+
+Frontier APIs (Anthropic/OpenAI) hand agents prompt caching and memory for free. Open-model self-hosters get **ephemeral, per-instance** prefix caching — it can't survive a restart, move across replicas, or ride cheap spot capacity, and it re-prefills on every cache miss. For long-horizon agents (a coding agent accumulates 100k+ tokens of repo + tool output per session), re-paying for that context is the dominant cost. Dexa makes the session a **persistent, portable object the operator owns** — which also lets it run on the cheapest interruptible compute, because the state survives preemption.
+
+## Quickstart
+
+```bash
+pip install -e '.[hf,bench]'          # on a CUDA box reuse the base torch; see docs/CLUSTER.md
+
+# benchmark: resume-from-state vs cold re-prefill, across context lengths
+python benchmarks/persist_demo.py bench --model <hf-model> --lengths 2000,8000,32000
+
+# the "survives a restart" demo — two separate processes:
+python benchmarks/persist_demo.py save   --model <hf-model> --length 8000 --session demo
+#   ...restart the box / move GPUs...
+python benchmarks/persist_demo.py resume --model <hf-model> --session demo
+#   -> resumes with zero re-prefill, byte-identical output
+```
 
 ## What it is
 

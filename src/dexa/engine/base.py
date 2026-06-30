@@ -82,6 +82,18 @@ class ModelBackend(ABC):
         """Teacher-forced per-token log-probabilities of ``target`` given
         ``context`` + ``prompt``. Returns shape [len(target)]."""
 
+    # --- optional: stateful session primitives (override to enable serving) --
+    def extend(self, context, token_ids: list[int]):
+        """Append tokens to a session's KV cache (incremental prefill of the
+        delta). Returns the grown KVCache. Override to support stateful serving."""
+        raise NotImplementedError
+
+    def generate_and_extend(self, context, prompt_token_ids: list[int], *,
+                            max_new_tokens: int = 64, greedy: bool = True):
+        """Decode a response against a session cache and return (response_tokens,
+        grown KVCache including prompt + response). Override to support serving."""
+        raise NotImplementedError
+
     # --- optional: direct attention output (used by compaction unit tests)-
     def attention_outputs(self, cache: ContextCache, queries: RefQueries) -> list[np.ndarray]:
         """Per-layer locally-normalized attention output of ``queries`` over

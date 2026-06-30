@@ -173,3 +173,15 @@ class FakeBackend(ModelBackend):
     ) -> np.ndarray:
         # Uniform-ish deterministic logprob; plumbing only.
         return np.full(len(target_token_ids), -np.log(50000.0), dtype=np.float32)
+
+    # --- stateful session primitives (deterministic; FakeBackend KV is
+    #     position-independent, so extend == re-prefill the token sequence) ---
+    def extend(self, context, token_ids: list[int]) -> KVCache:
+        toks = (context.token_ids or []) + list(token_ids)
+        return self.prefill(toks)
+
+    def generate_and_extend(self, context, prompt_token_ids: list[int], *,
+                            max_new_tokens: int = 64, greedy: bool = True):
+        resp = self.generate(context, prompt_token_ids, max_new_tokens=max_new_tokens)
+        new_cache = self.extend(context, list(prompt_token_ids) + list(resp))
+        return resp, new_cache

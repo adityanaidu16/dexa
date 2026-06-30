@@ -547,6 +547,75 @@ class HFBackend(ModelBackend):
             last_logit = self._decode_logits(context, prefix)[-1]
         return generated
 
+    # --- stateful session primitives --------------------------------------
+    def _build_raw_cache(self, kv: KVCache):
+        pairs = []
+        for l in kv.layers:
+            k = torch.from_numpy(l.key).to(self.device, self._torch_dtype).unsqueeze(0)
+            v = torch.from_numpy(l.value).to(self.device, self._torch_dtype).unsqueeze(0)
+            pairs.append((k, v))
+        return DynamicCache(ddp_cache_data=pairs, config=self.model.config)
+
+    def _cache_to_kvcache(self, cache, positions: np.ndarray, token_ids) -> KVCache:
+        layers = []
+        for li in range(self._spec.n_layers):
+            k = cache.layers[li].keys[0].to(torch.float32).cpu().numpy()
+            v = cache.layers[li].values[0].to(torch.float32).cpu().numpy()
+            layers.append(LayerKV(key=np.ascontiguousarray(k), value=np.ascontiguousarray(v)))
+        return KVCache(spec=self._spec, layers=layers, positions=positions, token_ids=token_ids)
+
+    def extend(self, context: KVCache, token_ids: list[int]) -> KVCache:
+        """Append ``token_ids`` to a raw session cache (incremental prefill of the
+        delta, attending to the existing context). Returns the grown KVCache —
+        the core stateful op: add a turn / tool result without re-prefilling."""
+        token_ids = list(token_ids)
+        if not token_ids:
+            return context
+        start = context.seq_len
+        cache = self._build_raw_cache(context)
+        pos = torch.arange(start, start + len(token_ids), device=self.device).unsqueeze(0)
+        with torch.no_grad(), self._attn_impl("sdpa"):
+            out = self.model(input_ids=self._ids(token_ids), position_ids=pos,
+                             past_key_values=cache, use_cache=True)
+        new_positions = np.arange(0, start + len(token_ids), dtype=np.int64)
+        toks = (context.token_ids or []) + token_ids
+        return self._cache_to_kvcache(out.past_key_values, new_positions, toks)
+
+    def generate_and_extend(
+        self, context: KVCache, prompt_token_ids: list[int], *,
+        max_new_tokens: int = 64, greedy: bool = True,
+    ) -> tuple[list[int], KVCache]:
+        """Decode a response to ``prompt_token_ids`` against the session cache and
+        return (response_tokens, grown KVCache) — the grown cache includes the
+        prompt AND the generated response, so the next turn continues from here.
+        Incremental (no naive re-decode); raw/lossless."""
+        prompt_token_ids = list(prompt_token_ids)
+        start = context.seq_len
+        cache = self._build_raw_cache(context)
+        generated: list[int] = []
+        with torch.no_grad(), self._attn_impl("sdpa"):
+            pos = torch.arange(start, start + len(prompt_token_ids), device=self.device).unsqueeze(0)
+            out = self.model(input_ids=self._ids(prompt_token_ids), position_ids=pos,
+                             past_key_values=cache, use_cache=True)
+            cache = out.past_key_values
+            last = out.logits[0, -1]
+            cur = start + len(prompt_token_ids)
+            for _ in range(max_new_tokens):
+                if greedy:
+                    nxt = int(torch.argmax(last).item())
+                else:
+                    nxt = int(torch.multinomial(torch.softmax(last.float(), -1), 1).item())
+                generated.append(nxt)
+                p = torch.tensor([[cur]], device=self.device)
+                out = self.model(input_ids=self._ids([nxt]), position_ids=p,
+                                 past_key_values=cache, use_cache=True)
+                cache = out.past_key_values
+                last = out.logits[0, -1]
+                cur += 1
+        new_positions = np.arange(0, cur, dtype=np.int64)
+        toks = (context.token_ids or []) + prompt_token_ids + generated
+        return generated, self._cache_to_kvcache(cache, new_positions, toks)
+
     # --- optional attention outputs (numpy, model-free) -------------------
     def attention_outputs(self, cache: ContextCache, queries: RefQueries) -> list[np.ndarray]:
         s = self._spec

@@ -37,6 +37,8 @@ def main():
     ap.add_argument("--subset", default="multifieldqa_en", help="longbench subset")
     ap.add_argument("--length", type=int, default=4000, help="ruler context length")
     ap.add_argument("--n", type=int, default=20)
+    ap.add_argument("--methods", default="full_context,rag,attention_matching,heavy_hitter,snapkv,cartridge",
+                    help="comma list; drop 'cartridge' for a fast baselines-only frontier")
     ap.add_argument("--ratios", default="4,16,50,128")
     ap.add_argument("--rag-ks", default="1,3,8")
     ap.add_argument("--cart-steps", type=int, default=100)
@@ -56,6 +58,7 @@ def main():
 
     res = run_frontier(
         be, examples,
+        methods=tuple(m.strip() for m in args.methods.split(",") if m.strip()),
         ratios=[float(x) for x in args.ratios.split(",")],
         rag_ks=[int(x) for x in args.rag_ks.split(",")],
         cartridge_opts={"steps": args.cart_steps},

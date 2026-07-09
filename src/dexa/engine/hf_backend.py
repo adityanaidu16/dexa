@@ -180,6 +180,22 @@ class HFBackend(ModelBackend):
             for c, v in saved:
                 c._attn_implementation = v
 
+    def _kv_forward(self, **kw):
+        """A KV-building forward that computes only the **last** position's logits.
+
+        prefill/extend/append want the cache, not full-sequence logits — yet the
+        lm_head over all L positions is a large matmul and an L×vocab tensor (8.4 GB
+        at 32k tokens on an 8B), which both wastes compute and OOMs long contexts. A
+        real prefill only needs the last logit to begin decoding, so restrict the
+        head to one position (KV is unaffected). Name drifted across transformers
+        releases (``logits_to_keep``/``num_logits_to_keep``); fall back cleanly."""
+        for key in ("logits_to_keep", "num_logits_to_keep"):
+            try:
+                return self.model(**kw, **{key: 1})
+            except TypeError:
+                continue
+        return self.model(**kw)
+
     def prefill(self, token_ids: list[int], *, position_offset: int = 0) -> KVCache:
         token_ids = list(token_ids)
         T = len(token_ids)
@@ -187,7 +203,7 @@ class HFBackend(ModelBackend):
         position_ids = torch.arange(position_offset, position_offset + T,
                                     device=self.device).unsqueeze(0)
         with torch.no_grad(), self._attn_impl("sdpa"):
-            out = self.model(
+            out = self._kv_forward(
                 input_ids=self._ids(token_ids),
                 position_ids=position_ids,
                 use_cache=True,
@@ -551,8 +567,12 @@ class HFBackend(ModelBackend):
     def _build_raw_cache(self, kv: KVCache):
         pairs = []
         for l in kv.layers:
-            k = torch.from_numpy(l.key).to(self.device, self._torch_dtype).unsqueeze(0)
-            v = torch.from_numpy(l.value).to(self.device, self._torch_dtype).unsqueeze(0)
+            # zero-copy blob loads hand back read-only mmap views; copy those so
+            # torch.from_numpy doesn't warn / alias a non-writable buffer.
+            key = l.key if l.key.flags.writeable else l.key.copy()
+            val = l.value if l.value.flags.writeable else l.value.copy()
+            k = torch.from_numpy(key).to(self.device, self._torch_dtype).unsqueeze(0)
+            v = torch.from_numpy(val).to(self.device, self._torch_dtype).unsqueeze(0)
             pairs.append((k, v))
         return DynamicCache(ddp_cache_data=pairs, config=self.model.config)
 
@@ -575,11 +595,159 @@ class HFBackend(ModelBackend):
         cache = self._build_raw_cache(context)
         pos = torch.arange(start, start + len(token_ids), device=self.device).unsqueeze(0)
         with torch.no_grad(), self._attn_impl("sdpa"):
-            out = self.model(input_ids=self._ids(token_ids), position_ids=pos,
-                             past_key_values=cache, use_cache=True)
+            out = self._kv_forward(input_ids=self._ids(token_ids), position_ids=pos,
+                                   past_key_values=cache, use_cache=True)
         new_positions = np.arange(0, start + len(token_ids), dtype=np.int64)
         toks = (context.token_ids or []) + token_ids
         return self._cache_to_kvcache(out.past_key_values, new_positions, toks)
+
+    def rephase_cos_sin(self, delta: int):
+        """``(cos, sin)`` (numpy ``[head_dim]``) encoding the RoPE rotation for a
+        position shift of ``delta``, taken from the model's own rotary embedding so
+        the basis/convention match exactly. Feed to
+        :func:`dexa.segment.selective.rope_rephase_keys`."""
+        pos = torch.tensor([[int(delta)]], device=self.device)
+        cos, sin = self._rope(1, pos)                       # [1,1,head_dim]
+        return (cos[0, 0].to(torch.float32).cpu().numpy(),
+                sin[0, 0].to(torch.float32).cpu().numpy())
+
+    @staticmethod
+    def _slice_kv(kv: KVCache, n: int) -> KVCache:
+        """First ``n`` tokens of a raw KVCache (the reusable prefix after a
+        mutation). Positions/token_ids are sliced to match."""
+        layers = [LayerKV(key=np.ascontiguousarray(l.key[:, :n]),
+                          value=np.ascontiguousarray(l.value[:, :n])) for l in kv.layers]
+        toks = list(kv.token_ids[:n]) if kv.token_ids is not None else None
+        return KVCache(spec=kv.spec, layers=layers, positions=kv.positions[:n],
+                       token_ids=toks, meta=dict(kv.meta))
+
+    def recompute_incremental(self, prev_kv, prev_ctx, new_ctx):
+        """Rebuild the KV for ``new_ctx`` reusing ``prev_kv`` where the causal
+        dependency graph allows (README Phase 1, exact mode).
+
+        Reuses the longest common **segment prefix** of (prev, new) unchanged, then
+        prefills only the tokens from the first changed segment to the end — the
+        minimum an *exact* result permits (downstream tokens attend to the edited
+        region, so their KV genuinely changes). The returned KVCache is
+        **bit-identical** to a full ``prefill(new_ctx.token_ids)``; the win is the
+        prefix we never re-encoded. Returns ``(kv, stats)``.
+
+        ``prev_ctx``/``new_ctx`` are :class:`~dexa.segment.SegmentedContext`.
+        """
+        from dexa.segment import plan_incremental
+
+        plan = plan_incremental(prev_ctx, new_ctx, mode="exact")
+        prefix = plan.reused_exact_tokens
+        new_tokens = new_ctx.token_ids
+        base = self._slice_kv(prev_kv, prefix)
+        tail = new_tokens[prefix:]
+        kv = base if not tail else self.extend(base, tail)
+        stats = {
+            "total_tokens": len(new_tokens),
+            "reused_tokens": prefix,
+            "recomputed_tokens": len(tail),
+            "recompute_fraction": (len(tail) / len(new_tokens)) if new_tokens else 0.0,
+        }
+        return kv, stats
+
+    def _assemble_reused(self, prev_kv, correct, plan, prev_ctx):
+        """Build a **position-correct** reused cache at the new length: the exact
+        prefix from ``prev_kv``, the mandatory edited region from ``correct``, and
+        each shifted-but-content-identical segment re-phased from ``prev_kv`` by its
+        position delta (RoPE-exact for the position component; content residual is
+        left for HKVD)."""
+        from dexa.segment import Action
+        from dexa.segment.selective import rope_rephase_keys
+
+        s = self._spec
+        n = plan.total_tokens
+        # start from `correct` shape; overwrite with reused columns where allowed.
+        layers = [LayerKV(key=cl.key.copy(), value=cl.value.copy()) for cl in correct.layers]
+        # cache re-phase rotations by delta (few distinct deltas).
+        rot: dict[int, tuple] = {}
+        for it in plan.items:
+            nlo, nhi = it.new_span
+            if it.action == Action.REUSE_EXACT:
+                plo, phi = prev_ctx.span(it.prev_index)
+                for li in range(s.n_layers):
+                    layers[li].key[:, nlo:nhi] = prev_kv.layers[li].key[:, plo:phi]
+                    layers[li].value[:, nlo:nhi] = prev_kv.layers[li].value[:, plo:phi]
+            elif it.action == Action.REUSE_SHIFTED:
+                plo, phi = prev_ctx.span(it.prev_index)
+                delta = it.position_shift
+                if delta not in rot:
+                    rot[delta] = self.rephase_cos_sin(delta)
+                cos, sin = rot[delta]
+                for li in range(s.n_layers):
+                    pk = prev_kv.layers[li].key[:, plo:phi]
+                    layers[li].key[:, nlo:nhi] = rope_rephase_keys(pk, cos, sin)
+                    layers[li].value[:, nlo:nhi] = prev_kv.layers[li].value[:, plo:phi]
+            # RECOMPUTE: keep `correct` (already copied in).
+        return KVCache(spec=s, layers=layers, positions=correct.positions.copy(),
+                       token_ids=list(correct.token_ids), meta={})
+
+    def recompute_selective(
+        self, prev_kv, prev_ctx, new_ctx, *,
+        recompute_frac: float = 0.15, select: str = "hkvd", dev_layers="all",
+    ):
+        """Selective KV recompute for a mid-context edit (README Phase 1, Layer C;
+        CacheBlend-style), including **length-changing** edits via RoPE re-phasing.
+
+        Assembles a position-correct reused cache (exact prefix; edited region
+        recomputed; shifted content-identical segments re-phased by their position
+        delta), then recomputes only the mandatory edited region plus the top-
+        ``recompute_frac`` highest-deviation ("HKVD") tokens among the reused-shifted
+        segments to fix the *content* residual (their attention over the edit).
+        Returns ``(blended_kv, stats)``.
+
+        **Prototype note:** to *source* recomputed tokens' KV and score deviation this
+        computes a full reference prefill — so it validates the quality/recompute-
+        fraction frontier; the *compute* realization (forwarding only selected tokens)
+        is the engine-kernel work that turns the token saving into a wall-time saving.
+        """
+        import numpy as _np
+
+        from dexa.segment import Action, plan_incremental
+        from dexa.segment.selective import blend_kv, hkvd_select, per_token_kv_deviation
+
+        plan = plan_incremental(prev_ctx, new_ctx, mode="selective")
+        mandatory, candidate = [], []
+        for it in plan.items:
+            lo, hi = it.new_span
+            (mandatory if it.action == Action.RECOMPUTE else
+             candidate if it.action == Action.REUSE_SHIFTED else []).extend(range(lo, hi))
+
+        correct = self.prefill(new_ctx.token_ids)          # reference (see prototype note)
+        reused = self._assemble_reused(prev_kv, correct, plan, prev_ctx)
+
+        sel = _np.empty(0, dtype=_np.int64)
+        if candidate:
+            lo, hi = min(candidate), max(candidate) + 1
+            dev = per_token_kv_deviation(reused, correct, (lo, hi), layers=dev_layers)
+            cand_set = set(candidate)
+            # mask non-candidate positions in the hull so they are never picked.
+            for i in range(lo, hi):
+                if i not in cand_set:
+                    dev[i - lo] = -_np.inf
+            sel = hkvd_select(dev, recompute_frac, offset=lo, strategy=select)
+
+        recompute_idx = _np.unique(_np.concatenate([
+            _np.asarray(mandatory, dtype=_np.int64), sel])) if (mandatory or sel.size) \
+            else _np.empty(0, dtype=_np.int64)
+        blended = blend_kv(reused, correct, recompute_idx)
+
+        n = new_ctx.n_tokens
+        stats = {
+            "total_tokens": n,
+            "mandatory_recompute": len(mandatory),
+            "candidate_tokens": len(candidate),
+            "selected_from_candidates": int(sel.size),
+            "recomputed_tokens": int(recompute_idx.size),
+            "recompute_fraction": (int(recompute_idx.size) / n) if n else 0.0,
+            "select": select,
+            "length_changed": prev_kv.seq_len != n,
+        }
+        return blended, stats
 
     def generate_and_extend(
         self, context: KVCache, prompt_token_ids: list[int], *,

@@ -1,5 +1,75 @@
 # Dexa Results
 
+## Update (2026-07-09): real 8B on A100 — the persist speed claim is falsified on a single GPU
+
+Ran the persist-vs-reprefill curve on a **real Llama-3.1-8B, A100-80GB, bf16**
+(`modal run scripts/modal_scale_and_connector.py --only persist`,
+`benchmarks/out/persist.json`). Two findings, opposite signs.
+
+| length | cold re-prefill | Dexa resume | speedup | lossless | state (bf16) | prefill / load |
+|-------:|----------------:|------------:|--------:|:--------:|-------------:|---------------:|
+|     8k |         4412 ms |     3174 ms |   1.4×  |   yes    |      1.0 GB  | 3279 / 2302 ms |
+|    16k |         4593 ms |     6464 ms |   0.7×  |   yes    |      2.1 GB  | 2614 / 4766 ms |
+|    32k |         9939 ms |    14338 ms |   0.7×  |   yes    |      4.2 GB  | 5992 / 11381 ms|
+|    64k |        20188 ms |    31428 ms |   0.6×  |   yes    |      8.4 GB  |13615 / 25265 ms|
+
+1. **Lossless portability holds.** Output is bit-identical to the live cache at
+   every length and survives teardown (save in one process, drop the cache, reload
+   and continue). The correctness half of the wedge is real on a genuine 8B.
+
+2. **The "14–25× faster, gap grows with length" speed claim does not survive
+   contact with a GPU — it inverts.** On a warm A100, resume is *slower* than cold
+   re-prefill at ≥16k (0.6–0.7×) and worsens with length. The breakdown says why:
+   at 64k, A100 bf16 prefill is 13.6 s but loading the 8.4 GB bf16 state from disk
+   is 25.3 s (~330 MB/s, and throughput *degrades* with size: 456→332 MB/s from 8k
+   to 64k). **Loading raw KV costs ~2× what recomputing it on the GPU costs.** The
+   14–25× headline was measured on CPU/SmolLM2, where prefill is compute-starved so
+   disk-reload wins; that condition does not hold on a GPU where prefill is cheap.
+   (The lone 8k "1.4×" is partly first-prefill CUDA warmup inflating the cold row.)
+
+   The state is already native **bf16** (131 KB/token confirms it — not an
+   fp32-upcast artifact), so this is not a precision bug; it is fundamental to the
+   comparison. **On a single warm GPU that can re-prefill, raw-KV resume loses.**
+
+**What this does and does not change.**
+
+- The **portability/correctness** value stands (lossless, survives preemption) and
+  is independent of the speed result.
+- The **speed** value proposition must be restated honestly. Raw-KV resume beats
+  re-prefill only when re-prefill is the *expensive* side of the trade, which on a
+  GPU means one of: (a) **compacted state** — shrink the bytes 8–32× (see §4 and
+  the compaction results) so the load is 8–32× smaller and finally undercuts
+  prefill; this is the honest path to a resume win on GPU; (b) a **faster load
+  path** — 330 MB/s is far below local-NVMe bandwidth, so the current blob load is
+  not achieving its claimed zero-copy/mmap speed at scale and is the first
+  engineering lever to pull; (c) **compute-contended serving**, where re-prefill
+  queues behind decode and its wall-clock balloons (the single-request bench does
+  not capture this); (d) larger/MoE models or longer contexts where prefill grows
+  faster than O(n) I/O.
+- **Action:** the README's "14–25× faster… gap grows with context length" headline
+  is contradicted by this data on GPU and should be corrected to the CPU-specific,
+  correctness-first framing above. The scaling curve is now measured to 64k — the
+  open question is no longer "does resume win?" (on a warm single GPU it does not
+  for raw KV) but "does compacted-state resume, or an optimized load path, win?"
+
+## Update (2026-07-09): vLLM connector validated against a real vLLM (0.24.0)
+
+`DexaConnector` was coded against vLLM's *documented* V1 KV-connector interface
+with no vLLM in the dev/CI environment. Ran the conformance check on a real vLLM
+(`modal run scripts/modal_scale_and_connector.py --only connector`,
+`benchmarks/vllm_connector_check.py`, `benchmarks/out/connector_check.json`):
+
+- **vLLM 0.24.0** (bleeding-edge at time of run). `DexaConnector` **subclasses the
+  installed `KVConnectorBase_V1`** and **all 10 V1 lifecycle-hook signatures match
+  with zero drift** (`get_num_new_matched_tokens`, `update_state_after_alloc`,
+  `build_connector_meta`, `request_finished`, `register_kv_caches`, `start_load_kv`,
+  `wait_for_layer_load`, `save_kv_layer`, `wait_for_save`, `get_finished`). Tier 0
+  (paged-block ↔ KVCache + store round-trip) also passes.
+- This retires the biggest documented-vs-actual risk in the connector on a current
+  release. **Still pending:** the five version-pinned site shims (`_block_ids`,
+  `_spec`, `_layer_kv_tensors`, `_split_kv_layer`, `_save_geometry`) that the
+  in-engine save/load path needs — surfaced by tier 2 (`--serve`), not yet wired.
+
 ## Update (2026-06-28): validated on Llama-3.1-8B — where AM actually wins
 
 Running on a real 8B model at 8000-token context exposed, then resolved, the

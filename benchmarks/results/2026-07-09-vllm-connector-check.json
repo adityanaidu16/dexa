@@ -1,0 +1,26 @@
+{
+  "_provenance": {
+    "date": "2026-07-09",
+    "command": "modal run scripts/modal_scale_and_connector.py --only connector",
+    "gpu": "A10G",
+    "note": "DexaConnector conformance against a REAL vLLM. Coded against the documented V1 interface with no vLLM in dev/CI; this is the first run against an installed vLLM. All 10 V1 lifecycle-hook signatures match with zero drift on vLLM 0.24.0. See docs/RESULTS.md 2026-07-09 update."
+  },
+  "vllm_available": true,
+  "vllm_version": "0.24.0",
+  "tiers": [
+    {"tier": 0, "roundtrip": true, "store": true, "ok": true},
+    {
+      "tier": 1,
+      "skipped": false,
+      "subclass_real_base": true,
+      "n_match": 10,
+      "n_total": 10,
+      "ok": true,
+      "methods_matched": [
+        "get_num_new_matched_tokens", "update_state_after_alloc", "build_connector_meta",
+        "request_finished", "register_kv_caches", "start_load_kv", "wait_for_layer_load",
+        "save_kv_layer", "wait_for_save", "get_finished"
+      ]
+    }
+  ]
+}

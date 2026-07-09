@@ -1,0 +1,22 @@
+{
+  "_provenance": {
+    "date": "2026-07-09",
+    "gpu": "NVIDIA A100-SXM4-80GB",
+    "torch": "2.13.0+cu130",
+    "model": "unsloth/Llama-3.1-8B-Instruct",
+    "dtype": "bfloat16",
+    "command": "modal run scripts/modal_scale_and_connector.py --only persist",
+    "note": "Real 8B persist-vs-reprefill curve. Lossless at every length, but resume is SLOWER than cold re-prefill at >=16k (0.6-0.7x) and worsens with length: on a warm A100, loading raw bf16 KV from disk costs ~2x recomputing it. The CPU-measured 14-25x speedup does not transfer to GPU. See docs/RESULTS.md 2026-07-09 update."
+  },
+  "rows": [
+    {"length": 8000,  "cold_resume_ms": 4412.13,  "resume_ms": 3174.40,  "prefill_ms": 3279.22,  "load_ms": 2301.63,  "speedup": 1.3899, "identical_output": true, "state_mb": 1048.67, "state_kb_per_token": 131.084},
+    {"length": 16000, "cold_resume_ms": 4593.19,  "resume_ms": 6464.27,  "prefill_ms": 2613.88,  "load_ms": 4766.48,  "speedup": 0.7106, "identical_output": true, "state_mb": 2097.35, "state_kb_per_token": 131.084},
+    {"length": 32000, "cold_resume_ms": 9939.09,  "resume_ms": 14337.52, "prefill_ms": 5991.52,  "load_ms": 11380.78, "speedup": 0.6932, "identical_output": true, "state_mb": 4194.70, "state_kb_per_token": 131.084},
+    {"length": 64000, "cold_resume_ms": 20188.28, "resume_ms": 31428.10, "prefill_ms": 13614.79, "load_ms": 25264.73, "speedup": 0.6424, "identical_output": true, "state_mb": 8389.41, "state_kb_per_token": 131.085}
+  ],
+  "summary": {
+    "all_identical": true,
+    "max_speedup": 1.3899,
+    "cost_model": "a100-80g/8B"
+  }
+}

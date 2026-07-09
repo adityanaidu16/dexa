@@ -20,12 +20,14 @@ import modal
 
 GPU = os.environ.get("DEXA_PROBE_GPU", "A10G")
 
-# vLLM's official image ships nvcc + CUDA toolkit + a matched vllm build. The
-# engine's KV-cache init probes nvcc, which a runtime-only base (debian_slim +
-# pip vllm) lacks — so use the devel image pinned to the version we validate
-# against. This image is the template for every real-vLLM-engine run on Modal.
+# A real vLLM ENGINE probes nvcc during KV-cache init, which a runtime-only base
+# (debian_slim + pip vllm) lacks. vLLM's own image ships nvcc but Modal can't detect
+# its Python. Modal's documented vLLM recipe fixes both: a CUDA *devel* base (nvcc +
+# CUDA at /usr/local/cuda) + Modal-managed Python + pip vllm pinned to the version we
+# validate against. This is the template image for every real-vLLM-engine run.
 image = (
-    modal.Image.from_registry("vllm/vllm-openai:v0.24.0")
+    modal.Image.from_registry("nvidia/cuda:12.8.1-devel-ubuntu22.04", add_python="3.12")
+    .pip_install("vllm==0.24.0", "numpy")
     .env({"PYTHONPATH": "/root/dexa/src", "HF_HOME": "/cache/hf", "HF_HUB_DISABLE_XET": "1"})
     .add_local_dir("src", "/root/dexa/src")
 )

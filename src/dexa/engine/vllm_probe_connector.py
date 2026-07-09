@@ -112,11 +112,14 @@ class DexaProbeConnector(KVConnectorBase_V1):  # pragma: no cover - cluster only
 
     _RECORD: dict[str, Any] = {}
 
-    def __init__(self, vllm_config: Any = None, role: Any = None) -> None:
+    def __init__(self, vllm_config: Any = None, role: Any = None,
+                 kv_cache_config: Any = None) -> None:
         if not _VLLM_AVAILABLE:
             raise RuntimeError("DexaProbeConnector requires vllm; import failed: "
                                f"{_IMPORT_ERR!r}")
-        super().__init__(vllm_config, role)
+        # vLLM >=0.24 validates the connector ctor: external V1 connectors MUST take
+        # kv_cache_config as the 3rd arg and pass it to super().__init__().
+        super().__init__(vllm_config, role, kv_cache_config)
         self._role = role
         kt = getattr(vllm_config, "kv_transfer_config", None)
         extra = getattr(kt, "kv_connector_extra_config", None) or {}
@@ -132,6 +135,8 @@ class DexaProbeConnector(KVConnectorBase_V1):  # pragma: no cover - cluster only
         self._rec("model_config", describe(getattr(vllm_config, "model_config", None)))
         self._rec("cache_config", describe(getattr(vllm_config, "cache_config", None)))
         self._rec("parallel_config", describe(getattr(vllm_config, "parallel_config", None)))
+        # the KV layout the shims need, handed straight to the ctor in vLLM >=0.24.
+        self._rec("kv_cache_config", describe(kv_cache_config, depth=5))
 
     # --- record helper -----------------------------------------------------
     def _rec(self, key: str, val: Any, *, once: bool = True) -> None:

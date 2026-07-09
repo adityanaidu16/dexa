@@ -252,6 +252,13 @@ def run_tier1() -> dict:
     subclass = issubclass(DexaConnector, KVConnectorBase_V1)
     print(f"  DexaConnector subclasses real base: {'YES' if subclass else 'NO'}")
 
+    # Constructor arity — the gap that let vLLM 0.24's 2-arg -> 3-arg ctor change
+    # slip past the method-only conformance check. vLLM >=0.24 requires
+    # (vllm_config, role, kv_cache_config); reject the deprecated 2-arg form.
+    ctor_params = list(inspect.signature(DexaConnector.__init__).parameters)
+    ctor_ok = "kv_cache_config" in ctor_params
+    print(f"  ctor takes kv_cache_config (>=0.24): {'YES' if ctor_ok else 'NO — will be rejected at config time'}")
+
     report = signature_report(KVConnectorBase_V1, DexaConnector)
     n_match = sum(1 for r in report.values() if r["match"])
     n_total = len(report)
@@ -265,10 +272,11 @@ def run_tier1() -> dict:
                 print(f"         base: {name}{rec['base_sig']}")
             if rec["impl_sig"]:
                 print(f"         impl: {name}{rec['impl_sig']}")
-    ok = subclass and n_match == n_total
+    ok = subclass and ctor_ok and n_match == n_total
     print(f"  tier 1 verdict                    : {'PASS' if ok else 'REVIEW DIFFS ABOVE'}")
     return {"tier": 1, "skipped": False, "vllm_version": vc.vllm_version(),
-            "subclass_real_base": subclass, "n_match": n_match, "n_total": n_total,
+            "subclass_real_base": subclass, "ctor_ok": ctor_ok,
+            "n_match": n_match, "n_total": n_total,
             "report": report, "ok": ok}
 
 

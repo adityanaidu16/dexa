@@ -294,7 +294,12 @@ class DexaConnector(KVConnectorBase_V1):
     #: default on-disk root for persisted session KV (overridable via extra config).
     DEFAULT_STORE_ROOT = ".dexa_kv_connector"
 
-    def __init__(self, vllm_config: Any = None, role: Any = None) -> None:
+    def __init__(self, vllm_config: Any = None, role: Any = None,
+                 kv_cache_config: Any = None) -> None:
+        # vLLM >=0.24 validates the connector ctor at config time and REQUIRES the
+        # 3-arg form (vllm_config, role, kv_cache_config), passing all three to
+        # super().__init__(); the documented 2-arg form is rejected. kv_cache_config
+        # is also the source for the model spec (see _spec).
         if not _VLLM_AVAILABLE:
             raise RuntimeError(
                 "DexaConnector requires the 'vllm' package, which is not importable "
@@ -307,13 +312,15 @@ class DexaConnector(KVConnectorBase_V1):
                 "and the store helpers (store_kvcache, load_kvcache_for) work "
                 "everywhere without vllm."
             )
-        self._init_runtime(vllm_config, role)  # pragma: no cover - cluster only
+        self._init_runtime(vllm_config, role, kv_cache_config)  # pragma: no cover - cluster only
 
-    def _init_runtime(self, vllm_config: Any, role: Any) -> None:  # pragma: no cover - cluster only
+    def _init_runtime(self, vllm_config: Any, role: Any,
+                      kv_cache_config: Any = None) -> None:  # pragma: no cover - cluster only
         """Real construction body (cluster only): wire the store, the model spec,
         and the per-request bookkeeping vLLM's V1 lifecycle needs."""
-        super().__init__(vllm_config, role)
+        super().__init__(vllm_config, role, kv_cache_config)
         self._role = role
+        self._kv_cache_config = kv_cache_config
         # Store root from the connector's extra config, if provided.
         root = self.DEFAULT_STORE_ROOT
         extra = self._extra_config(vllm_config)
@@ -327,8 +334,10 @@ class DexaConnector(KVConnectorBase_V1):
         # and the blocks allocated to receive their loaded KV (req_id -> block_ids).
         self._needs_load: dict[str, str] = {}
         self._load_blocks: dict[str, list[int]] = {}
-        # requests whose KV should be persisted on finish (req_id -> (key, block_ids)).
-        self._needs_save: dict[str, tuple[str, list[int]]] = {}
+        # requests whose KV should be persisted on finish
+        # (req_id -> (key, block_ids, token_ids)); token_ids are carried so the
+        # worker-side save path can recover geometry without a request object.
+        self._needs_save: dict[str, tuple[str, list[int], list[int]]] = {}
         # accumulator while save_kv_layer streams layers for the current step.
         self._save_layers: dict[str, dict[str, np.ndarray]] = {}
 
@@ -468,7 +477,9 @@ class DexaConnector(KVConnectorBase_V1):
         tokens = self._request_tokens(request)
         key = prefix_key(tokens, model_name=self.model_name)
         if not self.store.has(key):
-            self._needs_save[self._req_id(request)] = (key, self._block_ids(block_ids))
+            # carry token_ids so the worker can rebuild geometry at save time
+            # (it has no request object then).
+            self._needs_save[self._req_id(request)] = (key, self._block_ids(block_ids), tokens)
         return False, None
 
     # =====================================================================
@@ -530,7 +541,7 @@ class DexaConnector(KVConnectorBase_V1):
         if meta is None or not meta.saves:
             return
         k_cache, v_cache = self._split_kv_layer(kv_layer)
-        for req_id, (_key, block_ids) in meta.saves.items():
+        for req_id, (_key, block_ids, _tokens) in meta.saves.items():
             k_blocks = np.stack([self._block_to_numpy(k_cache[b]) for b in block_ids], axis=0)
             v_blocks = np.stack([self._block_to_numpy(v_cache[b]) for b in block_ids], axis=0)
             slot = self._save_layers.setdefault(req_id, {"k": [], "v": []})
@@ -551,7 +562,7 @@ class DexaConnector(KVConnectorBase_V1):
             return
         spec = self._spec()
         for req_id, layers in self._save_layers.items():
-            key, _block_ids = meta.saves[req_id]
+            key, _block_ids, _tokens = meta.saves[req_id]
             k_blocks = layers["k"]
             v_blocks = layers["v"]
             T, positions, token_ids = self._save_geometry(req_id, meta)
@@ -585,49 +596,104 @@ class DexaConnector(KVConnectorBase_V1):
 
     @staticmethod
     def _block_ids(blocks: Any) -> list[int]:  # pragma: no cover - cluster only
-        raise RuntimeError(
-            "DexaConnector._block_ids extracts physical block ids from the vLLM "
-            "scheduler's block descriptor, whose shape is version-specific. "
-            "Provide the small site shim for your vLLM release (see the module "
-            "docstring 'Version caveat')."
-        )
+        """Physical block ids from vLLM 0.24's block descriptor.
+
+        ``update_state_after_alloc`` / ``request_finished`` hand a
+        ``vllm.v1.core.kv_cache_manager.KVCacheBlocks`` whose ``.blocks`` is a tuple
+        (one list per KV-cache group) of ``KVCacheBlock`` (each with ``.block_id``).
+        Flatten it; also accept already-flattened lists of blocks or ints
+        defensively (the exact carrier differs slightly across the two call sites)."""
+        seq = getattr(blocks, "blocks", None)
+        seq = seq if seq is not None else blocks
+        out: list[int] = []
+
+        def emit(x: Any) -> None:
+            bid = getattr(x, "block_id", None)
+            if bid is not None:
+                out.append(int(bid))
+            elif isinstance(x, int):
+                out.append(x)
+            else:
+                raise RuntimeError(f"unrecognized block element {type(x)!r}")
+
+        for grp in seq:
+            if isinstance(grp, (list, tuple)):
+                for b in grp:
+                    emit(b)
+            else:
+                emit(grp)
+        return out
 
     def _block_size(self) -> int:  # pragma: no cover - cluster only
         return self._vllm_config.cache_config.block_size
 
+    @staticmethod
+    def _torch_dtype_name(dt: Any) -> str:  # pragma: no cover - cluster only
+        s = str(dt)
+        if "bfloat16" in s:
+            return "bfloat16"
+        if "float16" in s or "half" in s:
+            return "float16"
+        return "float32"
+
     def _spec(self) -> ModelSpec:  # pragma: no cover - cluster only
-        raise RuntimeError(
-            "DexaConnector._spec builds a ModelSpec from vLLM's model_config; the "
-            "exact config fields are version-specific (see vllm_backend.__init__ "
-            "for the field probing). Provide the site shim for your vLLM release."
-        )
+        """ModelSpec from the ``kv_cache_config`` handed to the ctor (vLLM 0.24) plus
+        ``model_config``. KV-authoritative fields (n_kv_heads, head_dim, n_layers)
+        come from the group's ``FullAttentionSpec`` + ``layer_names``; n_q_heads /
+        hidden_size / dtype come from ``model_config.hf_config``."""
+        group = self._kv_cache_config.kv_cache_groups[0]
+        ks = group.kv_cache_spec
+        n_kv_heads = int(ks.num_kv_heads)
+        head_dim = int(ks.head_size)
+        n_layers = len(group.layer_names)
+        mc = getattr(self._vllm_config, "model_config", None)
+        hf = getattr(mc, "hf_config", None) or getattr(mc, "hf_text_config", None)
+        n_q_heads = int(getattr(hf, "num_attention_heads", n_kv_heads)) if hf else n_kv_heads
+        hidden = int(getattr(hf, "hidden_size", n_q_heads * head_dim)) if hf else n_q_heads * head_dim
+        dtype = self._torch_dtype_name(getattr(mc, "dtype", None))
+        name = getattr(mc, "model", "") or "vllm-model"
+        return ModelSpec(name=name, n_layers=n_layers, n_q_heads=n_q_heads,
+                         n_kv_heads=n_kv_heads, head_dim=head_dim, hidden_size=hidden,
+                         dtype=dtype)
+
+    @staticmethod
+    def _kv_split(t: Any):  # pragma: no cover - cluster only
+        """Split a paged KV tensor into (key, value) on its size-2 K/V axis.
+
+        vLLM 0.24 FlashAttention lays a layer's cache as
+        ``[num_blocks, 2, block_size, n_kv_heads, head_dim]`` (K/V on dim 1). Some
+        backends use ``[2, num_blocks, ...]`` (dim 0); pick whichever leading dim is
+        size 2 so the split is robust across the two common layouts."""
+        if t.shape[1] == 2:
+            return t[:, 0], t[:, 1]
+        if t.shape[0] == 2:
+            return t[0], t[1]
+        raise RuntimeError(f"cannot find the K/V split axis in KV tensor shape {tuple(t.shape)}")
 
     def _layer_kv_tensors(self, layer_name: str):  # pragma: no cover - cluster only
-        raise RuntimeError(
-            "DexaConnector._layer_kv_tensors splits the registered paged KV tensor "
-            "for a layer into (key_cache, value_cache); the packed layout "
-            "(separate K/V, stacked, or MLA) is version- and backend-specific. "
-            "Provide the site shim for your vLLM release."
-        )
+        """(key_cache, value_cache) views of the registered paged tensor for a layer,
+        each ``[num_blocks, block_size, n_kv_heads, head_dim]``."""
+        return self._kv_split(self._kv_caches[layer_name])
 
     def _split_kv_layer(self, kv_layer: Any):  # pragma: no cover - cluster only
-        raise RuntimeError(
-            "DexaConnector._split_kv_layer splits the per-layer KV tensor handed "
-            "to save_kv_layer into (key_cache, value_cache); layout is "
-            "version-/backend-specific. Provide the site shim for your vLLM release."
-        )
+        """(key, value) for the per-layer tensor streamed to ``save_kv_layer`` — same
+        K/V-split layout as the registered tensor."""
+        return self._kv_split(kv_layer)
 
     @staticmethod
     def _block_to_numpy(block: Any) -> np.ndarray:  # pragma: no cover - cluster only
         return block.to("cpu").float().numpy()
 
     def _save_geometry(self, req_id: str, meta: Any):  # pragma: no cover - cluster only
-        raise RuntimeError(
-            "DexaConnector._save_geometry recovers (T, positions, token_ids) for a "
-            "finished request from the scheduler/connector metadata; the carrier "
-            "for the token ids and sequence length is version-specific. Provide "
-            "the site shim for your vLLM release."
-        )
+        """(T, positions, token_ids) for a finished request, from the token ids
+        carried in the save plan (the worker has no request object at save time).
+
+        ``T`` is the prompt length; :func:`paged_blocks_to_kvcache` trims the stacked
+        blocks to the first ``T`` positions — i.e. the prompt-prefix KV — keyed by the
+        prompt so a later identical prompt loads it and skips prefill."""
+        _key, _blocks, tokens = meta.saves[req_id]
+        T = len(tokens)
+        return T, np.arange(T, dtype=np.int64), list(tokens)
 
 
 class _DexaConnectorMetadata(KVConnectorMetadata):  # pragma: no cover - cluster only
@@ -635,7 +701,8 @@ class _DexaConnectorMetadata(KVConnectorMetadata):  # pragma: no cover - cluster
     connector built, bound on the worker before its hooks run.
 
     ``loads``: ``req_id -> (store_key, block_ids)`` to restore into.
-    ``saves``: ``req_id -> (store_key, block_ids)`` to read out and persist.
+    ``saves``: ``req_id -> (store_key, block_ids, token_ids)`` to read out and
+    persist (token_ids carried so the worker can recover geometry at save time).
     """
 
     def __init__(self, *, loads: dict, saves: dict) -> None:

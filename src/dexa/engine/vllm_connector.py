@@ -326,7 +326,11 @@ class DexaConnector(KVConnectorBase_V1):
         extra = self._extra_config(vllm_config)
         if extra:
             root = extra.get("dexa_store_root", root)
-        self.store = SessionStore(root=root)
+        # blob format = mmap zero-copy load (the connector's KV is fp32 numpy, so the
+        # fp32 zero-copy path applies) — a re-prefill-competitive load, not the .npz
+        # ZIP-parse+copy. The store root / format is overridable via extra config.
+        fmt = (extra or {}).get("dexa_store_format", "blob")
+        self.store = SessionStore(root=root, format=fmt)
         self.model_name = self._model_name(vllm_config)
         # paged KV tensors per layer, captured on the worker via register_kv_caches.
         self._kv_caches: dict[str, Any] = {}

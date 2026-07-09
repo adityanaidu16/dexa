@@ -334,10 +334,6 @@ class DexaConnector(KVConnectorBase_V1):
         # and the blocks allocated to receive their loaded KV (req_id -> block_ids).
         self._needs_load: dict[str, str] = {}
         self._load_blocks: dict[str, list[int]] = {}
-        # requests whose KV should be persisted on finish
-        # (req_id -> (key, block_ids, token_ids)); token_ids are carried so the
-        # worker-side save path can recover geometry without a request object.
-        self._needs_save: dict[str, tuple[str, list[int], list[int]]] = {}
         # accumulator while save_kv_layer streams layers for the current step.
         self._save_layers: dict[str, dict[str, np.ndarray]] = {}
 
@@ -448,39 +444,54 @@ class DexaConnector(KVConnectorBase_V1):
     def build_connector_meta(self, scheduler_output: Any) -> KVConnectorMetadata:  # pragma: no cover - cluster only
         """Package this step's per-request load/save plan for the worker.
 
-        Drains the scheduler-side maps (loads matched this step; saves queued by
-        :meth:`request_finished`) into a :class:`_DexaConnectorMetadata` the
-        engine binds on the worker before :meth:`start_load_kv` /
-        :meth:`save_kv_layer` run.
+        **Saves are decided here, not in** :meth:`request_finished`. ``save_kv_layer``
+        captures a layer's KV *during* this step's forward pass, and
+        ``request_finished`` fires *after* a request's final forward — so a save
+        queued there is never captured. Instead, mirror vLLM's
+        ``SharedStorageConnector``: a request in ``scheduler_output.scheduled_new_reqs``
+        whose prefill **completes this step** (``num_computed + num_scheduled >=
+        len(prompt)``) and whose prompt KV isn't stored yet is marked for save now, so
+        its KV is captured during the forward that populates it. ``scheduled_new_reqs``
+        also carries the request's ``block_ids`` and ``prompt_token_ids`` directly.
+
+        Loads matched this step (from :meth:`get_num_new_matched_tokens` /
+        :meth:`update_state_after_alloc`) are packed as before.
         """
         self._require_vllm()
-        meta = _DexaConnectorMetadata(
-            loads={rid: (key, self._load_blocks.get(rid, [])) for rid, key in self._needs_load.items()},
-            saves=dict(self._needs_save),
-        )
+        loads = {rid: (key, self._load_blocks.get(rid, []))
+                 for rid, key in self._needs_load.items()}
+
+        saves: dict[str, tuple[str, list[int], list[int]]] = {}
+        num_sched = getattr(scheduler_output, "num_scheduled_tokens", None) or {}
+        for new_req in getattr(scheduler_output, "scheduled_new_reqs", None) or []:
+            rid = new_req.req_id
+            if rid in self._needs_load:
+                continue  # being loaded, not saved
+            prompt = list(new_req.prompt_token_ids)
+            completed = int(new_req.num_computed_tokens) + int(num_sched.get(rid, 0))
+            if completed < len(prompt):
+                continue  # chunked prefill still in progress (TODO: scan cached reqs)
+            key = prefix_key(prompt, model_name=self.model_name)
+            if self.store.has(key):
+                continue  # already persisted
+            saves[rid] = (key, self._block_ids(new_req.block_ids), prompt)
+
+        meta = _DexaConnectorMetadata(loads=loads, saves=saves)
         self._needs_load.clear()
         self._load_blocks.clear()
-        self._needs_save.clear()
         return meta
 
     def request_finished(
         self, request: Any, block_ids: Any
     ) -> tuple[bool, Optional[dict[str, Any]]]:  # pragma: no cover - cluster only
-        """On request completion, queue its KV for persistence.
+        """On request completion, let vLLM free the blocks.
 
-        Keys the finished sequence by its full token prefix and records the blocks
-        holding its KV so :meth:`save_kv_layer` / :meth:`wait_for_save` can read
-        them out and persist a :class:`KVCache`. Returns ``(False, None)``: the
-        blocks may be freed immediately (we copy out synchronously), and there is
+        Persistence is **not** queued here — it is decided in
+        :meth:`build_connector_meta` during the request's forward pass (see there for
+        why). Returns ``(False, None)``: blocks may be freed immediately and there is
         no async transfer state to hand back to the scheduler.
         """
         self._require_vllm()
-        tokens = self._request_tokens(request)
-        key = prefix_key(tokens, model_name=self.model_name)
-        if not self.store.has(key):
-            # carry token_ids so the worker can rebuild geometry at save time
-            # (it has no request object then).
-            self._needs_save[self._req_id(request)] = (key, self._block_ids(block_ids), tokens)
         return False, None
 
     # =====================================================================

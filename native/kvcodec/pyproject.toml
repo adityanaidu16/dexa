@@ -1,0 +1,17 @@
+[build-system]
+requires = ["maturin>=1.5,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "dexa-kvcodec"
+version = "0.1.0"
+description = "Native (Rust) accelerator for Dexa's KV blob format."
+requires-python = ">=3.9"
+license = { text = "Apache-2.0" }
+
+[tool.maturin]
+# Place the compiled module at `dexa.session.kvcodec` so `save_kvcache_blob`
+# picks it up automatically. `maturin develop` from this dir installs it into the
+# active venv; the pure-numpy fallback is used whenever it is absent.
+module-name = "dexa.session.kvcodec"
+features = ["pyo3/extension-module"]

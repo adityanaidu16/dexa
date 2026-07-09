@@ -66,15 +66,18 @@ Existing OSS work (vLLM prefix caching, LMCache offloading/sharing) solves reuse
 - Extract KV after prefill, load before decode, persist across requests, sessions, and replicas.
 - Tiered placement across GPU/CPU/NVMe/network with configurable eviction.
 - Survives restarts and spot interruptions when backed by a shared tier.
+- **Native-precision state** — persist KV at the model's actual dtype (`bfloat16`/`float16`), not upcast to fp32. Lossless for a genuinely bf16/fp16 model and **~2× smaller** persisted state (and ~2× less bytes to move across a replica/tier). Automatic via `spec.dtype`; `precision=` overrides.
+- **Memory-mapped blob format** (`SessionStore(..., format="blob")`) — drops the `.npz` ZIP container for a header + raw KV bytes loaded via `mmap`, so a resume is a **zero-copy view** (fp32) paged in during the host→device copy instead of a full up-front decode. **~1.7× faster resume load** vs `.npz` (`benchmarks/persist_format_bench.py`). An optional Rust codec (`native/kvcodec`) parallelizes the save-side pack; the on-disk format is identical with or without it.
 
 ### Mutable state with incremental recompute
 - Segment-level dependency tracking: the cache is structured so the system knows which downstream segments depend on which upstream ones.
 - On a mid-context edit, recompute only the affected segment(s) and everything causally downstream — not the entire prefix.
 - The thing nothing in open-source does today.
 
-### Versioning & branching
-- `commit` a turn's delta and version the result; `branch` a session for sub-agents or speculative paths; `diff` and `rollback`.
-- Multi-agent systems fork shared context without duplicating full prefills.
+### Versioning & branching  *(prototyped: `dexa.segment.SegmentedSession`)*
+- `commit` a turn and version the result; `branch` a session for sub-agents or speculative paths; `diff` and `rollback` — all on the live segmented context, with mutations updating KV via incremental recompute and snapshots/forks copying KV instead of re-prefilling.
+- Multi-agent systems fork shared context without duplicating full prefills (`branch()` copies the KV; the shared prefix is never re-encoded).
+- Validated end-to-end (`tests/test_segmented_session.py`): mutations stay behaviorally identical to a full re-prefill, branches are isolated, rollback restores, and a session persists + reattaches via the blob store.
 
 ### Governance primitives
 - Per-tenant isolation, RBAC on state operations, TTL/retention/eviction policies.
@@ -102,11 +105,14 @@ What unites them: they run their own inference, they have raw-KV access, and the
 - Define the state-object format v0.
 - **Gate:** match or beat LMCache on TTFT and cross-replica reuse at 128K context.
 
-### Phase 1 — Mutable state + incremental recompute
-- Segment-level dependency tracking (causal DAG over context segments).
-- Incremental recompute on mid-context edits.
+### Phase 1 — Mutable state + incremental recompute  *(substrate prototyped)*
+- Segment-level dependency tracking (causal DAG over context segments) — `dexa.segment`: content-identified `Segment`s, a `RecomputePlan`, and `plan_incremental(prev, new)` (pure, unit-tested).
+- **Exact incremental recompute on mid-context edits** — `HFBackend.recompute_incremental` reuses the unchanged segment prefix and re-encodes only from the first change onward. Validated on a real model (tiny-random Llama, CPU) to be *numerically equivalent to a full re-prefill with an identical greedy continuation, and the reused prefix bit-identical to the cached state* (`tests/test_incremental_recompute.py`).
 - Handle file/tool-result edits, replayed-message divergence, header churn.
-- **Gate:** order-of-magnitude reduction in tokens reprocessed per mutating turn vs. full-reprefill baseline on an agent loop benchmark.
+- **Gate (measured):** on a simulated agent loop (`benchmarks/incremental_recompute_bench.py`), **4.6× fewer tokens reprocessed** per mutating turn vs full re-prefill with a small stable prefix — the reduction grows toward order-of-magnitude as the stable prefix dominates (the real long-horizon case). Honest limit: an edit *early* in a long context still forces recompute of everything after it; the win concentrates on appends and edits near the tail.
+- **Selective recompute (CacheBlend, EuroSys'25) — prototyped.** For the stale-but-content-identical suffix after an edit, reuse its KV and recompute only the top-fraction highest-deviation ("HKVD") tokens (`HFBackend.recompute_selective`, `dexa.segment.selective`). Validated (`benchmarks/selective_recompute_bench.py`): on a length-preserving mid-context edit, **HKVD selection removes downstream attention-output error faster than recency or random at every recompute level** (recency is *worst* — stale tokens aren't at the tail). The *ordering* is confirmed on random weights; the *magnitude* (CacheBlend's "~15% recovers most") needs a trained model + GPU, where the deviation distribution is far peakier. This is what beats prefix caching's reuse extent; Dexa's differentiation over LMCache's CacheBlend is applying it to the *mutation* case on a versioned segment graph.
+- **Exact RoPE re-phasing — built.** Reused segments after a *length-changing* edit are shifted in position; since keys are post-RoPE and RoPE composes, their keys are re-phased by the position delta **exactly** with no forward pass (`selective.rope_rephase_keys` + `HFBackend.rephase_cos_sin`; values carry no RoPE and are reused as-is). Gated by a position-only exactness test — the same tokens prefilled at `offset=0` vs `offset=delta` differ only by RoPE phase, and re-phasing reconstructs them (`tests/test_rope_rephase.py`); the generalized selective path reproduces a full re-prefill at full recompute (`tests/test_selective_engine.py`). This makes `recompute_selective` handle length-changing edits. (Re-phasing corrects the *position* component exactly; its standalone error-reduction is largest when content is stable and position shifts, e.g. RAG-chunk reuse, and small when content change dominates — the content residual is HKVD's job.)
+- **Next:** the compute realization (forward only the selected tokens, layer-by-layer sparse — turns the token-count saving into wall-time), then Phase 1.x versioning/branching (`commit`/`branch`/`diff`/`rollback`) on the segment graph.
 
 ### Phase 1.x — Versioning, second engine, observability
 - `commit` / `branch` / `diff` / `rollback` on top of the segment model.

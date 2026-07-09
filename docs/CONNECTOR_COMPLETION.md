@@ -128,10 +128,14 @@ Getting here retired, in order (each via one probe/serve Modal run):
    claim only whole blocks (vLLM asserts `num_new_tokens > 0`; reuse is
    block-granular). A sub-block prompt yields 0.
 
+**Cross-instance: VALIDATED** (`scripts/modal_connector_xinstance.py`, 2026-07-09).
+Two separate Modal containers (distinct vLLM processes, pids 36 vs 216) sharing a
+persistent Volume as the store: A saved its KV; B — a fresh process — saw A's KV on
+entry, hit the store, loaded it, and returned identical output
+(`A_saved=True B_saw_stored_KV=True identical_output=True`). The portable-across-
+instances property per-instance prefix caching can't provide.
+
 **Remaining (honest):**
-- **Cross-instance** — validated cross-*request* in one process; the store is on
-  disk, so a second vLLM instance should load it, but that's untested. Easiest next
-  step: run two `LLM(...)` in sequence sharing the store dir (or two Modal functions).
 - **TP>1** — KV-head sharding; the hard one (save/load must be per-shard-consistent).
 - **Chunked prefill** — a large prompt completes over multiple steps and moves to
   `scheduled_cached_reqs`; the save loop only scans `scheduled_new_reqs`, so it

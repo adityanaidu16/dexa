@@ -111,10 +111,10 @@ What unites them: they run their own inference, they have raw-KV access, and the
 
 ### Phase 0 — Persistent KV on one engine
 - vLLM integration via KV-connector interface. *(**works end-to-end on real vLLM
-  0.24.0**: KV saved on one request is loaded on the next with bit-identical output,
-  block-granular prefill skipped — validated cross-request, TP=1, single instance.
-  Cross-instance / TP>1 / chunked prefill remain — see `docs/CONNECTOR_COMPLETION.md`,
-  `docs/RESULTS.md`.)*
+  0.24.0**, validated cross-request **and cross-instance** (KV saved by one vLLM
+  process is loaded by a separate process, block-granular prefill skipped,
+  bit-identical output) at TP=1. TP>1 / chunked prefill remain — see
+  `docs/CONNECTOR_COMPLETION.md`, `docs/RESULTS.md`.)*
 - Extract/load KV, tier across GPU → CPU → NVMe, survive restarts.
 - Define the state-object format v0.
 - **Gate:** match or beat LMCache on TTFT and cross-replica reuse at 128K context.

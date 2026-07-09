@@ -22,14 +22,22 @@ constructor, the `nvcc`/devel-image requirement, the exact object shapes, the
 save-timing lifecycle bug, and the block-align/`num_new_tokens>0` scheduler
 constraint) — see `docs/CONNECTOR_COMPLETION.md`.
 
-**Honest scope of "works".** Validated: **cross-request** reuse, **single instance**,
+**Cross-instance confirmed too** (`scripts/modal_connector_xinstance.py`): two
+*separate* Modal containers (distinct vLLM processes, pids 36 vs 216) sharing a
+persistent Volume as the store. Instance A saved its KV; instance B — a fresh
+process — **saw A's KV file on entry**, got a `[dexa] store HIT`, loaded 2 blocks,
+and returned identical output (`A_saved=True  B_saw_stored_KV=True
+identical_output=True`). This is the portable-across-instances property that
+per-instance vLLM prefix caching cannot provide — Dexa's actual differentiator,
+proven end-to-end.
+
+**Honest scope of "works".** Validated: cross-request **and cross-instance** reuse,
 **TP=1**, single attention backend, block-granular prefix (bit-identical). **Not yet
-validated:** cross-*instance* (two separate vLLM processes — the store is on disk so
-it should carry, but untested); **TP>1** (KV-head sharding — the hard one);
-**chunked prefill** (large prompts completing over multiple steps — the save only
-handles single-step `scheduled_new_reqs` today); cross-attention-backend / cross-GPU
-portability. These are the remaining connector items before the independent
-benchmark (`docs/BENCHMARK_PLAN.md`).
+validated:** **TP>1** (KV-head sharding — the hard one); **chunked prefill** (large
+prompts completing over multiple steps — the save only handles single-step
+`scheduled_new_reqs` today); cross-attention-backend / cross-GPU portability. These
+are the remaining connector items before the independent benchmark
+(`docs/BENCHMARK_PLAN.md`).
 
 ## Update (2026-07-09, later): load-path fix flips resume to a GPU win
 

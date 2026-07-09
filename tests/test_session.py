@@ -16,6 +16,7 @@ from dexa.session.state import (
     _f32_to_bf16_bits,
     _bf16_bits_to_f32,
 )
+from dexa.session.blob import load_kvcache_blob, save_kvcache_blob
 from dexa.session.store import SessionStore
 from dexa.bench.persist import run_persist_bench
 from dexa.core.types import KVCache, LayerKV, ModelSpec
@@ -121,6 +122,57 @@ def test_store_blob_format_and_cross_format_load(tmp_path):
 
     store.delete("s1")
     assert not store.has("s1")
+
+
+def test_blob_keep_native_bf16_is_uint16_bits_and_equivalent(tmp_path):
+    """keep_native skips the bf16->fp32 host widen: a bf16 blob comes back as the
+    raw uint16 bits (zero-copy, half the bytes), and decoding those bits reproduces
+    the default fp32 load bit-for-bit. This is the load-path optimization that lets
+    HFBackend reinterpret straight to a device bfloat16 tensor (docs/RESULTS.md)."""
+    kv = _bf16_kv(T=128)
+    p = save_kvcache_blob(kv, tmp_path / "s.dexakv")  # auto -> bf16 (spec.dtype)
+
+    fp32 = load_kvcache_blob(p)                        # default: widened to fp32
+    native = load_kvcache_blob(p, keep_native=True)   # fast path: raw store dtype
+
+    assert native.meta["native_store_dtype"] == "bfloat16"
+    for a in native.layers:
+        assert a.key.dtype == np.uint16 and a.value.dtype == np.uint16
+    # native uint16 arrays are half the bytes of the widened fp32 ones.
+    assert native.layers[0].key.nbytes * 2 == fp32.layers[0].key.nbytes
+    # and they carry exactly the same information: decode == the fp32 load.
+    for n, f in zip(native.layers, fp32.layers):
+        assert np.array_equal(_bf16_bits_to_f32(n.key), f.key)
+        assert np.array_equal(_bf16_bits_to_f32(n.value), f.value)
+
+
+def test_blob_keep_native_fp32_unchanged(tmp_path):
+    """For an fp32 store keep_native is a no-op: layers stay fp32 (so HFBackend's
+    uint16 fast path never triggers for genuinely-fp32 state) and match the default
+    load exactly."""
+    kv = _bf16_kv(T=64)
+    p = save_kvcache_blob(kv, tmp_path / "f.dexakv", precision="float32")
+    default = load_kvcache_blob(p)
+    native = load_kvcache_blob(p, keep_native=True)
+    assert native.meta["native_store_dtype"] == "float32"
+    for n, d in zip(native.layers, default.layers):
+        assert n.key.dtype == np.float32
+        assert np.array_equal(n.key, d.key) and np.array_equal(n.value, d.value)
+
+
+def test_store_load_keep_native_passthrough_and_npz_ignored(tmp_path):
+    kv = _bf16_kv(T=48)
+    blob_store = SessionStore(tmp_path / "sess", format="blob")
+    blob_store.save("s", kv)
+    native, _ = blob_store.load("s", keep_native=True)
+    assert native.layers[0].key.dtype == np.uint16
+    assert native.meta["native_store_dtype"] == "bfloat16"
+
+    # npz has no native path; keep_native is accepted but ignored (stays fp32).
+    npz_store = SessionStore(tmp_path / "sess2", format="npz")
+    npz_store.save("s", kv)
+    got, _ = npz_store.load("s", keep_native=True)
+    assert got.layers[0].key.dtype == np.float32
 
 
 def test_persist_bench_lossless_and_speedup(tmp_path):

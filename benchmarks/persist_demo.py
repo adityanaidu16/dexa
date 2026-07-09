@@ -44,7 +44,8 @@ def _cmd_bench(args):
     be = _backend(args)
     lengths = [int(x) for x in args.lengths.split(",")]
     store = SessionStore(args.store_dir, format=args.format)
-    res = run_persist_bench(be, lengths=lengths, gen_tokens=args.gen, store=store)
+    res = run_persist_bench(be, lengths=lengths, gen_tokens=args.gen, store=store,
+                            keep_native=args.native_load)
     report_persist(res)
     out = Path(args.out_dir); out.mkdir(parents=True, exist_ok=True)
     (out / "persist.json").write_text(json.dumps(res, indent=2, default=str))
@@ -127,6 +128,9 @@ def main():
         if name == "bench":
             p.add_argument("--lengths", default="256,1024,4096")
             p.add_argument("--out-dir", default="benchmarks/out")
+            p.add_argument("--native-load", action=argparse.BooleanOptionalAction, default=True,
+                           help="resume without the bf16->fp32 host widen (fast path); "
+                                "--no-native-load restores the old widen for A/B comparison")
         else:
             p.add_argument("--length", type=int, default=2000)
             p.add_argument("--session", default="demo")

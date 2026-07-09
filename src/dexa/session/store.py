@@ -65,12 +65,22 @@ class SessionStore:
         return {"session_id": session_id, "path": str(path), "format": self.format,
                 "save_seconds": dt, "nbytes": int(path.stat().st_size)}
 
-    def load(self, session_id: str) -> tuple[KVCache, float]:
+    def load(self, session_id: str, *, keep_native: bool = False) -> tuple[KVCache, float]:
+        """Load a session's KVCache and the wall-time it took.
+
+        ``keep_native=True`` asks the blob format to skip the bf16→fp32 host widen
+        and return layers in their store dtype (see
+        :func:`dexa.session.blob.load_kvcache_blob`) — the fast resume path, valid
+        only for a dtype-aware consumer like ``HFBackend``. Ignored for the ``.npz``
+        format (which always materializes fp32)."""
         path = self._resolve(session_id)
         if path is None:
             raise FileNotFoundError(f"no persisted session {session_id!r} in {self.root}")
         t0 = time.perf_counter()
-        kv = load_kvcache_blob(path) if path.suffix == ".dexakv" else load_kvcache(path)
+        if path.suffix == ".dexakv":
+            kv = load_kvcache_blob(path, keep_native=keep_native)
+        else:
+            kv = load_kvcache(path)
         return kv, time.perf_counter() - t0
 
     def has(self, session_id: str) -> bool:

@@ -52,6 +52,7 @@ def run_persist_bench(
     store: Optional[SessionStore] = None,
     cost: Optional[CostModel] = None,
     compress: bool = False,
+    keep_native: bool = False,
     verbose: bool = True,
 ) -> dict:
     store = store or SessionStore()
@@ -73,7 +74,9 @@ def run_persist_bench(
         del kv_live
 
         # resume: load persisted state, then TTFT + the same continuation.
-        (kv_loaded, load_s) = store.load(sid)
+        # keep_native skips the bf16->fp32 host widen on load (the resume-latency
+        # win); HFBackend reinterprets the bf16 bits straight to device.
+        (kv_loaded, load_s) = store.load(sid, keep_native=keep_native)
         _, resume_ttft_s = _time(lambda: backend.generate(kv_loaded, [], max_new_tokens=1))
         resume_cont = backend.generate(kv_loaded, [], max_new_tokens=gen_tokens)
         resume_s = load_s + resume_ttft_s

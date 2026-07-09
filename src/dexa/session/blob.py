@@ -126,14 +126,25 @@ def save_kvcache_blob(
     return path
 
 
-def load_kvcache_blob(path: str | Path, *, mmap: bool = True) -> KVCache:
+def load_kvcache_blob(path: str | Path, *, mmap: bool = True, keep_native: bool = False) -> KVCache:
     """Load a KVCache written by :func:`save_kvcache_blob`.
 
     With ``mmap=True`` (default) the payload is memory-mapped: for the ``float32``
     store dtype the returned layers are **zero-copy views** onto the mapping (the
     resume path pages them in on demand); for ``float16``/``bfloat16`` a widen to
     fp32 is unavoidable (numpy has no native bf16) but the ZIP-parse + full copy of
-    the ``.npz`` path is still skipped."""
+    the ``.npz`` path is still skipped.
+
+    ``keep_native=True`` skips that widen entirely and hands back the layers **in
+    their on-disk store dtype** — ``uint16`` (the raw bf16 bits) for a ``bfloat16``
+    store, ``float16`` for ``float16``, ``float32`` unchanged. This keeps the load
+    zero-copy for bf16 too (no host-side fp32 pass over the whole slab), which on a
+    real 8B/64k resume is the difference between ~25 s and a memcpy — see
+    ``docs/RESULTS.md`` (2026-07-09). The returned cache is stamped
+    ``meta["native_store_dtype"]`` so a dtype-aware consumer (``HFBackend``) knows a
+    ``uint16`` layer is bf16 bits, not integers. **Only pass this to a consumer that
+    handles the native representation** — generic fp32 KV math must not touch these
+    arrays; use the default (``keep_native=False``) everywhere else."""
     path = Path(path)
     with open(path, "rb") as f:
         magic = f.read(8)
@@ -162,18 +173,26 @@ def load_kvcache_blob(path: str | Path, *, mmap: bool = True) -> KVCache:
 
     layers = []
     for li in range(n_layers):
-        # _decode is a no-op cast for fp32 (keeps the zero-copy view) and the
-        # widen for fp16/bf16.
-        layers.append(
-            LayerKV(
-                key=_decode(keys[li], store_dtype),
-                value=_decode(values[li], store_dtype),
+        if keep_native:
+            # hand back the raw store-dtype view (uint16 bf16 bits / fp16 / fp32) —
+            # no widen, stays zero-copy; the aware consumer reinterprets on device.
+            layers.append(LayerKV(key=keys[li], value=values[li]))
+        else:
+            # _decode is a no-op cast for fp32 (keeps the zero-copy view) and the
+            # widen for fp16/bf16.
+            layers.append(
+                LayerKV(
+                    key=_decode(keys[li], store_dtype),
+                    value=_decode(values[li], store_dtype),
+                )
             )
-        )
     tok = header["token_ids"]
+    meta = dict(header["meta"])
+    if keep_native:
+        meta["native_store_dtype"] = store_dtype
     return KVCache(
         spec=spec, layers=layers,
         positions=np.asarray(header["positions"], dtype=np.int64),
         token_ids=list(tok) if tok else None,
-        meta=header["meta"],
+        meta=meta,
     )

@@ -47,6 +47,7 @@ from dexa.core.types import (
     RefQueries,
 )
 from dexa.engine.base import ContextCache, ModelBackend
+from dexa.session.state import _bf16_bits_to_f32
 
 _NEG = torch.finfo(torch.float32).min
 
@@ -377,14 +378,36 @@ class HFBackend(ModelBackend):
         kv_pairs = []
         betas: list[torch.Tensor] = []
         for li in range(s.n_layers):
+            # Native bf16 fast path: a full raw KVCache stored as bf16 (carried as
+            # uint16 bits by a keep_native blob load) with no padding needed
+            # (t == phys). Reinterpret the bits straight to a device bfloat16 tensor
+            # — no host-side fp32 widen and no fp32 pad-alloc, which is the whole
+            # resume-latency win (docs/RESULTS.md 2026-07-09). Numerically identical
+            # to the slow path below: that widens the same bits to fp32 then casts
+            # back to bf16 on device; both yield the same bf16 KV, so a full-recompute
+            # resume stays bit-identical.
+            if isinstance(context, KVCache):
+                lk = context.layers[li]
+                if lk.key.dtype == np.uint16 and lk.key.shape[1] == phys:
+                    kv_pairs.append((self._native_bf16_to_torch(lk.key),
+                                     self._native_bf16_to_torch(lk.value)))
+                    betas.append(torch.zeros(s.n_q_heads, phys, dtype=self._torch_dtype,
+                                             device=self.device))
+                    continue
+
             k_full = np.zeros((s.n_kv_heads, phys, s.head_dim), dtype=np.float32)
             v_full = np.zeros((s.n_kv_heads, phys, s.head_dim), dtype=np.float32)
             beta_kv = np.full((s.n_kv_heads, phys), self._neg, dtype=np.float32)
             if isinstance(context, KVCache):
                 lk = context.layers[li]
                 t = lk.key.shape[1]
-                k_full[:, :t] = lk.key
-                v_full[:, :t] = lk.value
+                # decode native bf16 bits to fp32 when padding IS needed (rare for a
+                # raw resume; the fast path above covers the full-cache case). A
+                # uint16 array assigned into fp32 would otherwise be read as integers.
+                key = _bf16_bits_to_f32(lk.key) if lk.key.dtype == np.uint16 else lk.key
+                val = _bf16_bits_to_f32(lk.value) if lk.value.dtype == np.uint16 else lk.value
+                k_full[:, :t] = key
+                v_full[:, :t] = val
                 beta_kv[:, :t] = 0.0
             else:
                 cl = context.layers[li]
@@ -401,6 +424,23 @@ class HFBackend(ModelBackend):
             betas.append(torch.from_numpy(beta_q).to(self.device, self._torch_dtype))
         cache = DynamicCache(ddp_cache_data=kv_pairs, config=self.model.config)
         return cache, betas
+
+    def _native_bf16_to_torch(self, arr: np.ndarray) -> torch.Tensor:
+        """Reinterpret a numpy ``uint16`` array of bf16 bits as a device bfloat16
+        tensor ``[1, *arr.shape]`` — no host-side fp32 widen.
+
+        bf16 is exactly the high 16 bits of fp32 (see
+        :func:`dexa.session.state._f32_to_bf16_bits`), so viewing the stored bits as
+        ``bfloat16`` reconstructs the original KV exactly; if the model runs in
+        another dtype we cast on-device. ``torch.frombuffer`` reinterprets the raw
+        bytes (dodging the need for torch ``uint16`` support); the blob mmap views
+        are read-only, so copy first (a ``uint16`` memcpy — half the bytes of the old
+        fp32 pass, and no per-element widen)."""
+        a = arr if arr.flags.writeable else arr.copy()
+        t = torch.frombuffer(a, dtype=torch.bfloat16).reshape(a.shape).to(self.device)
+        if self._torch_dtype != torch.bfloat16:
+            t = t.to(self._torch_dtype)
+        return t.unsqueeze(0)
 
     def _logical_len(self, context: ContextCache) -> int:
         return context.seq_len if isinstance(context, KVCache) else context.logical_length

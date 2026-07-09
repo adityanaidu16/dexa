@@ -187,7 +187,61 @@ sampler (see `docs/RESULTS.md` §5 on STILL's training status).
 
 ---
 
-## 7. Interpreting results (the honest headline)
+## 7. Modal: 32k/64k persist curve + vLLM connector check (one command)
+
+`scripts/modal_scale_and_connector.py` runs the two things that only a real
+GPU/vLLM box can *validate*, on serverless GPUs (per-second billing, no capacity
+lottery, model cached in a persisted HF volume). No code edits.
+
+```bash
+pip install modal && modal token new     # once
+
+# both halves (persist scaling curve + connector conformance):
+modal run scripts/modal_scale_and_connector.py
+
+# just the scaling curve, custom lengths / model:
+modal run scripts/modal_scale_and_connector.py --only persist \
+  --model unsloth/Llama-3.1-8B-Instruct --lengths 8000,32000,64000
+
+# connector, including loading DexaConnector inside a live vLLM (tier 2):
+modal run scripts/modal_scale_and_connector.py --only connector --serve
+
+DEXA_PERSIST_GPU=H100 modal run scripts/modal_scale_and_connector.py   # pick the GPU
+```
+
+**Half 1 — the scaling curve.** `benchmarks/persist_demo.py bench` on a real 8B
+measures, per context length, cold re-prefill vs Dexa state-reload (TTFT), the
+speedup, whether the resumed output is bit-identical, and the persisted state
+size. This is what extends `docs/RESULTS.md` past its SmolLM2/CPU, ~8k ceiling to
+the 32k/64k regime where the wedge (prefill compute ≫ reload I/O) actually bites.
+Output: `benchmarks/out/persist.json`, echoed into the streamed logs.
+
+*Sizing.* KV is upcast to fp32 for the portable state, so an 8B at 64k holds
+~16 GB of state (~24 GB on-device: 16 GB bf16 weights + 8 GB bf16 KV). Default GPU
+is **A100-80GB**; use A100-40GB only if you cap `--lengths` at 32000.
+
+**Half 2 — the connector check.** `benchmarks/vllm_connector_check.py` validates
+`DexaConnector` against the *installed* vLLM in tiers:
+
+- **tier 0** (no vLLM): the paged-block ↔ KVCache round-trip and store
+  persist/restore — the data movement the worker hooks rely on.
+- **tier 1** (`import vllm`, no GPU model): confirms `DexaConnector` subclasses
+  the installed `KVConnectorBase_V1` and prints a **per-method V1 signature
+  diff**. Signature drift between vLLM releases is the most common documented-vs-
+  actual gap; this names it exactly, so you know which override to re-map.
+- **tier 2** (`--serve`, needs a GPU + model): asks vLLM to load `DexaConnector`
+  through its registry and generate. Without the version-pinned site shims
+  (`_block_ids`, `_spec`, `_layer_kv_tensors`, `_split_kv_layer`, `_save_geometry`)
+  this is *expected* to reach a seam and raise; the check reports how far the
+  lifecycle ran and which shim it hit — the concrete to-do list for a site to
+  finish the in-engine path.
+
+Output: `benchmarks/out/connector_check.json`. The same script runs anywhere
+(tiers skip cleanly without vLLM): `python benchmarks/vllm_connector_check.py`.
+
+---
+
+## 8. Interpreting results (the honest headline)
 
 From `docs/RESULTS.md`, stated plainly and non-promotionally:
 

@@ -283,6 +283,21 @@ reserved; large/vLLM/GPU paths are out of scope for this machine):
 - **More seeds / compute-matched frontier for §2.** Resolving the 4–32x
   tie-or-not and producing a quality-per-GPU-second curve needs more seeds and a
   compute-matched run.
+- **32k/64k persist scaling curve.** The persist-vs-reprefill numbers here are
+  SmolLM2/CPU and top out near ~8k; the cold-vs-resume speedup grows with context
+  and model size, so the 8B/32k/64k point is the one that matters and is not yet
+  measured.
+- **vLLM connector on a real vLLM.** `engine/vllm_connector.py` (`DexaConnector`)
+  is coded against vLLM's documented V1 KV-connector surface but has never run
+  against an installed vLLM; its five version-pinned site shims deliberately
+  raise until wired to a release.
+
+**Turnkey path for the last two:** `modal run
+scripts/modal_scale_and_connector.py` runs the 32k/64k curve on a real 8B *and*
+the connector conformance check (subclass + per-method V1 signature diff, plus an
+opt-in `--serve` that loads `DexaConnector` inside a live vLLM). See
+[`docs/CLUSTER.md`](CLUSTER.md) §7. The connector check's pure paths are unit-
+tested on CPU (`tests/test_vllm_connector_check.py`).
 
 ---
 

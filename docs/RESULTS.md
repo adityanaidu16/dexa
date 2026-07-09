@@ -1,5 +1,50 @@
 # Dexa Results
 
+## Update (2026-07-09, independent benchmark): whole-prompt keying loses on prefix-sharing
+
+Ran vLLM's own `vllm bench serve` (the independent harness from
+`docs/BENCHMARK_PLAN.md`) with the `prefix_repetition` dataset (shared prefix, varying
+suffixes) against three real `vllm serve` configs (OPT-125m, A10G, 1024-token prefix,
+60 prompts; `scripts/modal_bench_serve.py`):
+
+| config | req/s | mean TTFT | median | P99 |
+|---|---:|---:|---:|---:|
+| prefixcache (vLLM in-GPU) | 99.1 | **183 ms** | 180 | 272 |
+| baseline (no cache, re-prefill) | 52.3 | 610 ms | 601 | 841 |
+| **dexa** (connector) | 9.8 | **3355 ms** | 3385 | 5854 |
+
+**Dexa was ~5.5× slower than even the no-cache baseline — and this is a real
+architectural finding, not warm-GPU noise.** The connector keys KV by the **full
+prompt**, but `prefix_repetition` varies the suffix, so all 60 requests produced
+distinct keys → **zero hits** → the connector paid full prefill *plus* a full ~160 MB
+KV save to disk on every request (the logs show 30+ distinct `[dexa] saved KV` keys).
+Pure overhead, no reuse.
+
+**What it means (positioning, honestly).** This benchmark measures prefix *sharing*
+(one prompt prefix, many continuations) — **LMCache's domain**, which needs
+**block-level keying** (hash each prefix block so a shared prefix hits despite a
+different suffix). Dexa's connector does **whole-prompt exact-match** reuse, which is
+aligned with Dexa's *stated* wedge — **session persistence / portability** (resume a
+specific full context after preemption or on another instance, validated in the
+cross-instance test) — but gets **no benefit** on prefix-sharing traffic and actively
+hurts by saving KV that is never reused.
+
+**Consequences / next work:**
+1. **The connector needs block-hash keying** (store/load per prefix block, keyed by a
+   rolling block hash like vLLM/LMCache) to be competitive on prefix-sharing workloads
+   and the Mooncake trace. Whole-prompt keying only serves exact-session resume.
+2. **The unconditional save is wrong for serving** — saving every request's KV
+   (including never-reused ones) tanks throughput. Saving should be gated (e.g. only
+   on eviction, or only prefixes seen more than once).
+3. **Benchmark Dexa on its actual wedge**: a session-resume / preemption workload where
+   the *whole* context is reused across instances — not prefix sharing. The
+   cross-instance test is the seed; a served version (kill instance A mid-session,
+   resume on B) is the honest headline benchmark for Dexa's design.
+
+The harness itself works and is the right tool; the first result says Dexa is
+mis-targeted at the prefix-sharing benchmark and needs block-level keying to enter
+LMCache's arena.
+
 ## Update (2026-07-09, latest): the vLLM connector works end-to-end (real KV reuse)
 
 `DexaConnector` now moves KV through a **live vLLM 0.24.0 engine** end-to-end —

@@ -65,6 +65,50 @@ identical greedy output with re-prefill skipped. That single green test is the e
 "one flag in vLLM" promise made real, and it doubles as the lossless-correctness gate
 the independent serving benchmarks do **not** provide (see `docs/BENCHMARK_PLAN.md`).
 
+## Discovered ground truth (vLLM 0.24.0, from `scripts/modal_connector_probe.py`)
+
+A live probe run (OPT-125m, A10G) captured the real object shapes each shim needs.
+The connector construction and all lifecycle hooks fired successfully; recorded:
+
+**Constructor (blocks loading entirely).** vLLM ≥0.24 validates the ctor at config
+time and *rejects* the documented 2-arg form:
+`__init__(self, vllm_config, role, kv_cache_config)` must pass all three to
+`super().__init__()`. `kv_cache_config` is the source for `_spec` (below).
+
+**`_spec()`** ← `kv_cache_config.kv_cache_groups[0]`
+(`vllm.v1.kv_cache_interface.KVCacheGroupSpec`):
+- `.kv_cache_spec` (`FullAttentionSpec`): `block_size=16`, `head_size=64`,
+  `num_kv_heads=12`, `dtype.itemsize=2` (fp16), `page_size_bytes=49152`
+  (= 2·block_size·num_kv_heads·head_size·2 bytes ✓).
+- `.layer_names` (len 12) → `n_layers = len(layer_names)`.
+- `n_q_heads` / `hidden_size` from `vllm_config.model_config`.
+
+**`_layer_kv_tensors(name)` / `_split_kv_layer(kv_layer)`** ← `register_kv_caches`
+hands a dict `{layer_name: tensor}` (12 entries, keys
+`"model.decoder.layers.{i}.self_attn.attn"`); each tensor is
+**`[num_blocks, 2, block_size, n_kv_heads, head_dim]`** (`[23151, 2, 16, 12, 64]`,
+fp16, cuda). Dim 1 is the K/V pair → `key = t[:, 0]`, `value = t[:, 1]`, each
+`[num_blocks, block_size, n_kv_heads, head_dim]`. (Verify `save_kv_layer`'s
+`kv_layer` matches this layout — its dump was truncated; it is the same registered
+tensor, so almost certainly identical.)
+
+**`_block_ids(blocks)`** ← `update_state_after_alloc`'s `blocks` is
+`vllm.v1.core.kv_cache_manager.KVCacheBlocks` with `.blocks` = a tuple (one entry
+per KV-cache group) of lists of `vllm.v1.core.kv_cache_utils.KVCacheBlock`. Each
+`KVCacheBlock` carries `.block_id` → `[b.block_id for b in blocks.blocks[0]]`
+(single group here; flatten groups if >1).
+
+**`_save_geometry(req_id, meta)`** ← the `request`
+(`vllm.v1.request.Request`) has `prompt_token_ids` (plain list) and `all_token_ids`
+(a `vllm.v1.utils.ConstantList` = prompt+output), plus `request_id`,
+`num_prompt_tokens`, `num_tokens`. The worker has no request object at save time, so
+**carry the token ids through `build_connector_meta`** (capture them in
+`request_finished`); `_save_geometry` then returns `(T, arange(T), token_ids)`.
+
+**Runtime image.** A real vLLM engine probes `nvcc` during KV-cache init, so Modal
+runs need a CUDA *devel* base (not runtime-only pip) — see
+`scripts/modal_connector_probe.py`.
+
 ## Sequencing
 
 `_spec` → the two tensor-split shims for one pinned attention backend (TP=1) →

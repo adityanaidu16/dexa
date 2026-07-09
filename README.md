@@ -101,11 +101,21 @@ What unites them: they run their own inference, they have raw-KV access, and the
 
 ## Build sequencing
 
+> **Active roadmap.** The immediate path to "usable by ML engineers" is two tracked
+> docs: [`docs/CONNECTOR_COMPLETION.md`](docs/CONNECTOR_COMPLETION.md) (finish the vLLM
+> connector so a real request round-trips KV end-to-end — the #1 blocker) and
+> [`docs/BENCHMARK_PLAN.md`](docs/BENCHMARK_PLAN.md) (prove it on an *independent*
+> harness — `vllm bench serve` + Mooncake traces, vs LMCache and vanilla prefix
+> caching), backed by a cited survey in
+> [`docs/research/`](docs/research/2026-07-09-independent-benchmarks.md).
+
 ### Phase 0 — Persistent KV on one engine
-- vLLM integration via KV-connector interface.
+- vLLM integration via KV-connector interface. *(connector written + signature-validated
+  on vLLM 0.24.0; end-to-end KV movement pending — see `docs/CONNECTOR_COMPLETION.md`.)*
 - Extract/load KV, tier across GPU → CPU → NVMe, survive restarts.
 - Define the state-object format v0.
 - **Gate:** match or beat LMCache on TTFT and cross-replica reuse at 128K context.
+  *(unmet; the independent head-to-head is scoped in `docs/BENCHMARK_PLAN.md`.)*
 
 ### Phase 1 — Mutable state + incremental recompute  *(substrate prototyped)*
 - Segment-level dependency tracking (causal DAG over context segments) — `dexa.segment`: content-identified `Segment`s, a `RecomputePlan`, and `plan_incremental(prev, new)` (pure, unit-tested).

@@ -1,0 +1,84 @@
+# vLLM connector completion — from "signatures match" to "moves KV through real vLLM"
+
+**Status.** `src/dexa/engine/vllm_connector.py` (`DexaConnector`) implements the full
+vLLM V1 `KVConnectorBase_V1` scheduler/worker lifecycle, and its signatures were
+validated against a real vLLM 0.24.0 (10/10 hooks match, zero drift — see
+`docs/RESULTS.md`, 2026-07-09). The pure-numpy paged-block ↔ KVCache helpers are
+unit-tested everywhere. **But no real request's KV has yet round-tripped through a
+live vLLM:** five version-pinned *site shims* deliberately `raise`, and everything
+validated end-to-end so far is on `HFBackend`, which is not a serving engine.
+
+**This is the #1 blocker to being useful to ML engineers** — they serve with
+vLLM/SGLang, not a HuggingFace forward loop. Closing it turns the "one flag in
+vLLM" pitch from unproven into demoable.
+
+## Done-when
+
+Two vLLM instances behind Dexa: instance A serves a long context; instance B
+(fresh, or after A is killed) resumes it with **zero re-prefill and correct
+output**, driven by a *real request* — not a unit test.
+
+## Pin first
+
+Do **not** chase vLLM's moving V1 API. Pin **one** version in the `[vllm]` extra
+(0.24.0, already signature-validated, or the latest stable you'll deploy on) and
+target that exact `KVConnectorBase_V1`. Use **LMCache's connector as the reference
+implementation** — it solves each shim against the same seam, so this is porting
+known-good logic, not inventing it. The Mooncake connectors (`MooncakeConnector`,
+`MooncakeStoreConnector`) are a second reference on the identical surface.
+
+## The five site-shims (all currently `raise`)
+
+Implement in dependency order:
+
+| Shim | Must return | Where to get it |
+|---|---|---|
+| `_spec()` | `ModelSpec(n_layers, n_kv_heads, head_dim, hidden_size, dtype)` | Already solved in `VLLMBackend.__init__` — lift that field-probing verbatim |
+| `_layer_kv_tensors(name)` | `(key_cache, value_cache)` views of the registered paged tensor | Attention-backend-specific: FlashAttention packs `[2, num_blocks, block_size, n_kv, d]`; FlashInfer/MLA differ. Pin one backend, handle that layout |
+| `_split_kv_layer(kv_layer)` | same split for the tensor handed to `save_kv_layer` | Same layout knowledge |
+| `_block_ids(blocks)` | `list[int]` physical block numbers | vLLM V1 `KVCacheBlocks`/block-table object — the shape LMCache reads |
+| `_save_geometry(req_id, meta)` | `(T, positions, token_ids)` for the finished request | Carry `token_ids` in the metadata already built in `build_connector_meta` |
+
+## The three real correctness risks
+
+The pure-numpy tests give false confidence here — these only surface against a live
+engine:
+
+1. **Partial final block.** A sequence rarely fills its last block; the padding drop
+   must be exact or the tail corrupts. `paged_blocks_to_kvcache` handles it in numpy,
+   but the *engine* block boundaries must line up.
+2. **Tensor parallelism (TP>1).** Each worker holds a *shard* of the KV heads.
+   Save/load must be per-shard-consistent, or reuse across a differently-sharded
+   instance silently corrupts. This is the single most likely thing to break "resume
+   on any instance," and the long pole.
+3. **Cross-attention-backend / cross-arch identity.** KV computed with FlashAttention
+   on A100 vs FlashInfer on H100 may not be reload-compatible. **Scope the v1 claim
+   to same attention-backend + same TP degree** and say so; broaden later with
+   measurement, not assumption.
+
+## Deliverable that proves it
+
+Extend `benchmarks/vllm_connector_check.py` tier 2 (`--serve`) into a **two-process
+reuse test**: process A serves a prompt (KV saved to a shared dir); process B starts
+fresh, sends the same prompt, and we assert `get_num_new_matched_tokens > 0` and
+identical greedy output with re-prefill skipped. That single green test is the entire
+"one flag in vLLM" promise made real, and it doubles as the lossless-correctness gate
+the independent serving benchmarks do **not** provide (see `docs/BENCHMARK_PLAN.md`).
+
+## Sequencing
+
+`_spec` → the two tensor-split shims for one pinned attention backend (TP=1) →
+`_block_ids` / `_save_geometry` → the two-process reuse test → **then** TP>1. Get
+TP=1 cross-instance reuse working and demoable before touching sharding.
+
+**Rough effort:** the shims are ~1–2 focused days against a pinned version with
+LMCache open beside you; TP>1 correctness is the long pole (a few more days +
+multi-GPU testing). Bounded work — the hard design (lifecycle, block↔numpy,
+persistence) is done and tested.
+
+## Why this must land before benchmarking
+
+Every independent serving harness (`vllm bench serve`, AIPerf + Mooncake) drives a
+*working* vLLM server. None of the benchmarking in `docs/BENCHMARK_PLAN.md` can run
+until the connector completes. This is the strict prerequisite for the whole
+"prove it to ML engineers" path.

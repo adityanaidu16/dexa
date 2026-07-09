@@ -1,5 +1,36 @@
 # Dexa Results
 
+## Update (2026-07-09, latest): the vLLM connector works end-to-end (real KV reuse)
+
+`DexaConnector` now moves KV through a **live vLLM 0.24.0 engine** end-to-end —
+validated on Modal (OPT-125m, A10G, `scripts/modal_connector_serve.py`), two
+identical requests to one server with vLLM prefix caching **off** so the connector
+store is the only reuse path:
+
+- **Request 1** (miss): normal prefill, then `[dexa] saved KV: T=43` — the 43-token
+  prompt's KV persisted to the store (`.npz` on disk).
+- **Request 2** (hit): `[dexa] store HIT: 32 external tokens` — matched 2 full blocks
+  (block-aligned from 43), loaded them, and vLLM re-prefilled only the remaining 11
+  tokens.
+- **`RESULT: saved=True  identical_output=True`** — the KV-reused output is
+  bit-identical to the fresh-prefill output. No crash.
+
+This retires the connector's biggest risk: it is no longer "conforms to the API on
+paper" but "actually persists and restores KV inside a real vLLM." Getting here took
+a probe-driven discovery loop (each Modal run retired one real unknown: the 2→3-arg
+constructor, the `nvcc`/devel-image requirement, the exact object shapes, the
+save-timing lifecycle bug, and the block-align/`num_new_tokens>0` scheduler
+constraint) — see `docs/CONNECTOR_COMPLETION.md`.
+
+**Honest scope of "works".** Validated: **cross-request** reuse, **single instance**,
+**TP=1**, single attention backend, block-granular prefix (bit-identical). **Not yet
+validated:** cross-*instance* (two separate vLLM processes — the store is on disk so
+it should carry, but untested); **TP>1** (KV-head sharding — the hard one);
+**chunked prefill** (large prompts completing over multiple steps — the save only
+handles single-step `scheduled_new_reqs` today); cross-attention-backend / cross-GPU
+portability. These are the remaining connector items before the independent
+benchmark (`docs/BENCHMARK_PLAN.md`).
+
 ## Update (2026-07-09, later): load-path fix flips resume to a GPU win
 
 The falsification below was diagnosed to a specific, fixable cause and fixed. The

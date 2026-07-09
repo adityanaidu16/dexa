@@ -109,28 +109,35 @@ per KV-cache group) of lists of `vllm.v1.core.kv_cache_utils.KVCacheBlock`. Each
 runs need a CUDA *devel* base (not runtime-only pip) — see
 `scripts/modal_connector_probe.py`.
 
-## Status after the end-to-end run (vLLM 0.24.0, OPT-125m, A10G)
+## Status: WORKS end-to-end (cross-request, TP=1) — validated 2026-07-09
 
-`scripts/modal_connector_serve.py` (two identical requests, prefix caching off) got
-the connector to **construct and run inside real vLLM with generation working and
-output identical** — so the 3-arg ctor, `_spec`, `_layer_kv_tensors`, and the load
-path are correctly wired and nothing raises. **But no KV was saved** (`saved=False`,
-no `[dexa] saved KV` log), so cross-request reuse does not yet happen.
+`scripts/modal_connector_serve.py` (vLLM 0.24.0, OPT-125m, A10G, prefix caching off)
+now shows full cross-request KV reuse: request 1 logs `[dexa] saved KV: T=43` and
+writes a `.npz`; request 2 logs `[dexa] store HIT: 32 external tokens`, loads 2
+blocks, re-prefills only the remaining 11 tokens, and returns **bit-identical**
+output (`saved=True  identical_output=True`, no crash). See `docs/RESULTS.md`.
 
-**Root cause — save decided one lifecycle phase too late.** The current design queues
-saves in `request_finished`, which vLLM calls *after* a request's final forward pass.
-But `save_kv_layer` (captures KV) fires *during* forward passes, and
-`build_connector_meta` (packs the save plan the worker binds) runs *before* them. So
-when `request_finished` marks a request, there is no remaining forward pass and
-`save_kv_layer` never captures it.
+Getting here retired, in order (each via one probe/serve Modal run):
+1. **ctor** — vLLM ≥0.24 requires 3-arg `(vllm_config, role, kv_cache_config)`.
+2. **image** — a real engine needs `nvcc`; use a CUDA *devel* base.
+3. **object shapes** — the five shims, implemented against the probe dump (above).
+4. **save timing** — decide saves in `build_connector_meta` from
+   `scheduler_output.scheduled_new_reqs` (prefill-complete this step), not in
+   `request_finished` (fires after the last forward → never captured).
+5. **scheduler constraint** — `get_num_new_matched_tokens` must leave ≥1 token and
+   claim only whole blocks (vLLM asserts `num_new_tokens > 0`; reuse is
+   block-granular). A sub-block prompt yields 0.
 
-**Fix (next task) — mirror vLLM's `SharedStorageConnector`:** decide saves in
-`build_connector_meta` from `scheduler_output` — mark a request for save on the step
-its prefill completes (all prompt tokens computed, not yet in the store) so
-`save_kv_layer` captures its KV that same step. The `scheduler_output` structure is
-already captured by the probe; `request_finished` can drop back to just freeing
-blocks / returning `(False, None)`. Then re-run `modal_connector_serve.py`: request 1
-should log `[dexa] saved KV`, request 2 `[dexa] store HIT`, with a KV file on disk.
+**Remaining (honest):**
+- **Cross-instance** — validated cross-*request* in one process; the store is on
+  disk, so a second vLLM instance should load it, but that's untested. Easiest next
+  step: run two `LLM(...)` in sequence sharing the store dir (or two Modal functions).
+- **TP>1** — KV-head sharding; the hard one (save/load must be per-shard-consistent).
+- **Chunked prefill** — a large prompt completes over multiple steps and moves to
+  `scheduled_cached_reqs`; the save loop only scans `scheduled_new_reqs`, so it
+  currently saves only single-step-prefill prompts. Extend to cached reqs.
+- **Cross-attention-backend / cross-GPU-arch** portability — scope the claim to
+  same-backend + same-TP until measured.
 
 ## Sequencing
 

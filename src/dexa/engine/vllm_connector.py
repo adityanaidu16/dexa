@@ -419,8 +419,15 @@ class DexaConnector(KVConnectorBase_V1):
         key = prefix_key(tokens, model_name=self.model_name)
         if not self.store.has(key):
             return 0, False
-        n_external = max(0, len(tokens) - int(num_computed_tokens))
-        if n_external == 0:
+        n_external = len(tokens) - int(num_computed_tokens)
+        # vLLM reuses KV at BLOCK granularity and asserts num_new_tokens > 0, so we
+        # must (a) leave >=1 token for the engine to run a forward pass over, and
+        # (b) only claim whole blocks. A prompt shorter than one block yields 0 —
+        # nothing to reuse. (LMCache/SharedStorageConnector do the same.)
+        block = self._block_size()
+        n_external = min(n_external, len(tokens) - 1)
+        n_external = (n_external // block) * block
+        if n_external <= 0:
             return 0, False
         self._needs_load[self._req_id(request)] = key
         print(f"[dexa] store HIT: {n_external} external tokens for key {key}", flush=True)

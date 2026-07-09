@@ -55,7 +55,13 @@ def serve_reuse(model: str) -> None:
               gpu_memory_utilization=0.6, max_model_len=2048,
               enable_prefix_caching=False)
     sp = SamplingParams(max_tokens=16, temperature=0.0)
-    prompt = "The capital of France is"
+    # >1 block (block_size 16): KV reuse is block-granular, so a sub-block prompt has
+    # nothing to reuse. This tokenizes to ~40 tokens (>=2 full blocks).
+    prompt = (
+        "The quarterly review covered revenue, churn, and the migration plan in "
+        "detail, and the team noted that the new pipeline reduced latency while the "
+        "storage tier absorbed the additional load. In summary, the capital of France is"
+    )
 
     print("\n=== REQUEST 1 (expect: miss -> prefill -> save) ===", flush=True)
     o1 = llm.generate([prompt], sp)[0].outputs[0].text

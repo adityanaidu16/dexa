@@ -10,9 +10,15 @@ from __future__ import annotations
 import numpy as np
 
 from dexa.engine.fake import FakeBackend
-from dexa.session.state import save_kvcache, load_kvcache
+from dexa.session.state import (
+    load_kvcache,
+    save_kvcache,
+    _f32_to_bf16_bits,
+    _bf16_bits_to_f32,
+)
 from dexa.session.store import SessionStore
 from dexa.bench.persist import run_persist_bench
+from dexa.core.types import KVCache, LayerKV, ModelSpec
 
 
 def test_kvcache_roundtrip_bit_identical(tmp_path):
@@ -24,6 +30,57 @@ def test_kvcache_roundtrip_bit_identical(tmp_path):
     assert kv2.token_ids == kv.token_ids
     assert np.array_equal(kv2.positions, kv.positions)
     for a, b in zip(kv.layers, kv2.layers):
+        assert np.array_equal(a.key, b.key) and np.array_equal(a.value, b.value)
+
+
+def _bf16_kv(seed=0, T=512):
+    """A KVCache whose fp32 values are already exact bf16 (as a real bf16 model's
+    KV is once upcast to fp32) and whose spec advertises bfloat16."""
+    rng = np.random.default_rng(seed)
+    spec = ModelSpec(name="m", n_layers=3, n_q_heads=4, n_kv_heads=2, head_dim=8,
+                     hidden_size=32, dtype="bfloat16")
+    layers = []
+    for _ in range(spec.n_layers):
+        k = _bf16_bits_to_f32(_f32_to_bf16_bits(
+            rng.standard_normal((spec.n_kv_heads, T, spec.head_dim)).astype(np.float32)))
+        v = _bf16_bits_to_f32(_f32_to_bf16_bits(
+            rng.standard_normal((spec.n_kv_heads, T, spec.head_dim)).astype(np.float32)))
+        layers.append(LayerKV(key=k, value=v))
+    return KVCache(spec=spec, layers=layers,
+                   positions=np.arange(T, dtype=np.int64), token_ids=list(range(T)))
+
+
+def test_bf16_roundtrip_lossless_and_half_size(tmp_path):
+    # a bf16 model: auto precision must be lossless AND ~half the fp32 bytes.
+    kv = _bf16_kv()
+    p_auto = save_kvcache(kv, tmp_path / "auto.npz")            # follows spec.dtype -> bf16
+    p_fp32 = save_kvcache(kv, tmp_path / "fp32.npz", precision="float32")
+
+    kv2 = load_kvcache(p_auto)
+    for a, b in zip(kv.layers, kv2.layers):
+        assert np.array_equal(a.key, b.key) and np.array_equal(a.value, b.value)  # lossless
+
+    # the KV arrays dominate the file; bf16 storage is ~2x smaller than fp32.
+    assert p_auto.stat().st_size < 0.6 * p_fp32.stat().st_size
+
+
+def test_fp16_roundtrip_and_legacy_fp32_default(tmp_path):
+    kv = _bf16_kv()
+    # values representable in fp16 as well (bf16-of-normal draws are small); fp16
+    # storage round-trips through fp32 without changing the decode-relevant bits
+    # here we only assert it loads and is close.
+    p = save_kvcache(kv, tmp_path / "h.npz", precision="float16")
+    kv2 = load_kvcache(p)
+    for a, b in zip(kv.layers, kv2.layers):
+        assert np.allclose(a.key, b.key, rtol=1e-2, atol=1e-2)
+
+    # a legacy file (fp32 keys, no store_dtype tag) still loads bit-identically.
+    pf = save_kvcache(kv, tmp_path / "f.npz", precision="float32")
+    z = {k: v for k, v in np.load(pf, allow_pickle=False).items() if k != "store_dtype"}
+    legacy = tmp_path / "legacy.npz"
+    np.savez(legacy, **z)
+    kv3 = load_kvcache(legacy)
+    for a, b in zip(kv.layers, kv3.layers):
         assert np.array_equal(a.key, b.key) and np.array_equal(a.value, b.value)
 
 
@@ -41,6 +98,29 @@ def test_resume_output_identical_to_live(tmp_path):
 
     assert resumed == live, "resumed output must be identical to live (lossless)"
     assert load_s >= 0.0
+
+
+def test_store_blob_format_and_cross_format_load(tmp_path):
+    be = FakeBackend()
+    ctx = be.tokenize(" ".join(f"tok{i}" for i in range(40)))
+    kv = be.prefill(ctx)
+    live = be.generate(kv, [], max_new_tokens=6)
+
+    # blob format: lossless resume + on-disk .dexakv.
+    store = SessionStore(tmp_path / "sess", format="blob")
+    meta = store.save("s1", kv)
+    assert meta["format"] == "blob" and meta["path"].endswith(".dexakv")
+    assert store.has("s1") and "s1" in store.list_ids()
+    loaded, _ = store.load("s1")
+    assert be.generate(loaded, [], max_new_tokens=6) == live
+
+    # an npz store can read a blob a blob-store wrote (load auto-detects by suffix).
+    npz_store = SessionStore(tmp_path / "sess", format="npz")
+    loaded2, _ = npz_store.load("s1")
+    assert be.generate(loaded2, [], max_new_tokens=6) == live
+
+    store.delete("s1")
+    assert not store.has("s1")
 
 
 def test_persist_bench_lossless_and_speedup(tmp_path):

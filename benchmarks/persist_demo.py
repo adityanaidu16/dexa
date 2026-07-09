@@ -43,7 +43,7 @@ def _cmd_bench(args):
     from dexa.session.store import SessionStore
     be = _backend(args)
     lengths = [int(x) for x in args.lengths.split(",")]
-    store = SessionStore(args.store_dir)
+    store = SessionStore(args.store_dir, format=args.format)
     res = run_persist_bench(be, lengths=lengths, gen_tokens=args.gen, store=store)
     report_persist(res)
     out = Path(args.out_dir); out.mkdir(parents=True, exist_ok=True)
@@ -55,7 +55,7 @@ def _cmd_save(args):
     from dexa.bench.persist import _make_context
     from dexa.session.store import SessionStore
     be = _backend(args)
-    store = SessionStore(args.store_dir)
+    store = SessionStore(args.store_dir, format=args.format)
     ctx = _make_context(be, args.length)
     t0 = time.perf_counter()
     kv = be.prefill(ctx)
@@ -97,7 +97,7 @@ def _cmd_compaction(args):
 def _cmd_resume(args):
     from dexa.session.store import SessionStore
     be = _backend(args)
-    store = SessionStore(args.store_dir)
+    store = SessionStore(args.store_dir, format=args.format)
     if not store.has(args.session):
         raise SystemExit(f"no persisted session '{args.session}' in {args.store_dir}")
     kv, load_s = store.load(args.session)
@@ -121,6 +121,8 @@ def main():
         p.add_argument("--model", default="HuggingFaceTB/SmolLM2-360M-Instruct")
         p.add_argument("--device", default="auto")
         p.add_argument("--store-dir", default=".dexa_sessions")
+        p.add_argument("--format", default="blob", choices=["blob", "npz"],
+                       help="persistence format: 'blob' = mmap zero-copy resume (default), 'npz' = legacy container")
         p.add_argument("--gen", type=int, default=8)
         if name == "bench":
             p.add_argument("--lengths", default="256,1024,4096")

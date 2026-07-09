@@ -427,6 +427,7 @@ class DexaConnector(KVConnectorBase_V1):
         if n_external == 0:
             return 0, False
         self._needs_load[self._req_id(request)] = key
+        print(f"[dexa] store HIT: {n_external} external tokens for key {key}", flush=True)
         return n_external, False
 
     def update_state_after_alloc(
@@ -570,6 +571,7 @@ class DexaConnector(KVConnectorBase_V1):
                 k_blocks, v_blocks, spec=spec, positions=positions, token_ids=token_ids
             )
             self.store.save(key, kv)
+            print(f"[dexa] saved KV: key={key} T={T}", flush=True)
         self._save_layers.clear()
 
     def get_finished(

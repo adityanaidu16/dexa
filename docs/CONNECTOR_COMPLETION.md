@@ -109,6 +109,29 @@ per KV-cache group) of lists of `vllm.v1.core.kv_cache_utils.KVCacheBlock`. Each
 runs need a CUDA *devel* base (not runtime-only pip) — see
 `scripts/modal_connector_probe.py`.
 
+## Status after the end-to-end run (vLLM 0.24.0, OPT-125m, A10G)
+
+`scripts/modal_connector_serve.py` (two identical requests, prefix caching off) got
+the connector to **construct and run inside real vLLM with generation working and
+output identical** — so the 3-arg ctor, `_spec`, `_layer_kv_tensors`, and the load
+path are correctly wired and nothing raises. **But no KV was saved** (`saved=False`,
+no `[dexa] saved KV` log), so cross-request reuse does not yet happen.
+
+**Root cause — save decided one lifecycle phase too late.** The current design queues
+saves in `request_finished`, which vLLM calls *after* a request's final forward pass.
+But `save_kv_layer` (captures KV) fires *during* forward passes, and
+`build_connector_meta` (packs the save plan the worker binds) runs *before* them. So
+when `request_finished` marks a request, there is no remaining forward pass and
+`save_kv_layer` never captures it.
+
+**Fix (next task) — mirror vLLM's `SharedStorageConnector`:** decide saves in
+`build_connector_meta` from `scheduler_output` — mark a request for save on the step
+its prefill completes (all prompt tokens computed, not yet in the store) so
+`save_kv_layer` captures its KV that same step. The `scheduler_output` structure is
+already captured by the probe; `request_finished` can drop back to just freeing
+blocks / returning `(False, None)`. Then re-run `modal_connector_serve.py`: request 1
+should log `[dexa] saved KV`, request 2 `[dexa] store HIT`, with a KV file on disk.
+
 ## Sequencing
 
 `_spec` → the two tensor-split shims for one pinned attention backend (TP=1) →

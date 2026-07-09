@@ -1,6 +1,43 @@
 # Dexa Results
 
+## Update (2026-07-09, later): load-path fix flips resume to a GPU win
+
+The falsification below was diagnosed to a specific, fixable cause and fixed. The
+bf16 KV load widened **bf16→fp32 on the host** (`load_kvcache_blob`) and
+`_build_cache` then allocated a *second* fp32 slab — two full fp32 passes over the
+KV before a byte reached the GPU. The fix keeps bf16 end-to-end: a `keep_native`
+blob load hands back the raw uint16 bits (zero-copy mmap), and `HFBackend`
+reinterprets them straight to a device `bfloat16` tensor (`torch.frombuffer`), so
+there is no host widen, no pad-alloc, and half the host→device bytes. Re-run
+(`benchmarks/results/2026-07-09-a100-8b-persist-native-load.json`):
+
+| length | resume speedup (before → after) | load_ms (before → after) | lossless |
+|-------:|:-------------------------------:|:------------------------:|:--------:|
+|     8k |          1.4× → **5.5×**        |     2302 → **2.2 ms**    |   yes    |
+|    16k |          0.7× → **3.7×**        |     4766 → **4.2 ms**    |   yes    |
+|    32k |          0.7× → **3.8×**        |    11381 → **8.0 ms**    |   yes    |
+|    64k |          0.6× → **4.3×**        |    25265 → **14 ms**     |   yes    |
+
+- **`load_ms` collapses ~1800× at 64k (25.3 s → 14 ms)** — the environment-
+  independent proof the widen is gone (mmap is now lazy). This is purely the fix.
+- **Within-run, resume now beats cold re-prefill 3.7–5.5×** and stays
+  **bit-identical** at every length (the persist bench's identical-output gate is
+  what validates the device-side bf16 reinterpret). The flip from the loss below is
+  attributable to the fix: only the load path changed; cold prefill is untouched.
+- **Honest caveat:** the re-run's A100 instance was ~1.7× slower in *absolute*
+  terms than the pre-fix run (noisy Modal allocation — cold prefill 13.6 s → 23.5 s
+  at 64k), so compare speedups **within a run**, not absolute times across runs.
+  Even so, absolute resume time at 64k dropped 31.4 s → 9.8 s despite the slower box.
+
+Net: raw-KV resume **does** beat GPU re-prefill once the load path stops widening
+to fp32 — the correctness/portability win now comes with a real speed win too. The
+earlier "does raw-KV resume win on GPU?" open question is answered **yes** (~4× at
+64k on an 8B); compacted-state resume (fewer bytes still) remains the next lever.
+
 ## Update (2026-07-09): real 8B on A100 — the persist speed claim is falsified on a single GPU
+
+> **Superseded by the fix above** — this section documents the as-first-implemented
+> state (raw-KV resume losing to GPU prefill) and the diagnosis that led to the fix.
 
 Ran the persist-vs-reprefill curve on a **real Llama-3.1-8B, A100-80GB, bf16**
 (`modal run scripts/modal_scale_and_connector.py --only persist`,

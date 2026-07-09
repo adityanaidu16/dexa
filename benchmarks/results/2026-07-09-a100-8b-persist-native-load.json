@@ -1,0 +1,24 @@
+{
+  "_provenance": {
+    "date": "2026-07-09",
+    "gpu": "NVIDIA A100-SXM4-80GB",
+    "torch": "2.13.0+cu130",
+    "model": "unsloth/Llama-3.1-8B-Instruct",
+    "dtype": "bfloat16",
+    "command": "modal run scripts/modal_scale_and_connector.py --only persist  (--native-load default on)",
+    "note": "Re-run AFTER the bf16-end-to-end load-path fix (keep_native). load_ms collapses from ~25s to ~14ms at 64k (fp32 host widen removed; mmap lazy). Within-run resume now beats cold re-prefill 3.7-5.5x and stays bit-identical, flipping the 2026-07-09-a100-8b-persist.json result (0.6-0.7x loss). CAVEAT: this run's box was ~1.7x slower in absolute terms than the pre-fix run (noisy A100 allocation; cold prefill 13.6s->23.5s at 64k), so compare speedups WITHIN a run, not absolute times across runs."
+  },
+  "rows": [
+    {"length": 8000,  "cold_resume_ms": 5815.71,  "resume_ms": 1060.99,  "prefill_ms": 4163.13,  "load_ms": 2.245,  "speedup": 5.4814, "identical_output": true, "state_mb": 1048.67},
+    {"length": 16000, "cold_resume_ms": 8665.37,  "resume_ms": 2348.17,  "prefill_ms": 3755.06,  "load_ms": 4.195,  "speedup": 3.6903, "identical_output": true, "state_mb": 2097.35},
+    {"length": 32000, "cold_resume_ms": 17940.88, "resume_ms": 4764.85,  "prefill_ms": 8591.22,  "load_ms": 7.974,  "speedup": 3.7653, "identical_output": true, "state_mb": 4194.70},
+    {"length": 64000, "cold_resume_ms": 42221.42, "resume_ms": 9822.34,  "prefill_ms": 23453.19, "load_ms": 14.158, "speedup": 4.2985, "identical_output": true, "state_mb": 8389.41}
+  ],
+  "summary": {
+    "all_identical": true,
+    "max_speedup": 5.4814,
+    "cost_model": "a100-80g/8B",
+    "load_ms_before_64k": 25264.73,
+    "load_ms_after_64k": 14.158
+  }
+}

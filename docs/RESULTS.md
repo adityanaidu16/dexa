@@ -45,6 +45,21 @@ Bottom line: session persistence is **proven as a mechanism, not yet as a speedu
 through the connector. The win exists (persist curve), but the connector needs the
 load-path and chunked-prefill work before it lands.
 
+**Follow-up — load path optimized (4.4× faster, correct).** Rewrote `start_load_kv`
+and `save_kv_layer`: vectorized the block copies (per-block Python loops → one
+`index_select` gather and one scatter per layer, eliminating ~14k kernel launches /
+individual transfers at 8k×28-layer) and load via `keep_native` (skip the fp16→fp32
+host widen; reinterpret to the layer dtype on device). Re-run (same Qwen3-0.6B/8k):
+
+| | before | after |
+|---|---:|---:|
+| resume load TTFT | 4721 ms | **1073 ms** (4.4× faster) |
+| next-token correctness vs cold | — | **True** (exact) |
+
+Still 0.29× vs the 311 ms cold re-prefill — because 0.6B prefill is trivially cheap,
+not because the load is slow anymore. Whether the optimized load now *beats*
+re-prefill on a model where prefill is expensive (8B) is the next measurement.
+
 ## Update (2026-07-09, independent benchmark): whole-prompt keying loses on prefix-sharing
 
 Ran vLLM's own `vllm bench serve` (the independent harness from

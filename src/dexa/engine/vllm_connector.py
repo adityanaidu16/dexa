@@ -220,6 +220,22 @@ def load_decision(
     return n_tokens >= threshold
 
 
+def contention_factor_from_busy(busy: float, *, floor: float = 0.1) -> float:
+    """Map a GPU-busyness level in [0, 1] to a crossover-scaling factor in [floor, 1].
+
+    Pure so it is unit-tested without vLLM. ``busy`` is how full the engine's recent
+    scheduler batches are (scheduled tokens / max batch tokens). Idle (``busy=0``) ->
+    ``1.0`` (use the nominal crossover). Saturated (``busy=1``) -> ``floor`` (drop the
+    crossover to a small fraction, so a KV load — which uses idle I/O — is preferred
+    over a re-prefill that would queue behind the busy GPU). This is the signal that
+    lets Dexa win at *short* contexts under real serving load, which single-request
+    benchmarks miss. It is a heuristic proxy for "re-prefill will be slow right now";
+    a measured-latency version is future work."""
+    busy = min(1.0, max(0.0, busy))
+    floor = min(1.0, max(0.0, floor))
+    return 1.0 - busy * (1.0 - floor)
+
+
 def kvcache_to_paged_blocks(
     kv: KVCache, block_size: int
 ) -> tuple[list[np.ndarray], list[np.ndarray]]:
@@ -374,10 +390,18 @@ class DexaConnector(KVConnectorBase_V1):
         # re-prefill for this model/hardware/tier. Model+GPU specific — calibrate it
         # (default is conservative so Dexa only kicks in where it clearly wins).
         self._min_load_tokens = int(ex.get("dexa_min_load_tokens", 32768))
-        # optional contention factor in (0,1]: divide the crossover when the GPU is
-        # busy (re-prefill queues behind other work, so loading wins earlier). 1.0 =
-        # off. A scheduler-queue-aware value is future work; exposed as a knob now.
+        # Contention: lower the crossover when the GPU is busy (re-prefill queues
+        # behind other work and competes for compute, so a load — idle I/O — wins
+        # earlier). By default this is DYNAMIC: derived from how full the engine's
+        # recent scheduler batches are (see build_connector_meta / _busyness). A
+        # static override is available via dexa_contention_factor (1.0 = off).
+        self._contention_aware = bool(ex.get("dexa_contention_aware", True))
         self._contention_factor = float(ex.get("dexa_contention_factor", 1.0))
+        self._contention_floor = float(ex.get("dexa_contention_floor", 0.1))
+        sc = getattr(vllm_config, "scheduler_config", None)
+        self._max_batch_tokens = int(getattr(sc, "max_num_batched_tokens", 0) or 0)
+        self._max_seqs = int(getattr(sc, "max_num_seqs", 0) or 0)
+        self._busy_ema = 0.0  # EMA of GPU busyness in [0,1], updated per step
         # paged KV tensors per layer, captured on the worker via register_kv_caches.
         self._kv_caches: dict[str, Any] = {}
         # scheduler-side: requests that matched the store this step (req_id -> key),
@@ -492,10 +516,19 @@ class DexaConnector(KVConnectorBase_V1):
 
     def _should_load(self, n_tokens: int) -> bool:  # pragma: no cover - cluster only
         """Whether loading ``n_tokens`` of KV is expected to beat re-prefilling them —
-        the adaptive load-vs-recompute decision (delegates to :func:`load_decision`)."""
+        the adaptive load-vs-recompute decision (delegates to :func:`load_decision`).
+
+        The contention factor is DYNAMIC by default: derived from the observed batch
+        fullness (:attr:`_busy_ema`) via :func:`contention_factor_from_busy`, so a busy
+        GPU lowers the crossover and Dexa loads at shorter contexts. A static
+        ``dexa_contention_factor`` (or ``dexa_contention_aware=false``) overrides it."""
+        if self._contention_aware and (self._max_batch_tokens > 0 or self._max_seqs > 0):
+            factor = contention_factor_from_busy(self._busy_ema, floor=self._contention_floor)
+        else:
+            factor = self._contention_factor
         return load_decision(n_tokens, policy=self._load_policy,
                              min_load_tokens=self._min_load_tokens,
-                             contention_factor=self._contention_factor)
+                             contention_factor=factor)
 
     def update_state_after_alloc(
         self, request: Any, blocks: Any, num_external_tokens: int
@@ -529,6 +562,22 @@ class DexaConnector(KVConnectorBase_V1):
         :meth:`update_state_after_alloc`) are packed as before.
         """
         self._require_vllm()
+        # Observe GPU busyness for the adaptive-load decision, smoothed. Take the max
+        # of token-fullness (scheduled tokens / max batch tokens — captures prefill
+        # pressure) and seq-fullness (running requests / max seqs — captures
+        # decode-heavy concurrency, which token-fullness under-counts at 1 tok/req).
+        # get_num_new_matched_tokens (the decision) runs before this each step, so it
+        # reads the prior steps' EMA — fine, contention is temporally smooth.
+        if self._max_batch_tokens > 0 or self._max_seqs > 0:
+            total = int(getattr(scheduler_output, "total_num_scheduled_tokens", 0) or 0)
+            cached = getattr(scheduler_output, "scheduled_cached_reqs", None)
+            running = len(getattr(scheduler_output, "scheduled_new_reqs", None) or []) \
+                + int(getattr(cached, "num_reqs", 0) or 0)
+            tok_full = (total / self._max_batch_tokens) if self._max_batch_tokens else 0.0
+            seq_full = (running / self._max_seqs) if self._max_seqs else 0.0
+            fullness = min(1.0, max(tok_full, seq_full))
+            self._busy_ema = 0.7 * self._busy_ema + 0.3 * fullness
+
         loads = {rid: (key, self._load_blocks.get(rid, []))
                  for rid, key in self._needs_load.items()}
 

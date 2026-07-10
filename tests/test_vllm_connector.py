@@ -252,3 +252,18 @@ def test_load_decision_policies_and_contention():
     # contention lowers the crossover: GPU busy (factor 0.25) -> load at 8k
     assert load_decision(8192, min_load_tokens=32768, contention_factor=0.25) is True
     assert load_decision(8192, min_load_tokens=32768, contention_factor=1.0) is False
+
+
+def test_contention_factor_from_busy():
+    from dexa.engine.vllm_connector import contention_factor_from_busy, load_decision
+    # idle -> nominal crossover; saturated -> floor; monotone in between
+    assert contention_factor_from_busy(0.0) == 1.0
+    assert abs(contention_factor_from_busy(1.0, floor=0.1) - 0.1) < 1e-9
+    assert abs(contention_factor_from_busy(0.5, floor=0.0) - 0.5) < 1e-9
+    assert contention_factor_from_busy(-5) == 1.0  # clamped low
+    assert abs(contention_factor_from_busy(9, floor=0.1) - 0.1) < 1e-9  # clamped high
+    # busy GPU makes an 8k context loadable that would be re-prefilled when idle
+    idle = contention_factor_from_busy(0.0)
+    busy = contention_factor_from_busy(1.0, floor=0.1)   # crossover -> 3276
+    assert load_decision(8192, min_load_tokens=32768, contention_factor=idle) is False
+    assert load_decision(8192, min_load_tokens=32768, contention_factor=busy) is True

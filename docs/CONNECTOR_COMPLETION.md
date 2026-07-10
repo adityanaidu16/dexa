@@ -142,11 +142,18 @@ recomputing at short contexts. `get_num_new_matched_tokens` now gates the load o
 unit-tested): `adaptive` (default) loads only past a calibrated crossover
 (`dexa_min_load_tokens`, default 32768, model/hardware/tier specific), so Dexa is
 **never worse than re-prefill** — below the crossover it reports 0 and vLLM prefills.
-`contention_factor` (0,1] lowers the crossover when the GPU is busy (re-prefill
-queues; a load uses idle I/O), and `always`/`never` force the choice. **Next:** an
-online cost model (measure prefill & load rates, fit the a·n + b·n² prefill curve to
-find the crossover automatically) and a scheduler-queue-aware `contention_factor`
-(the signal that makes Dexa win at short contexts under real load).
+`always`/`never` force the choice. **Contention is now dynamic** (`dexa_contention_aware`,
+default on): each step, `build_connector_meta` updates a busyness EMA from the
+scheduler batch — `max(scheduled_tokens/max_batch_tokens, running_reqs/max_seqs)` —
+and `contention_factor_from_busy` lowers the crossover toward `dexa_contention_floor`
+(default 0.1) as the GPU saturates. So under real serving load, re-prefill queues and
+competes for compute while a KV load uses idle I/O, and Dexa loads at *short* contexts
+where it would otherwise re-prefill — the win single-request benchmarks miss. All
+pure decision logic (`load_decision`, `contention_factor_from_busy`) is unit-tested.
+**Next:** validate the contention win with a *concurrent* resume benchmark (high
+QPS → busy GPU → Dexa loads short contexts and beats queued re-prefill on P99 TTFT),
+and an online cost model (fit the a·n + b·n² prefill curve to set the crossover
+automatically instead of the calibrated default).
 
 **Remaining (honest):**
 - **TP>1** — KV-head sharding; the hard one (save/load must be per-shard-consistent).

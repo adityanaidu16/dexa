@@ -52,8 +52,37 @@ tokens it still loses to vLLM's batched re-prefill** (8930 vs 5596 ms) — loadi
 ~750 MB is not free even overlapped. Crucially, **`dexa_adaptive` matches vanilla
 (5603 ≈ 5596 ms)**: with the crossover above the context it declines to load and
 re-prefills, so Dexa is **never worse than baseline** — the adaptive policy does its
-job. Whether async load *beats* re-prefill at longer contexts (where re-prefill's
-O(n²) cost grows) is the crossover measurement in progress.
+job.
+
+**Crossover measurement (8192 tok, 16 concurrent) — the decisive result.**
+
+| config | p50 | p99 | mean |
+|---|---:|---:|---:|
+| vanilla (re-prefill) | 5359 | **9379 ms** | 5068 |
+| dexa_always (async load) | 15145 | **20296 ms** | 12927 |
+| dexa_adaptive | 5350 | **9371 ms** | 5061 |
+
+Async load got **relatively *worse* at 8k** (2.2× vs 1.6× at 3072), not better — the
+crossover is receding, not approaching. **This is fundamental, and it is the decisive
+finding: for re-prefillable KV, vLLM's re-prefill beats KV loading in every practical
+regime.** Recomputing from tiny token-id inputs with optimized batched FlashAttention
+kernels is simply cheaper than moving gigabytes of KV (disk → host → GPU), and the KV
+bytes grow with context (O(n)) just like prefill, so loading never catches up until
+prefill's O(n²) attention term dominates — which only happens around **~64k tokens**,
+a regime that is memory-impractical to even prefill single-step. Async loading, though
+correct and 2.1× better than sync, does not change this: the bottleneck is *bytes
+moved*, not *overlap*.
+
+**Bottom line for the whole "make it fast" investigation.** Against an optimized
+engine, **persisting and reloading raw KV is not a latency win** — the engine can
+always recompute it more cheaply. The honest, shippable result is the **adaptive
+policy**: it recognizes this and declines to load (matching baseline exactly at 3072
+*and* 8192), so **Dexa is provably never worse than re-prefill**. Dexa's value is
+therefore **not** raw-KV TTFT; it is (1) **portability/correctness** — a session
+survives preemption and moves across instances bit-identically (proven), a capability,
+not a speedup; and (2) the narrow regimes where recompute is genuinely dear —
+**very long contexts (64k+)** or **compacted/distilled state** (smaller than raw, and
+expensive to reconstruct), which is where the compaction/cartridge work points.
 
 ## Update (2026-07-09, session-resume benchmark): mechanism works, connector load too slow
 

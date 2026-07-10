@@ -60,6 +60,24 @@ Still 0.29× vs the 311 ms cold re-prefill — because 0.6B prefill is trivially
 not because the load is slow anymore. Whether the optimized load now *beats*
 re-prefill on a model where prefill is expensive (8B) is the next measurement.
 
+**8B measurement (Llama-3.1-8B, A100-80GB, 8k):** cold re-prefill **617 ms** vs
+optimized resume **1681 ms** (0.37×, next-token correct). Resume still loses — and the
+reason is the important finding: **vLLM's prefill is extremely fast** (8k on an 8B
+A100 in 617 ms, via FlashAttention/fused kernels), far faster than the HFBackend
+prefill the original persist curve compared against. So the bar to beat is much
+higher than that curve implied. Both prefill and load grow with context, but prefill
+stays cheap until long sequences; the crossover where a KV load beats re-prefill is
+**~64k+ tokens** (consistent with the persist curve showing the win at 64k, not 8k).
+
+**Honest consequence.** The connector's session-resume win is real but **narrow: it
+needs very long contexts (~64k+)** — which is also exactly where you *cannot* force
+single-step prefill (the 64k activation memory is prohibitive), so **chunked-prefill
+support becomes mandatory** to even run the benchmark that would show the win. The two
+remaining connector items are therefore coupled: (1) chunked-prefill handling, then
+(2) a 64k resume benchmark. Absent those, on 8k–32k contexts vLLM's own re-prefill
+beats a portable KV load, and Dexa's value there is portability/correctness (survives
+preemption, moves across instances — both proven), not raw TTFT.
+
 ## Update (2026-07-09, independent benchmark): whole-prompt keying loses on prefix-sharing
 
 Ran vLLM's own `vllm bench serve` (the independent harness from

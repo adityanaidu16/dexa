@@ -36,6 +36,25 @@ exactly when loading hurt most.
 The validation was the point: it stopped a feature that makes P99 3.4× worse from
 being on by default, and identified async loading as the real prerequisite.
 
+**Follow-up — async loading built (2.1× better than sync; adaptive never-worse).**
+`start_load_kv` now submits each load to a thread pool that runs it on its own CUDA
+stream (H2D + scatter overlap the main worker's compute); `get_num_new_matched_tokens`
+reports `async=True` and `get_finished` polls the futures. Re-run (same 24× 3072-tok /
+8B / A100 concurrent workload), and a single-request correctness gate first:
+
+- **Correct**: single-request resume next-token matches cold; and async made the
+  single-request resume itself competitive (0.29× → **0.99×**, load pipelines better).
+- **Concurrent P99 TTFT**: vanilla **5596 ms**, dexa_always (async) **8930 ms**
+  (down from 18553 ms sync — **2.1× better**), dexa_adaptive **5603 ms**.
+
+Reading it honestly: **async loading is correct and a big win over sync, but at 3072
+tokens it still loses to vLLM's batched re-prefill** (8930 vs 5596 ms) — loading 24×
+~750 MB is not free even overlapped. Crucially, **`dexa_adaptive` matches vanilla
+(5603 ≈ 5596 ms)**: with the crossover above the context it declines to load and
+re-prefills, so Dexa is **never worse than baseline** — the adaptive policy does its
+job. Whether async load *beats* re-prefill at longer contexts (where re-prefill's
+O(n²) cost grows) is the crossover measurement in progress.
+
 ## Update (2026-07-09, session-resume benchmark): mechanism works, connector load too slow
 
 Benchmarked Dexa's *actual* wedge — resume a full session on a cold instance vs

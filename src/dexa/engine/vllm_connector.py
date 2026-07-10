@@ -189,6 +189,37 @@ def prefix_key(token_ids, *, model_name: Optional[str] = None) -> str:
     return f"dexa-{digest}"
 
 
+def load_decision(
+    n_tokens: int,
+    *,
+    policy: str = "adaptive",
+    min_load_tokens: int = 32768,
+    contention_factor: float = 1.0,
+) -> bool:
+    """Whether loading ``n_tokens`` of KV from the store should beat re-prefilling them.
+
+    The adaptive load-vs-recompute decision, pure so it is unit-tested without vLLM.
+    vLLM's prefill is fast (measured: 8B/A100/8k re-prefill 617 ms < KV load 1681 ms),
+    so blindly loading can be *slower* than recomputing at short contexts; the load
+    only pays past a model/hardware/tier-specific crossover (~64k on 8B/A100). Policy:
+
+    * ``adaptive`` (default): load only when ``n_tokens >= min_load_tokens * contention_factor``.
+      ``contention_factor`` in (0, 1] lowers the crossover when the GPU is busy —
+      re-prefill queues behind other work, so a load (idle I/O) wins earlier.
+    * ``always``: load whenever the KV is present (portability-first; ignores cost).
+    * ``never``: disable loading (measure the baseline).
+
+    Below the crossover the connector reports 0 matched tokens, so vLLM re-prefills and
+    Dexa adds no cost — **never worse than baseline**.
+    """
+    if policy == "always":
+        return True
+    if policy == "never":
+        return False
+    threshold = min_load_tokens * max(1e-6, contention_factor)
+    return n_tokens >= threshold
+
+
 def kvcache_to_paged_blocks(
     kv: KVCache, block_size: int
 ) -> tuple[list[np.ndarray], list[np.ndarray]]:
@@ -332,6 +363,21 @@ class DexaConnector(KVConnectorBase_V1):
         fmt = (extra or {}).get("dexa_store_format", "blob")
         self.store = SessionStore(root=root, format=fmt)
         self.model_name = self._model_name(vllm_config)
+        # Adaptive load-vs-recompute policy. vLLM's prefill is fast, so blindly
+        # loading KV can be SLOWER than re-prefilling at short contexts (measured:
+        # 8B/A100/8k re-prefill 617ms < load 1681ms; crossover ~64k). "adaptive"
+        # loads only when the context is long enough that loading beats re-prefill,
+        # so Dexa is never worse than the baseline. See _should_load / _estimate_*.
+        ex = extra or {}
+        self._load_policy = ex.get("dexa_load_policy", "adaptive")  # adaptive|always|never
+        # crossover: minimum matched tokens above which loading is expected to beat
+        # re-prefill for this model/hardware/tier. Model+GPU specific — calibrate it
+        # (default is conservative so Dexa only kicks in where it clearly wins).
+        self._min_load_tokens = int(ex.get("dexa_min_load_tokens", 32768))
+        # optional contention factor in (0,1]: divide the crossover when the GPU is
+        # busy (re-prefill queues behind other work, so loading wins earlier). 1.0 =
+        # off. A scheduler-queue-aware value is future work; exposed as a knob now.
+        self._contention_factor = float(ex.get("dexa_contention_factor", 1.0))
         # paged KV tensors per layer, captured on the worker via register_kv_caches.
         self._kv_caches: dict[str, Any] = {}
         # scheduler-side: requests that matched the store this step (req_id -> key),
@@ -433,9 +479,23 @@ class DexaConnector(KVConnectorBase_V1):
         n_external = (n_external // block) * block
         if n_external <= 0:
             return 0, False
+        # Adaptive: only load when loading is expected to be cheaper than letting
+        # vLLM re-prefill these tokens. Below the crossover, returning 0 lets the
+        # engine prefill (Dexa adds no cost) — never worse than baseline.
+        if not self._should_load(n_external):
+            print(f"[dexa] store has key but re-prefill is cheaper for {n_external} "
+                  f"tokens (policy={self._load_policy}) -> skip load", flush=True)
+            return 0, False
         self._needs_load[self._req_id(request)] = key
         print(f"[dexa] store HIT: {n_external} external tokens for key {key}", flush=True)
         return n_external, False
+
+    def _should_load(self, n_tokens: int) -> bool:  # pragma: no cover - cluster only
+        """Whether loading ``n_tokens`` of KV is expected to beat re-prefilling them —
+        the adaptive load-vs-recompute decision (delegates to :func:`load_decision`)."""
+        return load_decision(n_tokens, policy=self._load_policy,
+                             min_load_tokens=self._min_load_tokens,
+                             contention_factor=self._contention_factor)
 
     def update_state_after_alloc(
         self, request: Any, blocks: Any, num_external_tokens: int

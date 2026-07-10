@@ -234,3 +234,21 @@ def test_real_v1_base_is_subclassed_when_vllm_present():
     assert issubclass(DexaConnector, KVConnectorBase_V1)
     # if vllm is importable we should have captured its version
     assert isinstance(vc.vllm_version(), str)
+
+
+def test_load_decision_adaptive_crossover():
+    from dexa.engine.vllm_connector import load_decision
+    # adaptive: below the crossover -> don't load (re-prefill is cheaper); at/above -> load
+    assert load_decision(8192, min_load_tokens=32768) is False
+    assert load_decision(32768, min_load_tokens=32768) is True
+    assert load_decision(65536, min_load_tokens=32768) is True
+
+
+def test_load_decision_policies_and_contention():
+    from dexa.engine.vllm_connector import load_decision
+    # explicit policies override the cost check
+    assert load_decision(1, policy="always", min_load_tokens=32768) is True
+    assert load_decision(10**9, policy="never", min_load_tokens=32768) is False
+    # contention lowers the crossover: GPU busy (factor 0.25) -> load at 8k
+    assert load_decision(8192, min_load_tokens=32768, contention_factor=0.25) is True
+    assert load_decision(8192, min_load_tokens=32768, contention_factor=1.0) is False

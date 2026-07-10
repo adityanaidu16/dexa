@@ -135,6 +135,19 @@ entry, hit the store, loaded it, and returned identical output
 (`A_saved=True B_saw_stored_KV=True identical_output=True`). The portable-across-
 instances property per-instance prefix caching can't provide.
 
+**Adaptive load-vs-recompute (v1 done).** vLLM's prefill is fast (8B/A100/8k =
+617 ms, faster than a 1.7 GB KV load), so blindly loading can be *slower* than
+recomputing at short contexts. `get_num_new_matched_tokens` now gates the load on
+`load_decision(n_tokens, policy, min_load_tokens, contention_factor)` (pure,
+unit-tested): `adaptive` (default) loads only past a calibrated crossover
+(`dexa_min_load_tokens`, default 32768, model/hardware/tier specific), so Dexa is
+**never worse than re-prefill** — below the crossover it reports 0 and vLLM prefills.
+`contention_factor` (0,1] lowers the crossover when the GPU is busy (re-prefill
+queues; a load uses idle I/O), and `always`/`never` force the choice. **Next:** an
+online cost model (measure prefill & load rates, fit the a·n + b·n² prefill curve to
+find the crossover automatically) and a scheduler-queue-aware `contention_factor`
+(the signal that makes Dexa win at short contexts under real load).
+
 **Remaining (honest):**
 - **TP>1** — KV-head sharding; the hard one (save/load must be per-shard-consistent).
 - **Chunked prefill** — a large prompt completes over multiple steps and moves to

@@ -1,5 +1,50 @@
 # Dexa Results
 
+## Update (2026-07-09, session-resume benchmark): mechanism works, connector load too slow
+
+Benchmarked Dexa's *actual* wedge — resume a full session on a cold instance vs
+re-prefill — through the real vLLM connector (`scripts/modal_bench_resume.py`,
+Qwen3-0.6B, 8192-token context, A10G; three separate containers sharing a Volume
+store):
+
+| phase | TTFT |
+|---|---:|
+| cold — vanilla vLLM full re-prefill (8k) | **273 ms** |
+| resume — Dexa load on a cold instance (8176 tokens matched) | **4721 ms** |
+
+**Resume is 17× *slower* (0.06×).** Two honest findings:
+
+1. **The mechanism is fully proven.** With single-step prefill forced, instance A saved
+   the whole 8192-token context; a separate cold instance B saw it, matched 8176 tokens
+   (block-aligned), and loaded it — full-session cross-instance resume works.
+2. **But the connector's load path is far too slow to win.** 4.7 s to load ~1.9 GB of
+   **fp32** KV vs 273 ms to recompute it on a small model. The connector load
+   (`start_load_kv`) is unoptimized: fp32 (it does *not* use the bf16-end-to-end fast
+   path built for the HFBackend persist path — different code path), a full numpy
+   repack (`kvcache_to_paged_blocks`), and a per-block Python copy loop (~14k iters at
+   8k/28-layer). This is the persist-curve lesson again, through the real connector.
+
+Plus a **critical gap surfaced**: the connector **only saves single-step prefills**.
+A real long context is *chunked* (prefills over many steps → `scheduled_cached_reqs`),
+which the save loop doesn't scan — so without the `max_num_batched_tokens` workaround
+the 16k run saved *nothing* (only the 8-token warmup) and resume just re-prefilled
+(1.00×). Long sessions are exactly Dexa's use case, so this is now a blocker, not a
+TODO.
+
+**What it takes to make the wedge win (the persist curve proves it's achievable — 4×
+at 8B/64k with an optimized load):**
+1. **Optimize the connector load path** — bf16 end-to-end + skip the numpy repack +
+   vectorize the block copy (the same class of fix the persist path got, applied to
+   `start_load_kv`).
+2. **Handle chunked prefill** — stateful per-request tracking so long (chunked)
+   sessions actually save.
+3. **Benchmark on a big model** — where prefill is expensive enough that even a good
+   load wins (small-model prefill is too cheap, as here).
+
+Bottom line: session persistence is **proven as a mechanism, not yet as a speedup**
+through the connector. The win exists (persist curve), but the connector needs the
+load-path and chunked-prefill work before it lands.
+
 ## Update (2026-07-09, independent benchmark): whole-prompt keying loses on prefix-sharing
 
 Ran vLLM's own `vllm bench serve` (the independent harness from

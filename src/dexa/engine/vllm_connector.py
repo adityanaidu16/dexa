@@ -533,15 +533,35 @@ class DexaConnector(KVConnectorBase_V1):
             return
         block_size = self._block_size()
         for _req_id, (key, block_ids) in meta.loads.items():
-            kv, _ = self.store.load(key)
+            # keep_native avoids the bf16/fp16 -> fp32 host widen (half the bytes to
+            # move and repack); the reinterpret to the layer dtype happens on device.
+            kv, _ = self.store.load(key, keep_native=True)
+            native = (kv.meta or {}).get("native_store_dtype")
             k_blocks, v_blocks = kvcache_to_paged_blocks(kv, block_size)
             for li, layer_name in enumerate(self._kv_caches):
                 k_dst, v_dst = self._layer_kv_tensors(layer_name)
-                k_src = torch.from_numpy(k_blocks[li]).to(k_dst.device, k_dst.dtype)
-                v_src = torch.from_numpy(v_blocks[li]).to(v_dst.device, v_dst.dtype)
-                for bi, phys in enumerate(block_ids[: k_src.shape[0]]):
-                    k_dst[phys] = k_src[bi]
-                    v_dst[phys] = v_src[bi]
+                k_src = self._blocks_to_device(k_blocks[li], native, k_dst)
+                v_src = self._blocks_to_device(v_blocks[li], native, v_dst)
+                n = min(len(block_ids), int(k_src.shape[0]))
+                phys = torch.as_tensor(block_ids[:n], device=k_dst.device, dtype=torch.long)
+                # one vectorized scatter per layer (was a per-block Python loop of
+                # ~n_blocks kernel launches).
+                k_dst[phys] = k_src[:n]
+                v_dst[phys] = v_src[:n]
+
+    @staticmethod
+    def _blocks_to_device(arr: np.ndarray, native_dtype: Optional[str], dst: Any):  # pragma: no cover - cluster only
+        """Move a numpy block array to a device tensor matching ``dst``'s dtype.
+
+        With ``keep_native``, ``arr`` is in the on-disk store dtype: ``uint16`` (raw
+        bf16 bits — reinterpret via ``view(bfloat16)``, no widen), ``float16``, or
+        ``float32``. Cast to ``dst.dtype`` on device."""
+        import torch
+        if native_dtype == "bfloat16":  # uint16 bits -> bfloat16, byte-identical
+            t = torch.from_numpy(arr).view(torch.bfloat16)
+        else:  # np.float16 / np.float32
+            t = torch.from_numpy(arr)
+        return t.to(dst.device, dst.dtype)
 
     def wait_for_layer_load(self, layer_name: str) -> None:  # pragma: no cover - cluster only
         """Block until ``layer_name``'s load finished. The store path copies
@@ -560,13 +580,19 @@ class DexaConnector(KVConnectorBase_V1):
         into a :class:`KVCache` and persists it.
         """
         self._require_vllm()
+        import torch
+
         meta: _DexaConnectorMetadata = self._get_connector_metadata()
         if meta is None or not meta.saves:
             return
         k_cache, v_cache = self._split_kv_layer(kv_layer)
         for req_id, (_key, block_ids, _tokens) in meta.saves.items():
-            k_blocks = np.stack([self._block_to_numpy(k_cache[b]) for b in block_ids], axis=0)
-            v_blocks = np.stack([self._block_to_numpy(v_cache[b]) for b in block_ids], axis=0)
+            idx = torch.as_tensor(block_ids, device=k_cache.device, dtype=torch.long)
+            # one gather + one device->host copy per layer (was a per-block Python loop
+            # of individual .cpu() transfers). Widen to fp32 once on host — the storage
+            # layer re-encodes to the on-disk dtype (bf16/fp16), so disk stays compact.
+            k_blocks = k_cache.index_select(0, idx).to("cpu", torch.float32).numpy()
+            v_blocks = v_cache.index_select(0, idx).to("cpu", torch.float32).numpy()
             slot = self._save_layers.setdefault(req_id, {"k": [], "v": []})
             slot["k"].append(k_blocks)
             slot["v"].append(v_blocks)
@@ -703,10 +729,6 @@ class DexaConnector(KVConnectorBase_V1):
         """(key, value) for the per-layer tensor streamed to ``save_kv_layer`` — same
         K/V-split layout as the registered tensor."""
         return self._kv_split(kv_layer)
-
-    @staticmethod
-    def _block_to_numpy(block: Any) -> np.ndarray:  # pragma: no cover - cluster only
-        return block.to("cpu").float().numpy()
 
     def _save_geometry(self, req_id: str, meta: Any):  # pragma: no cover - cluster only
         """(T, positions, token_ids) for a finished request, from the token ids

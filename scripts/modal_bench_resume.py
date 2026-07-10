@@ -78,14 +78,15 @@ def measure(model: str, ctx_len: int, label: str, use_connector: bool) -> dict:
 
     llm.generate([warm], sp)  # warm up CUDA kernels so they're not in the timing
     t0 = time.perf_counter()
-    llm.generate([prompt], sp)
+    out = llm.generate([prompt], sp)
     dt_ms = (time.perf_counter() - t0) * 1000.0
+    tok = int(out[0].outputs[0].token_ids[0])  # next-token id: correctness check
 
     kv_store.commit()
     after = [os.path.basename(f) for f in glob.glob("/kv/*")]
-    print(f"[{label}] ctx={ctx_len} ttft={dt_ms:.0f}ms  store_before={len(before)} store_after={len(after)}",
-          flush=True)
-    return {"label": label, "ttft_ms": dt_ms, "before": before, "after": after}
+    print(f"[{label}] ctx={ctx_len} ttft={dt_ms:.0f}ms tok={tok} "
+          f"store_before={len(before)} store_after={len(after)}", flush=True)
+    return {"label": label, "ttft_ms": dt_ms, "tok": tok, "before": before, "after": after}
 
 
 @app.local_entrypoint()
@@ -101,8 +102,10 @@ def main(model: str = "Qwen/Qwen3-0.6B", ctx_len: int = 8192) -> None:
     speedup = tc / tr if tr > 0 else float("inf")
     print("\n" + "=" * 66)
     print(f"SESSION RESUME @ ctx={ctx_len} ({model}, {GPU})")
-    print(f"  cold  (vanilla full re-prefill) : {tc:8.0f} ms")
-    print(f"  resume(dexa load, cold instance): {tr:8.0f} ms")
+    print(f"  cold  (vanilla full re-prefill) : {tc:8.0f} ms  (next-tok {cold['tok']})")
+    print(f"  resume(dexa load, cold instance): {tr:8.0f} ms  (next-tok {resume['tok']})")
     print(f"  -> resume speedup vs cold re-prefill: {speedup:.2f}x")
+    correct = cold["tok"] == resume["tok"]
+    print(f"  correctness (resume next-tok == cold's): {correct}")
     print(f"  (A saved KV={saved}; resume instance saw stored KV on entry={hit})")
     print("=" * 66)

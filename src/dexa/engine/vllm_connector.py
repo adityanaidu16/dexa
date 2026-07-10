@@ -404,6 +404,16 @@ class DexaConnector(KVConnectorBase_V1):
         self._max_batch_tokens = int(getattr(sc, "max_num_batched_tokens", 0) or 0)
         self._max_seqs = int(getattr(sc, "max_num_seqs", 0) or 0)
         self._busy_ema = 0.0  # EMA of GPU busyness in [0,1], updated per step
+        # Async loading: overlap the KV load (disk read + repack + H2D + scatter) with
+        # the GPU's ongoing compute on a side stream, instead of blocking the worker
+        # step. The concurrent benchmark showed SYNCHRONOUS loads serialize and lose
+        # ~3.4× to vLLM's batched prefill; async is the prerequisite for a latency win
+        # under load. get_num_new_matched_tokens reports async=True so vLLM waits for
+        # the load (via get_finished) instead of running the request immediately.
+        self._async_load = bool(ex.get("dexa_async_load", True))
+        self._async_workers = int(ex.get("dexa_async_workers", 4))
+        self._load_pool: Any = None
+        self._pending_loads: dict[str, Any] = {}
         # paged KV tensors per layer, captured on the worker via register_kv_caches.
         self._kv_caches: dict[str, Any] = {}
         # scheduler-side: requests that matched the store this step (req_id -> key),
@@ -513,8 +523,11 @@ class DexaConnector(KVConnectorBase_V1):
                   f"tokens (policy={self._load_policy}) -> skip load", flush=True)
             return 0, False
         self._needs_load[self._req_id(request)] = key
-        print(f"[dexa] store HIT: {n_external} external tokens for key {key}", flush=True)
-        return n_external, False
+        print(f"[dexa] store HIT: {n_external} external tokens for key {key} "
+              f"(async={self._async_load})", flush=True)
+        # async flag: True => vLLM waits for the load (get_finished) instead of
+        # running the request this step, so the load overlaps other requests' compute.
+        return n_external, self._async_load
 
     def _should_load(self, n_tokens: int) -> bool:  # pragma: no cover - cluster only
         """Whether loading ``n_tokens`` of KV is expected to beat re-prefilling them —
@@ -637,28 +650,52 @@ class DexaConnector(KVConnectorBase_V1):
         have correct KV, so decode proceeds with no re-prefill.
         """
         self._require_vllm()
-        import torch  # vllm pulls in torch; safe on the cluster
-
         meta: _DexaConnectorMetadata = self._get_connector_metadata()
         if meta is None or not meta.loads:
             return
-        block_size = self._block_size()
-        for _req_id, (key, block_ids) in meta.loads.items():
-            # keep_native avoids the bf16/fp16 -> fp32 host widen (half the bytes to
-            # move and repack); the reinterpret to the layer dtype happens on device.
-            kv, _ = self.store.load(key, keep_native=True)
-            native = (kv.meta or {}).get("native_store_dtype")
-            k_blocks, v_blocks = kvcache_to_paged_blocks(kv, block_size)
+        for req_id, (key, block_ids) in meta.loads.items():
+            if self._async_load:
+                # submit off the worker thread; get_finished reports completion. The
+                # load runs on its own CUDA stream so its H2D+scatter overlap the
+                # main stream's compute for other requests.
+                self._pending_loads[req_id] = self._pool().submit(
+                    self._load_one, key, list(block_ids), req_id)
+            else:
+                self._load_one(key, list(block_ids), req_id)  # synchronous fallback
+
+    def _pool(self):  # pragma: no cover - cluster only
+        if self._load_pool is None:
+            import concurrent.futures
+            self._load_pool = concurrent.futures.ThreadPoolExecutor(
+                max_workers=self._async_workers, thread_name_prefix="dexa-load")
+        return self._load_pool
+
+    def _load_one(self, key: str, block_ids: list, req_id: str) -> str:  # pragma: no cover - cluster only
+        """Restore one request's matched prefix into its allocated blocks.
+
+        On the async path this runs in a pool thread on a dedicated CUDA stream, so
+        the disk read + numpy repack (GIL-releasing) and the H2D copy + scatter overlap
+        the main worker's compute. ``keep_native`` avoids the bf16/fp16→fp32 host widen.
+        """
+        import torch
+
+        kv, _ = self.store.load(key, keep_native=True)
+        native = (kv.meta or {}).get("native_store_dtype")
+        k_blocks, v_blocks = kvcache_to_paged_blocks(kv, self._block_size())
+        from contextlib import nullcontext
+        stream = torch.cuda.Stream() if self._async_load else None
+        with (torch.cuda.stream(stream) if stream is not None else nullcontext()):
             for li, layer_name in enumerate(self._kv_caches):
                 k_dst, v_dst = self._layer_kv_tensors(layer_name)
                 k_src = self._blocks_to_device(k_blocks[li], native, k_dst)
                 v_src = self._blocks_to_device(v_blocks[li], native, v_dst)
                 n = min(len(block_ids), int(k_src.shape[0]))
                 phys = torch.as_tensor(block_ids[:n], device=k_dst.device, dtype=torch.long)
-                # one vectorized scatter per layer (was a per-block Python loop of
-                # ~n_blocks kernel launches).
-                k_dst[phys] = k_src[:n]
+                k_dst[phys] = k_src[:n]  # one vectorized scatter per layer
                 v_dst[phys] = v_src[:n]
+        if stream is not None:
+            stream.synchronize()  # this request's KV is fully written before we report done
+        return req_id
 
     @staticmethod
     def _blocks_to_device(arr: np.ndarray, native_dtype: Optional[str], dst: Any):  # pragma: no cover - cluster only
@@ -736,10 +773,22 @@ class DexaConnector(KVConnectorBase_V1):
     def get_finished(
         self, finished_req_ids: set
     ) -> tuple[Optional[set], Optional[set]]:  # pragma: no cover - cluster only
-        """Report which async saves/loads completed this step. The store path is
-        synchronous, so nothing is pending: return ``(None, None)``."""
+        """Report which async (saving, loading) transfers completed this step.
+
+        vLLM polls this each step and schedules a request once its async load is
+        reported here. Saves are synchronous (done in :meth:`wait_for_save`), so the
+        first element is ``None``; the second is the set of req_ids whose load future
+        finished (``None`` if none pending)."""
         self._require_vllm()
-        return None, None
+        if not self._pending_loads:
+            return None, None
+        done: set = set()
+        for req_id, fut in list(self._pending_loads.items()):
+            if fut.done():
+                fut.result()  # surface load exceptions instead of hanging silently
+                done.add(req_id)
+                del self._pending_loads[req_id]
+        return None, (done or None)
 
     # --- version-pinned engine glue (cluster only) ------------------------
     # The helpers below reach into vLLM-version-specific internals (request ids,

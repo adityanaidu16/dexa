@@ -52,8 +52,13 @@ def measure(model: str, ctx_len: int, label: str, use_connector: bool) -> dict:
     kv_store.reload()
     before = [os.path.basename(f) for f in glob.glob("/kv/*")]
 
-    kwargs = dict(model=model, enforce_eager=True, gpu_memory_utilization=0.7,
-                  max_model_len=ctx_len + 256, enable_prefix_caching=False)
+    # Force SINGLE-STEP prefill (batch the whole prompt) so it lands in
+    # scheduled_new_reqs and the connector's save fires — the connector does not yet
+    # handle chunked prefill (long prompts spread over steps -> scheduled_cached_reqs),
+    # which is a critical gap for real long sessions (see docs/CONNECTOR_COMPLETION.md).
+    kwargs = dict(model=model, enforce_eager=True, gpu_memory_utilization=0.85,
+                  max_model_len=ctx_len + 256, enable_prefix_caching=False,
+                  max_num_batched_tokens=ctx_len + 256)
     if use_connector:
         from vllm.config import KVTransferConfig
         kwargs["kv_transfer_config"] = KVTransferConfig(
@@ -84,7 +89,7 @@ def measure(model: str, ctx_len: int, label: str, use_connector: bool) -> dict:
 
 
 @app.local_entrypoint()
-def main(model: str = "Qwen/Qwen3-0.6B", ctx_len: int = 16384) -> None:
+def main(model: str = "Qwen/Qwen3-0.6B", ctx_len: int = 8192) -> None:
     print(f"resume benchmark on {GPU}: {model}, ctx_len={ctx_len}")
     pop = measure.remote(model, ctx_len, "populate(dexa save)", True)
     cold = measure.remote(model, ctx_len, "cold(vanilla re-prefill)", False)

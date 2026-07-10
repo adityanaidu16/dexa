@@ -1,5 +1,41 @@
 # Dexa Results
 
+## Update (2026-07-09, contention benchmark): loading under load is 3.4× *worse* — sync load serializes
+
+Tested the contention thesis — "under GPU load, re-prefill queues so loading KV wins"
+— with a concurrent benchmark (`scripts/modal_bench_contention.py`): 24 distinct 3072-
+token sessions pre-saved, then replayed at 24-way concurrency on Llama-3.1-8B/A100-80GB.
+P99 TTFT:
+
+| config | p50 | **p99** | mean |
+|---|---:|---:|---:|
+| vanilla (re-prefill) | 3083 ms | **5505 ms** | 2965 ms |
+| dexa_always (load) | 18548 ms | **18553 ms** | 18546 ms |
+| dexa_adaptive (contention-aware) | 15885 ms | 15907 ms | 14347 ms |
+
+**The thesis is falsified for the current connector: loading is 3.4× *slower* under
+concurrency, not faster.** Cause: `start_load_kv` is **synchronous** — it blocks the
+worker step — so 24 concurrent loads *serialize*, while vLLM *batches* 24 prefills
+efficiently. Worse, the contention-aware policy made the actively-wrong call: its logs
+show it loaded the *later* requests once its busyness EMA ramped up — i.e. it loaded
+exactly when loading hurt most.
+
+**Consequences:**
+1. **Contention-aware loading is disabled by default** — its premise ("busy → load")
+   only holds with an **async/overlapped** load path, which the connector does not
+   have. The mechanism is kept (off) for when async loading lands.
+2. **Synchronous KV loading cannot compete with vLLM's batched prefill under any
+   concurrency.** vLLM's prefill is not just fast single-request (617 ms/8k) — it
+   *batches*, which a serial blocking load can't. So the connector's load must become
+   **async and overlapped with compute** (à la Mooncake RDMA / LMCache async) to be a
+   latency win at all in a real server.
+3. Reinforces the honest positioning: at realistic serving concurrency, Dexa's
+   connector is a **portability/correctness** tool (survives preemption, moves across
+   instances — proven), **not** a TTFT win, until async loading exists.
+
+The validation was the point: it stopped a feature that makes P99 3.4× worse from
+being on by default, and identified async loading as the real prerequisite.
+
 ## Update (2026-07-09, session-resume benchmark): mechanism works, connector load too slow
 
 Benchmarked Dexa's *actual* wedge — resume a full session on a cold instance vs

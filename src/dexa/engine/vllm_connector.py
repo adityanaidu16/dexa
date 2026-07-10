@@ -390,12 +390,14 @@ class DexaConnector(KVConnectorBase_V1):
         # re-prefill for this model/hardware/tier. Model+GPU specific — calibrate it
         # (default is conservative so Dexa only kicks in where it clearly wins).
         self._min_load_tokens = int(ex.get("dexa_min_load_tokens", 32768))
-        # Contention: lower the crossover when the GPU is busy (re-prefill queues
-        # behind other work and competes for compute, so a load — idle I/O — wins
-        # earlier). By default this is DYNAMIC: derived from how full the engine's
-        # recent scheduler batches are (see build_connector_meta / _busyness). A
-        # static override is available via dexa_contention_factor (1.0 = off).
-        self._contention_aware = bool(ex.get("dexa_contention_aware", True))
+        # Contention factor: lower the crossover when the GPU is busy.
+        # DEFAULT OFF — validation (docs/RESULTS.md, concurrent benchmark) FALSIFIED
+        # the premise: the current load is SYNCHRONOUS (start_load_kv blocks the
+        # worker), so under concurrency loads serialize and are ~3.4× SLOWER than
+        # vLLM's batched re-prefill — loading *more* when busy is exactly wrong.
+        # Re-enable only once the load path is async/overlapped (then busy → load
+        # becomes correct). The mechanism is kept, off by default, for that future.
+        self._contention_aware = bool(ex.get("dexa_contention_aware", False))
         self._contention_factor = float(ex.get("dexa_contention_factor", 1.0))
         self._contention_floor = float(ex.get("dexa_contention_floor", 0.1))
         sc = getattr(vllm_config, "scheduler_config", None)

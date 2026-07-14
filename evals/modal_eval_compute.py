@@ -37,6 +37,9 @@ GPU = os.environ.get("DEXA_EVAL_GPU", "A100-80GB")
 image = (
     modal.Image.from_registry("nvidia/cuda:12.8.1-devel-ubuntu22.04", add_python="3.12")
     .pip_install("vllm==0.24.0", "datasets", "numpy")
+    # hf-xet's CDN 403s here; removing it makes huggingface_hub fall back to plain
+    # HTTP downloads (HF_HUB_DISABLE_XET alone wasn't honored).
+    .run_commands("python -m pip uninstall -y hf-xet || true")
     .env({"HF_HOME": "/cache/hf", "HF_HUB_DISABLE_XET": "1"})
 )
 

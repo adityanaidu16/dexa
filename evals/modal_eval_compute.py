@@ -119,7 +119,7 @@ def run(model: str, n_list: list[int], n_problems: int) -> None:
     results: dict[str, list] = {}
 
     # ---- GSM8K: self-consistency (majority vote) --------------------------
-    gsm = load_dataset("gsm8k", "main", split=f"test[:{n_problems}]")
+    gsm = load_dataset("openai/gsm8k", "main", split=f"test[:{n_problems}]")
     gsm_prompts = [f"Solve step by step. End with '#### <number>'.\n\nProblem: {q}"
                    for q in gsm["question"]]
     gsm_gold = [extract_final_number(a) for a in gsm["answer"]]
@@ -134,7 +134,7 @@ def run(model: str, n_list: list[int], n_problems: int) -> None:
         print(f"[gsm8k] N={N:2d} acc={correct/len(gsm_gold):.3f} tokens={toks}", flush=True)
 
     # ---- HumanEval: best-of-N (any sample passes the tests) ---------------
-    he = load_dataset("openai_humaneval", split="test")
+    he = load_dataset("openai/openai_humaneval", split="test")
     he_prompts = [f"Complete this Python function. Return the full function in a "
                   f"```python block.\n\n```python\n{p}\n```" for p in he["prompt"]]
     for N in n_list:

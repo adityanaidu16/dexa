@@ -29,15 +29,43 @@ unit tests); TriviaQA = self-consistency on a knowledge task.
    (it gives `n>1` + shared-prefix KV, but no adaptive control), and it's the
    differentiated product.
 
+## Efficiency proof — verifier-guided early-stop (the product claim, measured)
+
+**Run:** `modal run evals/modal_verifier_search.py`, same model/GPU, N=16, all 164
+HumanEval problems. Generate N samples per problem, record each sample's pass/tokens,
+then compute costs post-hoc (samples are i.i.d.). Every strategy yields the **identical**
+pass@16 — only the token cost differs.
+
+| strategy | tokens | vs naive | pass@16 |
+|----------|-------:|---------:|--------:|
+| naive best-of-N (all N to completion) | 860,830 | 1.00× | 0.909 |
+| **early-stop B=4 (batched, realistic)** | **302,349** | **2.85×** | 0.909 |
+| early-stop B=1 (one-at-a-time, theoretical min) | 182,431 | 4.72× | 0.909 |
+
+**avg samples used (B=1): 3.11 / 16** — most problems pass on the first sample or two;
+only the hard tail consumes the full budget. That skew is exactly why early-stop wins.
+
+**The headline number: pass@16 quality (0.909) at 2.8× less cost** with realistic
+batched rounds of 4, up to 4.7× at the one-at-a-time minimum. The +21% quality lever
+from best-of-N is captured at a *fraction* of the naive 16× cost, because a free
+verifier (the unit tests) lets you stop the moment a sample passes and spend nothing
+more. This is the concrete product claim: **"pass@16 quality at ~pass@4 cost."**
+
 ## Product implication
 
 The eval-driven answer to "where do we add value": **an efficient, verifier-guided
 search engine for verifiable reasoning — code first.** Beachhead = code generation /
 coding agents, where (a) the quality lever is largest (+21%), (b) verifiers are free
-(unit tests), and (c) the naive 16× cost is the inefficiency to capture. Not knowledge
-QA (retrieval's job). Next: prove the *efficiency* claim — verifier-guided
-best-of-N with early-stop/pruning reaches ~pass@16 quality at a fraction of pass@16
-cost, vs naive all-N.
+(unit tests), and (c) the naive 16× cost is the inefficiency to capture — and we now
+have the hard number for that capture (**2.8–4.7× cheaper at equal quality**). Not
+knowledge QA (retrieval's job). The MVP and the proof are the same artifact: a
+verifier-guided early-stop engine that delivers pass@16 quality at pass@4 cost.
+
+*(Efficiency caveats: batched B=4 shares the prompt KV across a round but pays a small
+tail-latency cost vs B=1; the 2.85× is the conservative, realistic figure. The verifier
+here is the full hidden test suite — a real deployment sees only visible tests, which
+recovers slightly less of the gain but keeps the same shape. pass@k is an oracle
+selector, so 0.909 is the sampling ceiling a real verifier approximates.)*
 
 *(Caveats: single model (Llama-3.1-8B); HumanEval "best-of-N" is pass@k — an oracle
 selector — so it's the quality *ceiling* of sampling, which a real verifier

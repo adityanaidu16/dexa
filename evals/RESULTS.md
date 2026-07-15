@@ -75,6 +75,34 @@ pipelining and continuous batching would recover most of the token→wall-clock 
 Even naively, though, the engine is **2.6× cheaper and 1.5× faster at equal quality —
 live, not on paper.**
 
+## Continuous-batch scheduler — the wall-clock gap, closed
+
+**Run:** `modal run evals/modal_verifier_sched.py`, same model/GPU, N=16, B=4, all 164
+problems. The round engine left wall-clock on the table because discrete global rounds
+drain the batch (only the hard tail is left in round 4, idling the A100). This drives
+vLLM's low-level `LLMEngine` step loop directly (`add_request`/`step`/`abort`) with **no
+rounds**: all problems' samples share one continuously-batched flight, finished samples
+are verified each step, a problem's siblings are **aborted the instant one passes**, and
+a failed wave's next samples drop straight into the same live batch. Baseline is the
+same engine run with no early stop (N independent n=1 requests/problem).
+
+| metric | naive (no early stop) | continuous scheduler | ratio |
+|--------|----------------------:|---------------------:|------:|
+| pass@16 | 0.884 | 0.884 | **identical** |
+| decode tokens (incl. aborted partials) | 862,050 | 327,607 | **2.63×** |
+| **END-TO-END wall (s)** | 183.8 | 86.6 | **2.12×** |
+
+**pass@16 is *exactly* equal (0.884 = 0.884)** — same seeds draw the same 16 samples per
+problem, and early-stop only skips samples *after* a pass, so it cannot change whether
+any of the 16 would have passed. Early-stop is provably lossless here, not approximately.
+
+**The gap is closed: 1.5× → 2.12× wall-clock**, now tracking the 2.63× token saving
+closely (the residual is verify latency on the critical path + per-step overhead). This
+is the step from benchmark to engine: **2.1× faster end-to-end AND 2.6× cheaper at
+byte-identical quality**, because verification and abort live *inside* one continuously
+batched flight instead of between synchronized rounds. This adaptive per-sequence control
+(verify → abort → refill, all mid-batch) is exactly what vLLM's static `n=16` cannot do.
+
 ## Product implication
 
 The eval-driven answer to "where do we add value": **an efficient, verifier-guided
@@ -83,7 +111,8 @@ coding agents, where (a) the quality lever is largest (+21%), (b) verifiers are 
 (unit tests), and (c) the naive 16× cost is the inefficiency to capture — and we now
 have the hard number for that capture (**2.8–4.7× cheaper at equal quality**). Not
 knowledge QA (retrieval's job). The MVP and the proof are the same artifact: a
-verifier-guided early-stop engine that delivers pass@16 quality at pass@4 cost.
+verifier-guided early-stop engine that delivers pass@16 quality at pass@4 cost — and,
+with the continuous-batch scheduler, at **2.1× the throughput** of naive best-of-N too.
 
 *(Efficiency caveats: batched B=4 shares the prompt KV across a round but pays a small
 tail-latency cost vs B=1; the 2.85× is the conservative, realistic figure. The verifier

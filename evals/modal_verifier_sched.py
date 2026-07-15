@@ -130,23 +130,29 @@ def run(model: str, N: int, B: int, n_problems: int) -> None:
                 continue
             if passes(out.outputs[0].text, probs[idx]):
                 solved[idx] = True
+                # abort the still-decoding siblings but LEAVE them in `active`: when
+                # their aborted output drains through step() we count the partial
+                # tokens they generated (that compute was really spent — honest bill).
                 for rid, j in [(r, j) for r, j in active.items() if j == idx]:
                     engine.abort_request(rid)
-                    active.pop(rid, None)
-                    inflight[idx] -= 1
             elif inflight[idx] == 0 and launched[idx] < N:
                 launch(idx, min(B, N - launched[idx]))
     sched_wall = perf_counter() - t0
     sched_pass = sum(solved) / n
 
-    # ---- NAIVE baseline on the SAME engine (n=N per problem, no early stop) -
+    # ---- NAIVE baseline on the SAME engine, no early stop -------------------
+    # The low-level engine does NOT expand SamplingParams(n=N) into N samples, so we
+    # issue N independent n=1 requests per problem (identical request path to the
+    # scheduler, minus the abort/early-stop) and run every one to completion.
     naive_active: dict[str, int] = {}
     naive_pass_flag = [False] * n
     naive_tokens = 0
     t0 = perf_counter()
     for idx in range(n):
-        engine.add_request(f"n{idx}", token_prompts[idx], sp(N, 0))
-        naive_active[f"n{idx}"] = idx
+        for s in range(N):
+            rid = f"n{idx}:{s}"
+            engine.add_request(rid, token_prompts[idx], sp(1, s + 1))
+            naive_active[rid] = idx
     while engine.has_unfinished_requests():
         for out in engine.step():
             if not out.finished:
@@ -154,8 +160,9 @@ def run(model: str, N: int, B: int, n_problems: int) -> None:
             idx = naive_active.pop(out.request_id, None)
             if idx is None:
                 continue
-            naive_tokens += sum(len(o.token_ids) for o in out.outputs)
-            naive_pass_flag[idx] = any(passes(o.text, probs[idx]) for o in out.outputs)
+            naive_tokens += len(out.outputs[0].token_ids)
+            if passes(out.outputs[0].text, probs[idx]):
+                naive_pass_flag[idx] = True
     naive_wall = perf_counter() - t0
     naive_pass = sum(naive_pass_flag) / n
 

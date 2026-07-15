@@ -51,6 +51,30 @@ from best-of-N is captured at a *fraction* of the naive 16× cost, because a fre
 verifier (the unit tests) lets you stop the moment a sample passes and spend nothing
 more. This is the concrete product claim: **"pass@16 quality at ~pass@4 cost."**
 
+## Live engine — the post-hoc number, measured end-to-end
+
+**Run:** `modal run evals/modal_verifier_engine.py`, same model/GPU, N=16, B=4, all 164
+problems. Not reconstructed: the engine actually generates in batched rounds of 4, runs
+the unit-test verifier after each round, drops solved problems, and only survivors
+continue. Both wall-clock and tokens are measured live.
+
+| metric | naive n=16 | live engine (B=4 rounds) | ratio |
+|--------|-----------:|-------------------------:|------:|
+| pass@16 | 0.896 | 0.878 | ~equal (i.i.d. redraw noise) |
+| decode tokens | 858,658 | 330,174 | **2.60×** |
+| GPU generation wall (s) | 168.1 | 110.0 | **1.53×** |
+| verify wall (s) | 27.0 | 18.6 | — |
+
+The live token saving (**2.60×**) confirms the post-hoc 2.85× — the small gap is exactly
+the "pay for all B in the passing round" overhead the model predicted. Quality holds
+(0.878 vs 0.896 = ~3 problems, sampling noise from fresh per-round draws). Wall-clock
+improves less than tokens (**1.53×**) because the batch *shrinks* each round — 27 hard
+problems left by round 2 underfill the A100, so late rounds are latency-bound, not
+throughput-bound. That gap is the real engineering surface: cross-problem round
+pipelining and continuous batching would recover most of the token→wall-clock slack.
+Even naively, though, the engine is **2.6× cheaper and 1.5× faster at equal quality —
+live, not on paper.**
+
 ## Product implication
 
 The eval-driven answer to "where do we add value": **an efficient, verifier-guided

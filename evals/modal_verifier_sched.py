@@ -72,7 +72,10 @@ def run(model: str, N: int, B: int, n_problems: int) -> None:
         msg = [{"role": "user", "content":
                 f"Complete this Python function. Return the full function in a "
                 f"```python block.\n\n```python\n{p}\n```"}]
-        ids = tok.apply_chat_template(msg, tokenize=True, add_generation_prompt=True)
+        # tokenize=False then encode ourselves: guarantees int ids and avoids the
+        # double-BOS a raw-string prompt would get (template already emits BOS).
+        text = tok.apply_chat_template(msg, tokenize=False, add_generation_prompt=True)
+        ids = [int(x) for x in tok(text, add_special_tokens=False)["input_ids"]]
         token_prompts.append({"prompt_token_ids": ids})
 
     engine = LLMEngine.from_engine_args(EngineArgs(

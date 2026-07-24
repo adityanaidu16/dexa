@@ -103,6 +103,35 @@ byte-identical quality**, because verification and abort live *inside* one conti
 batched flight instead of between synchronized rounds. This adaptive per-sequence control
 (verify → abort → refill, all mid-batch) is exactly what vLLM's static `n=16` cannot do.
 
+## Robustness — 2nd model + a weak, deployable verifier
+
+**Run:** `modal run evals/modal_robustness.py`, N=16, all 164 problems. Two fair
+objections to the headline: it used one model and an *oracle* verifier (the full hidden
+suite). Real deployments see only a few **visible** example tests — which can
+false-positive (pass visible, fail hidden) or miss (a hidden-correct sample never trips
+the truncated check). So we score every sample on both the full hidden suite (ground
+truth + oracle signal) and a weak verifier = **first 3 asserts only**; the weak engine
+ships the first visible-pass sample and is graded on hidden — exactly what production does.
+
+| model | oracle pass@16 | weak pass@16 | % ceiling kept | visible FP rate | oracle cost | weak cost |
+|-------|---------------:|-------------:|---------------:|----------------:|------------:|----------:|
+| Llama-3.1-8B-Instruct | 0.909 | 0.848 | **93%** | 7.7% | 2.85× | **3.04×** |
+| Qwen2.5-Coder-7B-Instruct | 0.963 | 0.921 | **96%** | 3.8% | 3.45× | **3.52×** |
+
+**The win holds on both axes.** A realistic 3-example verifier keeps **93–96%** of the
+oracle pass@16 while cutting cost **3.0–3.5×** — actually *cheaper* than the oracle
+verifier, because 3 asserts trip sooner than the full suite. The second model (a coding
+model) doesn't just replicate the shape, it strengthens it: higher ceiling (0.963),
+more quality kept (96%), lower false-positive rate (3.8%), bigger speedup (3.5×).
+
+**The honest cost of a weak verifier, quantified:** it's not free. ~4–8% of the ceiling
+is lost to visible false-positives (a sample that passes 3 asserts but fails hidden gets
+shipped) plus the 6–10 problems per model where no sample passes visible within N. A
+stronger/better-calibrated model loses less. That is the real tradeoff to state to a
+buyer — not "lossless," but "keep >90% of the search gain at 3× less cost with only the
+tests you already have." (Caveat: 'visible = first 3 asserts' is a proxy for real example
+tests; HumanEval doesn't ship a clean visible/hidden split.)
+
 ## Product implication
 
 The eval-driven answer to "where do we add value": **an efficient, verifier-guided

@@ -153,3 +153,53 @@ selector, so 0.909 is the sampling ceiling a real verifier approximates.)*
 selector — so it's the quality *ceiling* of sampling, which a real verifier
 approximates; TriviaQA self-consistency has verifier noise but the flat shape is
 robust. Directional, not a leaderboard.)*
+
+---
+
+# Long-context branching curve — the thesis test that came back inverted (and why that's useful)
+
+**Run:** `modal run evals/modal_context_scaling.py`, Llama-3.1-8B, A100-80GB, N=8
+branches, gen=128, prefix caching OFF (models the at-scale regime where KV can't stay
+resident). Compares **shared** (one request, `n=N` — prefill the context once, branch N)
+vs **naive** (N sequential requests, each re-prefills the full context) across context
+length L.
+
+| context L | prefill s | shared s (n=N) | naive s (N re-prefill) | speedup |
+|----------:|----------:|---------------:|-----------------------:|--------:|
+| 4k   | 0.27  | 7.52   | 22.77  | **3.03×** |
+| 16k  | 1.35  | 13.82  | 32.16  | 2.33× |
+| 32k  | 3.48  | 32.57  | 48.90  | 1.50× |
+| 64k  | 10.06 | 91.76  | 101.41 | 1.11× |
+| 128k | 32.68 | 285.72 | 283.16 | **0.99×** |
+
+**The branch-sharing speedup SHRINKS with context (3.0× → 1.0×) — the opposite of the
+naive thesis.** But the decomposition shows *why*, and it's the actually-useful result:
+
+- **The prefill prize is real and grows.** At 128k, one prefill is 32.7 s and dominates
+  per-branch decode (~2.7 s). Paying prefill once vs 8× *should* be a ~5× win.
+- **vLLM's native `n=N` FAILS to capture it at long context.** Its concurrent branched
+  decode over the long shared KV is pathological: per-step 8-wide decode is **2.8× a
+  single decode at 4k (sublinear, good) but 94× at 128k (massively superlinear).** So
+  the shared run spends ~253 s in decode and ends up *no faster than re-prefilling
+  everything* (285 s ≈ 283 s). The prefill saving is real but eaten by a decode-side
+  inefficiency — it is not reading the shared prefix KV once and reusing it across the 8
+  branches; it re-pays per branch.
+- **The memory wall confirms the regime.** You *cannot* run 8 independent 128k contexts
+  concurrently (8×~16 GB = 128 GB > 80 GB HBM), so naive best-of-N at long context must
+  serialize. Sharing the prefix is the only thing that fits — but you also need an
+  efficient branched decode, which vLLM does not provide.
+
+**The redirect.** The bottleneck at long context is **decode over the long KV, not
+prefill** — exactly the decode-attention tax flagged earlier. The unrealized prize
+(≈5× at 128k: prefill-once + a decode that reads the shared prefix once/step ≈ 54 s vs
+vLLM's 285 s) points the product away from "persist/reuse KV" (commoditized, and vLLM
+already shares prefill *within* a request) and toward **an efficient shared-prefix
+branched decode** (tree/shared-prefix attention that reads the long prefix KV once and
+applies all N branch queries) and/or **KV compression** to cut the decode cost directly.
+
+*(Caveats: one run, `enforce_eager` (no CUDA graphs — but eager penalizes the
+many-small-steps naive baseline MORE than shared, so removing it would make shared look
+*worse*, not better; the shrink is robust to that). The ~5× "ideal" is inferred from the
+timing decomposition, not yet directly measured — a shared-prefix/tree-attention decode
+kernel is needed to realize it. The n=N long-context decode blowup should be reproduced
+across an n∈{1,2,4,8} sweep before it's called a definitive vLLM pathology.)*

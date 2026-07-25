@@ -203,3 +203,43 @@ many-small-steps naive baseline MORE than shared, so removing it would make shar
 timing decomposition, not yet directly measured — a shared-prefix/tree-attention decode
 kernel is needed to realize it. The n=N long-context decode blowup should be reproduced
 across an n∈{1,2,4,8} sweep before it's called a definitive vLLM pathology.)*
+
+## Decode-pathology sweep — the blowup, isolated and confirmed
+
+**Run:** `modal run evals/modal_decode_pathology.py`, Llama-3.1-8B, A100-80GB, gen=64,
+prefix caching off, eager. Isolates per-step decode cost across context length L and
+branch count n. `decode/step = (t_full − t_prefill)/gen`; `ratio = per_step(n)/per_step(1)`.
+
+| context L | decode/step n=1 | n=2 | n=4 | n=8 | ratio @ n=8 (ideal 8×) |
+|----------:|----------------:|----:|----:|----:|-----------------------:|
+| 4k   | 21.7 ms | 26.4 ms | 34.5 ms | 100.9 ms | **4.6×** (healthy, sublinear) |
+| 32k  | 21.9 ms | 76.7 ms | 188 ms | 423 ms | **19.3×** |
+| 128k | 21.9 ms | **554 ms** | 1643 ms | 3812 ms | **174×** |
+
+**Two facts nail it:**
+1. **Single-branch decode is flat across context — ~22 ms/step at 4k, 32k, AND 128k.**
+   One sequence reading even a 16 GB / 128k KV per step is cheap and well-optimized. The
+   KV *size* is not the problem.
+2. **The moment n>1 at long context, per-step cost explodes.** At 128k, going from n=1 to
+   n=2 jumps 22 ms → 554 ms (**25×** for *one* extra branch), reaching **174× at n=8**
+   against an ideal of 8×. At 4k the same n=8 is only 4.6× (sublinear, correct). So the
+   blowup is specific to **parallel sampling over a long shared prefix**: vLLM is not
+   reusing the shared prefix KV across branches during decode — it re-pays per branch
+   (copy-on-write fork or a non-shared attention path). Eager mode *compresses* this
+   ratio, so the true blowup is even worse.
+
+**The opportunity, quantified.** An efficient shared-prefix branched decode — read the
+long prefix KV **once** per step, batch the N branch queries against it (tree /
+shared-prefix attention) — should cost roughly n=1 plus a little. At 128k that's ~tens of
+ms vs vLLM's 3812 ms: a **~20–95× decode speedup** for long-context branching (best-of-N,
+parallel tool-calls, reasoning trees over a big shared context). That is the concrete,
+measured, differentiated wedge — and it's a *decode-kernel* problem, not a KV-offload
+problem, so it sidesteps the commoditized LMCache/Mooncake lane entirely.
+
+**The one check before committing (honest).** This is vLLM 0.24 *parallel sampling*
+specifically. SGLang's RadixAttention is purpose-built to share prefix KV across
+branches and **may already avoid this** — if so, the answer is "serve long-context
+branching on SGLang," not "build a new kernel." The next experiment is the same sweep on
+SGLang (and/or an explicit tree-attention path): if the blowup persists across engines,
+there's a real gap to own; if SGLang is flat, the win is picking the right runtime. Do
+NOT pitch the wedge until that's known.

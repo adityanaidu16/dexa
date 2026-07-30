@@ -77,7 +77,12 @@ def run(instruct_id: str, base_id: str, ctx_len: int, k_gen: int) -> None:
 
     dev = "cuda"
     tok = AutoTokenizer.from_pretrained(instruct_id)
-    ids_full = tok(PARA * 8, add_special_tokens=True, return_tensors="pt").input_ids
+    # NO tiling: a repeated context turns continuation into an in-context COPY task
+    # (induction heads), which is robust to any KV and hides real differences. Use a
+    # single diverse passage and stop the context inside it so the model must GENERATE.
+    ids_full = tok(PARA, add_special_tokens=True, return_tensors="pt").input_ids
+    ctx_len = min(ctx_len, ids_full.shape[1] - 1)
+    print(f"[info] single-pass context: {ids_full.shape[1]} tokens available, using {ctx_len}")
     ids = ids_full[:, :ctx_len].to(dev)
     prefix, last = ids[:, :-1], ids[:, -1:]
 
@@ -202,6 +207,6 @@ def run(instruct_id: str, base_id: str, ctx_len: int, k_gen: int) -> None:
 @app.local_entrypoint()
 def main(instruct: str = "unsloth/Llama-3.1-8B-Instruct",
          base: str = "unsloth/Meta-Llama-3.1-8B",
-         ctx_len: int = 1024, k_gen: int = 48) -> None:
+         ctx_len: int = 256, k_gen: int = 48) -> None:
     print(f"KV interchange experiments on {GPU}")
     run.remote(instruct, base, ctx_len, k_gen)

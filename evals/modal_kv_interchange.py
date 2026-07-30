@@ -90,8 +90,12 @@ def run(instruct_id: str, base_id: str, ctx_len: int, k_gen: int) -> None:
         out = model(prefix, use_cache=True)
         return out.past_key_values
 
+    def to_legacy(cache):
+        # transformers 4.46 may return a DynamicCache or a legacy tuple depending on model
+        return cache.to_legacy_cache() if hasattr(cache, "to_legacy_cache") else cache
+
     def requantize(cache, mode):
-        legacy = cache.to_legacy_cache()
+        legacy = to_legacy(cache)
         newl = tuple((qrt(k, mode), qrt(v, mode)) for k, v in legacy)
         return DynamicCache.from_legacy_cache(newl)
 
@@ -144,7 +148,7 @@ def run(instruct_id: str, base_id: str, ctx_len: int, k_gen: int) -> None:
     base_ref, _ = continue_greedy(base, requantize(cache_b, "bf16"), k_gen)
 
     # per-layer cosine similarity of the two models' KV over identical tokens
-    li, lb = cache_i.to_legacy_cache(), cache_b.to_legacy_cache()
+    li, lb = to_legacy(cache_i), to_legacy(cache_b)
     kcos = torch.stack([F.cosine_similarity(ki.flatten(), kb.flatten(), dim=0)
                         for (ki, _), (kb, _) in zip(li, lb)]).mean().item()
     vcos = torch.stack([F.cosine_similarity(vi.flatten(), vb.flatten(), dim=0)

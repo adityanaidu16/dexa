@@ -243,3 +243,55 @@ branching on SGLang," not "build a new kernel." The next experiment is the same 
 SGLang (and/or an explicit tree-attention path): if the blowup persists across engines,
 there's a real gap to own; if SGLang is flat, the win is picking the right runtime. Do
 NOT pitch the wedge until that's known.
+
+# KV cache interchangeability — across FORMATS (yes) and across WEIGHTS (no)
+
+**Run:** `modal run evals/modal_kv_interchange.py`, Llama-3.1-8B Instruct + base, single
+diverse 256-token context (no repetition), greedy 48-token continuation, agreement vs
+each model's own reference. Plain HF/torch for exact KV control.
+
+*(Methodology note: this took three iterations to measure honestly. A tiled prompt made
+greedy decode an in-context COPY task (induction heads) that is robust to any KV — every
+format AND cross-model showed a false 100%. Only a single-pass, non-repeated context
+forces genuine generation and exposes the real differences below. The first "cross-model
+KV is lossless" reading was an artifact; do not trust interchange tests on repeated text.)*
+
+## FORMAT axis — same weights, KV round-tripped through a numeric format
+
+| format | bytes/tok | token agreement (48 greedy) | first divergence | step-1 KL |
+|--------|----------:|----------------------------:|-----------------:|----------:|
+| fp16 | 1.0× | 100% | — | 0 |
+| **fp8 (e4m3)** | **0.5×** | **100%** | — | 0.0003 |
+| **int8** | **0.5×** | **100%** | — | 0 |
+| int4 | 0.25× | 29% | token 14 | 0.0027 |
+
+**KV is a portable container down to int8/fp8 — 2× compression, byte-identical greedy
+generation over 48 tokens.** int4 (per-(token,head) symmetric) breaks (diverges at token
+14), so 4× needs a smarter scheme (group-wise/asymmetric, or keep a few outlier channels
+in higher precision). This is the interchangeability that *works*: store/transport the KV
+in fp8/int8 and any deployment of the **same weights** loads it losslessly — halves what a
+persistence/offload layer must move, and enables mixed-precision serving.
+
+## WEIGHTS axis — inject one model's KV into another (base ↔ instruct, same 8B arch)
+
+| direction | KV cosine (K / V) | token agreement | first divergence |
+|-----------|------------------:|----------------:|-----------------:|
+| base gen ← instruct KV | 0.984 / 0.945 | 12.5% | token 5 |
+| instruct gen ← base KV | 0.984 / 0.945 | 4.2% | token 2 |
+
+**Raw KV is NOT interchangeable across weights — not even a light fine-tune.** base and
+instruct are the *same architecture* and their KV is numerically very close (cosine 0.98
+K / 0.95 V), yet generation diverges within **2–5 tokens** into different (coherent but
+distinct) continuations. The lesson: **high KV cosine does not imply interchangeability** —
+small per-layer differences compound through the autoregressive loop and flip the argmax
+almost immediately. A KV store must be keyed to the exact model weights; you cannot share
+a cache between two fine-tunes and expect the same output.
+
+**Verdict.** Formats: interchangeable (fp8/int8 free, int4 needs work). Weights: not —
+KV is model-specific. *One promising thread the numbers hint at:* the cross-fine-tune KV
+is close (0.98 cosine), so a cheap learned "KV bridge" (base-KV → instruct-KV transform)
+might recover reusability across fine-tunes of a shared base — the one place the weights
+axis isn't hopeless, and a genuinely novel direction if worth pursuing.
+
+*(Caveats: greedy decode, one model family, one 256-token passage, 48-token horizon,
+per-(token,head) symmetric quant for int8/int4. Directional, not a sweep.)*

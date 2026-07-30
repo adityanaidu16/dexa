@@ -40,12 +40,31 @@ image = (
 app = modal.App("dexa-kv-interchange")
 hf_cache = modal.Volume.from_name("dexa-hf-cache", create_if_missing=True)
 
+# Diverse, non-repetitive text: a repeated paragraph makes greedy decode degenerate and
+# insensitive to the KV, which would falsely show everything as "interchangeable".
 PARA = (
-    "The quarterly review covered revenue, churn, and the roadmap for the data platform. "
-    "Engineering flagged latency regressions in the ingestion pipeline and proposed a "
-    "migration to a streaming architecture with backpressure and exactly-once delivery. "
-    "Legal raised questions about data residency across the EU and APAC regions, and the "
-    "team debated whether to shard by tenant or by geography given the compliance burden. "
+    "The eruption of Krakatoa in 1883 was heard nearly three thousand miles away and "
+    "lowered global temperatures for years. Coral polyps build reefs by secreting calcium "
+    "carbonate, a process disrupted when ocean pH falls. In 1969 the Apollo guidance "
+    "computer ran at about forty kilohertz with four kilobytes of memory, yet it landed "
+    "two people on the Moon. The Fibonacci sequence appears in sunflower seed spirals "
+    "because packing at the golden angle maximizes exposure to light. Venetian glassblowers "
+    "on Murano were forbidden to leave the republic under penalty of death, protecting the "
+    "secret of cristallo. Enzymes lower activation energy by stabilizing the transition "
+    "state, sometimes accelerating reactions a billionfold. The Antikythera mechanism, "
+    "recovered from a Roman-era shipwreck, modeled the motions of the Sun and Moon with "
+    "bronze gears. Sourdough rises because wild yeast and lactobacilli ferment the flour, "
+    "producing carbon dioxide and lactic acid. The Treaty of Tordesillas in 1494 divided "
+    "the newly discovered lands between Spain and Portugal along a meridian in the Atlantic. "
+    "Neutron stars can spin hundreds of times per second, and a teaspoon of their material "
+    "would weigh billions of tons. The printing press attributed to Gutenberg used movable "
+    "metal type and an oil-based ink that adhered to it far better than water-based inks. "
+    "Monarch butterflies migrate thousands of miles to a few forests in central Mexico, "
+    "navigating by a time-compensated sun compass. In economics, comparative advantage "
+    "explains why two parties can both gain from trade even when one is better at everything. "
+    "The Rosetta Stone carried the same decree in hieroglyphic, Demotic, and Greek, letting "
+    "scholars finally read ancient Egyptian. Deep beneath the ocean, hydrothermal vents "
+    "support ecosystems that draw energy from chemistry rather than sunlight. "
 )
 
 
@@ -58,7 +77,7 @@ def run(instruct_id: str, base_id: str, ctx_len: int, k_gen: int) -> None:
 
     dev = "cuda"
     tok = AutoTokenizer.from_pretrained(instruct_id)
-    ids_full = tok(PARA * 20, add_special_tokens=True, return_tensors="pt").input_ids
+    ids_full = tok(PARA * 8, add_special_tokens=True, return_tensors="pt").input_ids
     ids = ids_full[:, :ctx_len].to(dev)
     prefix, last = ids[:, :-1], ids[:, -1:]
 
@@ -134,6 +153,7 @@ def run(instruct_id: str, base_id: str, ctx_len: int, k_gen: int) -> None:
                       reduction="batchmean").item()
         rel = BITS[mode] / 16.0
         print(f"  {mode:8} {rel:>12.2f}x {frac*100:>11.1f}% {div:>10}/{k_gen} {kl:>10.4f}")
+    print(f"  [ref continuation] {tok.decode(ref_toks)!r}")
     print("=" * 76)
 
     # ---------------- WEIGHTS axis ----------------
@@ -166,6 +186,10 @@ def run(instruct_id: str, base_id: str, ctx_len: int, k_gen: int) -> None:
     f2, d2 = agree(ib_toks, ref_toks)
     print(f"  base gen  <- instruct KV : agree {f1*100:5.1f}%, diverges at {d1}/{k_gen} (vs base's own)")
     print(f"  instruct gen <- base KV  : agree {f2*100:5.1f}%, diverges at {d2}/{k_gen} (vs instruct's own)")
+    print(f"  [base ref     ] {tok.decode(base_ref)!r}")
+    print(f"  [base<-instr  ] {tok.decode(bi_toks)!r}")
+    print(f"  [instr ref    ] {tok.decode(ref_toks)!r}")
+    print(f"  [instr<-base  ] {tok.decode(ib_toks)!r}")
     print("=" * 76)
     verdict_fmt = "FORMAT interchange works down to int8; int4 drifts"
     verdict_w = ("WEIGHTS interchange BREAKS — raw KV is model-specific"

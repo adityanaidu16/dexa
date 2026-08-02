@@ -362,3 +362,39 @@ hides early-stop's value. The benchmark that would actually prove (or kill) the 
 model **throughput under contention**: agents-per-GPU-per-second at a fixed latency SLA,
 generic serving vs early-stop serving, as concurrency rises. That is the real cost axis for
 a self-hosting buyer, and it's the honest v2.
+
+## Contention v2 — early-stop under load: real but modest, and not a moat
+
+**Run:** `modal run evals/modal_contention.py`, Llama-3.1-8B on SGLang, A100-80GB, W=4k,
+B=8, early-stop k=2. Sweeps concurrency C of agents (each with its own W-context, distinct
+per agent → no cross-agent sharing) and measures agent-turns/sec: generic (all B) vs
+agentic (early-stop k).
+
+| concurrency | generic turns/s | agentic turns/s | ratio |
+|------------:|----------------:|----------------:|------:|
+| 1  | 0.08 | 0.33 | 4.0× (cold-start artifact — ignore) |
+| 8  | 0.86 | 1.18 | 1.38× |
+| 32 | 0.93 | 1.57 | 1.69× |
+| 96 | 0.88 | 1.65 | **1.87×** |
+
+(The C=1 "4.0×" is a JIT/cold-start spike on the first timed batch; the script's auto-verdict
+wrongly compared it to C=96. The real trend, C=8→96, GROWS 1.38→1.87 as both policies saturate.)
+
+**Findings:**
+1. Early-stop **does** pay under contention — steady-state **~1.85× throughput** (generic caps
+   ~0.9 turns/s, agentic ~1.65). This is the win v1's idle GPU couldn't show. The self-hosting
+   cost story is real, not dead.
+2. But it's ~1.85×, **not** the 4× that the token ratio (B/k) predicts, because LLM decode is
+   memory-bandwidth-bound: the per-step weight load is amortized across all sequences in the
+   batch, so extra branches are partly free even under load. Fewer branches saves less than
+   token-counting implies.
+3. Still not a moat: a buyer captures most of the 1.85× with round-based early-stop in their
+   **own** orchestration (send k, check, send more) on any provider. Doing it in-engine is
+   tighter but not defensibility.
+
+**Verdict for the platform thesis.** The best case for the inference-stack cost wedge is
+~1.85× throughput under load, replicable by the buyer without the platform. A real efficiency,
+not a business. Combined with the rest of the ledger, every inference-stack value story tested
+here has resolved to table stakes (prefix caching), engine-owned (SGLang branched decode), or
+buyer-replicable orchestration (early-stop). The durable opportunity is up-stack — a vertical
+app owning a workflow and its eval/quality data — not in the serving layer.

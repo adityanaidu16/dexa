@@ -81,7 +81,7 @@ def run(model: str, g: int, p: float, wave: int) -> None:
         need = -(-max(1, round(1.0 / p)) // 1)          # ceil(1/p) branches to first pass
         return min(B, -(-need // wave) * wave)
 
-    uid = [900_000]  # ever-incrementing unique token to defeat prefix caching for reprefill
+    uid = [1000]  # ever-incrementing VALID token id (< vocab) to defeat prefix caching
 
     rows = []
     for W in WS:

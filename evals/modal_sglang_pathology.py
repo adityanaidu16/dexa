@@ -64,24 +64,37 @@ def run(model: str, gen: int) -> None:
     engine = sgl.Engine(model_path=model, mem_fraction_static=0.85,
                         disable_cuda_graph=True, context_length=max(CONTEXT_LENS) + gen + 8)
 
-    def timed(L, n, mnt):
-        batch = [ids_for(L) for _ in range(n)]
-        sp = [{"temperature": 0.8, "top_p": 0.95, "max_new_tokens": mnt} for _ in range(n)]
+    G1, G2 = 8, gen + 8  # difference isolates (G2-G1) decode steps
+
+    def branches(L, n):
+        # n distinct sequences sharing the same length-(L-1) prefix: a unique final
+        # token per branch prevents request dedup, while RadixAttention shares the
+        # common prefix. This is the real branch scenario.
+        pref = ids_for(L - 1)
+        return [pref + [100 + i] for i in range(n)]
+
+    def gen_time(batch, mnt):
+        sp = [{"temperature": 0.8, "top_p": 0.95, "max_new_tokens": mnt} for _ in batch]
         t = perf_counter()
         engine.generate(input_ids=batch, sampling_params=sp)
         return perf_counter() - t
 
-    timed(512, 2, 8)  # warmup
+    def decode_per_step(L, n):
+        batch = branches(L, n)
+        gen_time(batch, 4)            # warm the shared prefix + JIT
+        t1 = gen_time(batch, G1)
+        t2 = gen_time(batch, G2)
+        return max((t2 - t1) / (G2 - G1), 1e-6)
+
+    branches_warm = branches(512, 2)
+    gen_time(branches_warm, 8)        # global warmup
 
     results = {}
     for L in CONTEXT_LENS:
         per_step = {}
         for n in N_SWEEP:
-            t_full = timed(L, n, gen)
-            t_pref = timed(L, n, 1)
-            per_step[n] = max((t_full - t_pref) / (gen - 1), 1e-6)
-            print(f"[L={L:>7} n={n}] full={t_full:7.2f}s prefill1={t_pref:6.2f}s "
-                  f"decode/step={per_step[n]*1000:8.2f}ms", flush=True)
+            per_step[n] = decode_per_step(L, n)
+            print(f"[L={L:>7} n={n}] decode/step={per_step[n]*1000:8.2f}ms", flush=True)
         results[L] = per_step
 
     print("\n" + "=" * 80)

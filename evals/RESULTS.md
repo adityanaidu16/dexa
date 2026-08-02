@@ -328,3 +328,37 @@ persistence/interchange is commoditized or model-specific. The durable opportuni
 any, is *up* the stack — a vertical application that owns a workflow and its eval/quality
 data (code-gen quality being the one large, durable lever the evals found) and *uses*
 SGLang rather than competing with it. The inference tricks are inputs, not the product.
+
+## Agentic-serving value benchmark v1 — and why the naive story mostly reduces to prefix caching
+
+**Run:** `modal run evals/modal_agentic_value.py`, Llama-3.1-8B on SGLang, A100-80GB.
+Per agent turn (shared context W, B-way branch, verify, early-stop), GPU-seconds
+(dedicated-GPU wall-clock) under three conditions, swept over W and B.
+
+| W | B | reprefill (no cache) | cached | agentic | vs reprefill | vs cached | decode tok |
+|--:|--:|---------------------:|-------:|--------:|-------------:|----------:|-----------:|
+| 4k | 4 | 3.68s | 2.66s | 2.66s | 1.4× | 1.00× | 2× fewer |
+| 16k | 8 | 13.27s | 2.68s | 2.66s | 5.0× | 1.01× | 4× fewer |
+| 32k | 8 | 30.65s | 2.70s | 2.66s | **11.5×** | **1.02×** | 4× fewer |
+
+**The result partly falsifies the naive value story:**
+1. The large, W×B-scaling win (up to 11.5×) is entirely **prefix caching** (RadixAttention),
+   which is table stakes — free in SGLang, standard in every serious provider. Not a wedge.
+2. Against a realistic caching baseline, agentic wall-clock is **~1.0×** — no GPU-time win.
+   SGLang batches branches so efficiently that generating 8 costs the same wall-clock as 2,
+   so early-stop saves **decode tokens (2–4×) but not GPU-seconds on a dedicated GPU**.
+3. Early-stop runs branches in sequential waves, so it can *increase* latency on harder
+   turns (more waves) — a cost/latency tradeoff, not a free win.
+
+**Where the value actually is, by how the buyer pays:**
+- **Token-billed (generic API):** early-stop = 2–4× fewer decode tokens on the branching =
+  a direct, defensible bill reduction today.
+- **GPU-time (self-hosting):** the early-stop win only appears under serving **contention**
+  (many concurrent agents saturating the GPU: fewer tokens → more agents/GPU). The
+  dedicated-GPU wall-clock here can't show it — the benchmark's blind spot.
+
+**The flaw and the next test.** A single idle GPU underutilized by one agent's small batch
+hides early-stop's value. The benchmark that would actually prove (or kill) the wedge must
+model **throughput under contention**: agents-per-GPU-per-second at a fixed latency SLA,
+generic serving vs early-stop serving, as concurrency rises. That is the real cost axis for
+a self-hosting buyer, and it's the honest v2.

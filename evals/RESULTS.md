@@ -295,3 +295,36 @@ axis isn't hopeless, and a genuinely novel direction if worth pursuing.
 
 *(Caveats: greedy decode, one model family, one 256-token passage, 48-token horizon,
 per-(token,head) symmetric quant for int8/int4. Directional, not a sweep.)*
+
+## The SGLang gate — is the tree-native decode white space real? (No.)
+
+**Run:** `modal run evals/modal_sglang_pathology.py`, Llama-3.1-8B, A100-80GB. The vLLM
+run showed 8-wide decode over a long shared prefix costs 174× a single decode at 128k
+(the shared prefix KV re-read per branch). This tests whether SGLang's RadixAttention —
+the closest existing thing to a tree-native stack — has the same weakness. Measured
+decode/step by differencing two generation lengths on an already-warm shared prefix
+(cancels prefill + cache effects; the naive full-minus-prefill was polluted by
+RadixAttention caching the prefix across calls). Branches get a unique final token so
+they're distinct sequences sharing the prefix, not deduped.
+
+| context | decode/step n=1 | n=8 | n=8 vs n=1 | vLLM was |
+|--------:|----------------:|----:|-----------:|---------:|
+| 32k | 20.9 ms | 21.7 ms | **1.04×** | ~19× |
+| 128k | 21.1 ms | 46.7 ms | **2.2×** | **174×** |
+
+**SGLang handles it — flat in branch count to 32k, sublinear (2.2× for 8 branches) at
+128k, versus vLLM's 174× blowup.** RadixAttention reads the shared prefix once and
+batches the branch queries against it. So vLLM's pathology is vLLM-specific, not an
+industry gap. (Caveat: the 4k n=1 point landed in timing noise → its ratio is a
+divide-by-~0 artifact; the absolute per-step numbers are the clean signal.)
+
+**Strategic consequence.** The one architectural white space our experiments pointed to —
+an efficient shared-prefix/tree-native branched decode — is already occupied by SGLang.
+Building a new inference stack for it would be reinventing SGLang against a mature
+open-source incumbent. Combined with the rest of the ledger, every path *inside* the
+inference stack is now closed for a small team: orchestration is commoditized (Temporal/
+a loop), the kernel/scheduler layer is owned and well-executed by SGLang, and KV
+persistence/interchange is commoditized or model-specific. The durable opportunity, if
+any, is *up* the stack — a vertical application that owns a workflow and its eval/quality
+data (code-gen quality being the one large, durable lever the evals found) and *uses*
+SGLang rather than competing with it. The inference tricks are inputs, not the product.

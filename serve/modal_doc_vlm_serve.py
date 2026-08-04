@@ -43,7 +43,7 @@ def serve():
         "--served-model-name", "doc-vlm",
         "--max-model-len", "8192",
         "--gpu-memory-utilization", "0.9",
-        "--limit-mm-per-prompt", "image=1",
+        "--limit-mm-per-prompt", '{"image": 1}',
         "--mm-processor-kwargs", f'{{"max_pixels": {MAX_PIXELS}}}',
     ]
     subprocess.Popen(cmd)

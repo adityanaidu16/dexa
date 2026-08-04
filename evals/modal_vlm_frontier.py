@@ -35,7 +35,7 @@ image = (
 app = modal.App("dexa-vlm-frontier")
 hf_cache = modal.Volume.from_name("dexa-hf-cache", create_if_missing=True)
 
-BUDGETS = [1280, 768, 512, 336]   # image long-side px -> controls visual token count
+BUDGETS = [1536, 1024, 768, 512, 384]   # image long-side px -> controls visual token count
 
 
 @app.function(image=image, gpu=GPU, timeout=5400, volumes={"/cache/hf": hf_cache})
@@ -48,15 +48,15 @@ def run(model: str, n: int) -> None:
     from PIL import Image
     from vllm import LLM, SamplingParams
 
-    ds = load_dataset("lmms-lab/ChartQA", split="test")
+    # High-res DOCUMENT images: here visual tokens run to thousands and dominate cost,
+    # so reducing them actually exercises the lever (ChartQA charts are too small).
+    ds = load_dataset("lmms-lab/DocVQA", "DocVQA", split="validation")
     if n > 0:
         ds = ds.select(range(min(n, len(ds))))
-    rows = [(r["image"].convert("RGB"), r["question"],
-             r["answer"][0] if isinstance(r["answer"], list) else r["answer"])
-            for r in ds]
-    print(f"[info] {len(rows)} ChartQA examples", flush=True)
+    rows = [(r["image"].convert("RGB"), r["question"], list(r["answers"])) for r in ds]
+    print(f"[info] {len(rows)} DocVQA examples", flush=True)
 
-    llm = LLM(model=model, max_model_len=8192, gpu_memory_utilization=0.9,
+    llm = LLM(model=model, max_model_len=16384, gpu_memory_utilization=0.9,
               enforce_eager=True, limit_mm_per_prompt={"image": 1})
     sp = SamplingParams(temperature=0.0, max_tokens=32)
 
@@ -71,51 +71,57 @@ def run(model: str, n: int) -> None:
         buf = BytesIO(); img.save(buf, format="PNG")
         return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
 
-    def relaxed(pred, gold):
-        p = pred.strip().lower().rstrip("."); g = str(gold).strip().lower()
-        try:
-            pf = float(p.replace("%", "").replace(",", "").replace("$", ""))
-            gf = float(g.replace("%", "").replace(",", "").replace("$", ""))
-            return abs(pf - gf) <= 0.05 * abs(gf) if gf else pf == gf
-        except ValueError:
-            return g == p or (len(g) > 2 and g in p)
+    import re
 
-    results = []
-    for B in BUDGETS:
-        msgs = [[{"role": "user", "content": [
+    def norm(s):
+        return re.sub(r"[^a-z0-9 ]", "", str(s).lower()).strip()
+
+    def match(pred, golds):
+        p = norm(pred)
+        return any(norm(g) == p or (len(norm(g)) > 2 and norm(g) in p) for g in golds)
+
+    def build(B):
+        return [[{"role": "user", "content": [
                     {"type": "image_url", "image_url": {"url": to_url(resize(img, B))}},
                     {"type": "text", "text": q + " Answer with just the value, no words."}]}]
                 for img, q, _a in rows]
+
+    llm.chat(build(512)[:8], sp, use_tqdm=False)   # WARMUP so the first budget isn't skewed
+
+    results = []
+    for B in BUDGETS:
+        msgs = build(B)
         t = perf_counter()
         outs = llm.chat(msgs, sp, use_tqdm=True)
         dt = perf_counter() - t
-        correct = sum(relaxed(o.outputs[0].text, a) for o, (_i, _q, a) in zip(outs, rows))
+        correct = sum(match(o.outputs[0].text, a) for o, (_i, _q, a) in zip(outs, rows))
         toks = sum(len(o.prompt_token_ids) for o in outs) / len(outs)
         acc = correct / len(rows)
-        results.append((B, acc, dt / len(rows), toks))
-        print(f"[budget {B:>4}px] acc={acc:.3f}  {dt/len(rows)*1000:6.1f} ms/img  "
+        results.append((B, acc, dt / len(rows), toks, len(rows) / dt))
+        print(f"[budget {B:>4}px] acc={acc:.3f}  {len(rows)/dt:6.1f} img/s  "
               f"avg_prompt_tok={toks:6.0f}  ({dt:.1f}s total)", flush=True)
         if B == BUDGETS[0]:
             print(f"   sample: q={rows[0][1][:60]!r} pred={outs[0].outputs[0].text.strip()!r} "
                   f"gold={rows[0][2]!r}", flush=True)
 
-    base = results[0]
-    print("\n" + "=" * 78)
-    print(f"VLM COST/PERF FRONTIER — {model.split('/')[-1]} ({GPU}), ChartQA, {len(rows)} imgs")
-    print("=" * 78)
-    print(f"  {'budget':>8} {'accuracy':>9} {'ms/img':>9} {'prompt tok':>11} "
-          f"{'speedup':>8} {'Δacc':>7}")
-    for B, acc, ms, toks in results:
-        print(f"  {B:>6}px {acc:>9.3f} {ms*1000:>9.1f} {toks:>11.0f} "
-              f"{base[2]/ms:>7.2f}x {acc-base[1]:>+7.3f}")
-    print("=" * 78)
-    # best "move-justifying" point: largest speedup within 3 acc points of baseline
-    ok = [(b, a, ms) for b, a, ms in [(r[0], r[1], r[2]) for r in results] if base[1]-a <= 0.03]
-    best = max(ok, key=lambda x: base[2]/x[2]) if ok else base
-    print(f"  HEADLINE: at {best[0]}px, {base[2]/best[2]:.1f}x faster/cheaper for "
-          f"{best[1]-base[1]:+.3f} accuracy — visual-token reduction is an inside-the-"
-          f"forward-pass gain no gateway can offer. Steep frontier => thesis alive.")
-    print("=" * 78)
+    base = results[0]  # highest-res, warm
+    print("\n" + "=" * 80)
+    print(f"VLM COST/PERF FRONTIER — {model.split('/')[-1]} ({GPU}), DocVQA, {len(rows)} imgs")
+    print("=" * 80)
+    print(f"  {'budget':>8} {'accuracy':>9} {'img/s':>8} {'prompt tok':>11} "
+          f"{'throughput x':>13} {'Δacc':>7}")
+    for B, acc, ms, toks, ips in results:
+        print(f"  {B:>6}px {acc:>9.3f} {ips:>8.1f} {toks:>11.0f} "
+              f"{ips/base[4]:>12.2f}x {acc-base[1]:>+7.3f}")
+    print("=" * 80)
+    # best "move-justifying" point: largest throughput gain within 3 acc points of baseline
+    ok = [r for r in results if base[1] - r[1] <= 0.03]
+    best = max(ok, key=lambda r: r[4]) if ok else base
+    print(f"  HEADLINE: at {best[0]}px, {best[4]/base[4]:.1f}x higher throughput "
+          f"({base[3]:.0f}->{best[3]:.0f} visual tokens) for {best[1]-base[1]:+.3f} accuracy "
+          f"— an inside-the-forward-pass gain no gateway can offer. "
+          f"{'Steep frontier => thesis alive' if best[4]/base[4] >= 1.8 else 'Shallow => weak'}.")
+    print("=" * 80)
     hf_cache.commit()
 
 

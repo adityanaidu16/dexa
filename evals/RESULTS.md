@@ -398,3 +398,35 @@ not a business. Combined with the rest of the ledger, every inference-stack valu
 here has resolved to table stakes (prefix caching), engine-owned (SGLang branched decode), or
 buyer-replicable orchestration (early-stop). The durable opportunity is up-stack — a vertical
 app owning a workflow and its eval/quality data — not in the serving layer.
+
+# Multimodal execution thesis — the first prize that survived measurement
+
+**Run:** `modal run evals/modal_vlm_frontier.py`, Qwen2.5-VL-7B on vLLM, A100-80GB,
+DocVQA (200 high-res document images, relaxed-match accuracy). Sweeps the visual-token
+budget via input resolution and measures accuracy vs throughput. (v1 was invalid: ChartQA
+images too small for visual tokens to dominate, and the first budget ate cold-start; v2
+uses high-res docs + a warmup batch + throughput as the metric.)
+
+| budget | accuracy | img/s | visual tokens | throughput | Δacc |
+|-------:|---------:|------:|--------------:|-----------:|-----:|
+| 1536px | 0.935 | 11.4 | 2201 | 1.0× | — |
+| **1024px** | **0.925** | 30.2 | 1017 | **2.7×** | **−1.0%** |
+| 768px | 0.885 | 47.2 | 574 | 4.1× | −5.0% |
+| 512px | 0.735 | 78.6 | 277 | 6.9× | −20% |
+| 384px | 0.445 | 98.3 | 182 | 8.6× | −49% |
+
+**Cut cost ~2.7× at ~1% accuracy, ~4× at ~5%** — on high-res docs where visual tokens
+(2201) dominate the LLM's work. This is the first thesis in the whole ledger whose prize
+did NOT evaporate under rigorous measurement. The degradation is sensible (below ~768px
+small text becomes unreadable), confirming the eval is real.
+
+**Honest caveat — prize vs moat.** The lever here is naive resolution reduction, which a
+client can do themselves (resize before any API). So this run *sizes the prize* but isn't
+yet the moat. The execution-owned, non-commoditized edge is (1) content-aware
+in-forward-pass token pruning (FastV-style) that a gateway can't touch and should BEAT the
+resize frontier by keeping informative tokens, and (2) adaptive per-request budgeting.
+
+**Next test (the moat test):** does content-aware in-model pruning beat this resize
+frontier — same accuracy at higher throughput? If yes, execution-owned multimodal token
+reduction is a real, defensible gain no gateway can replicate. Beachhead = high-res
+document AI (invoices, forms, reports, contracts) where visual tokens dominate cost.

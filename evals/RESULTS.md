@@ -430,3 +430,23 @@ resize frontier by keeping informative tokens, and (2) adaptive per-request budg
 frontier — same accuracy at higher throughput? If yes, execution-owned multimodal token
 reduction is a real, defensible gain no gateway can replicate. Beachhead = high-res
 document AI (invoices, forms, reports, contracts) where visual tokens dominate cost.
+
+## Moat test — hit a real Qwen2.5-VL wall (informative)
+
+**Attempt:** `evals/modal_vlm_moat.py` — compare content-aware in-model visual-token
+pruning (keep highest-norm / most-query-similar tokens) vs naive resize at matched token
+budget. **Result: blocked by a genuine architectural constraint, not a bug.**
+
+Qwen2.5-VL's positional encoding (mRoPE) is bound to the image's 2D grid: dropping visual
+tokens via attention masking breaks `get_rope_index` (`[3,1671]` computed positions vs
+`[3,881]` masked — the model still expects the full grid). Arbitrary visual-token pruning
+is therefore NOT a quick attention-mask hack; it requires reimplementing position handling
+for the pruned set, which is exactly why FastV-style pruning ships as model-specific
+research code.
+
+**Reading:** this cuts both ways. (+) The lever genuinely lives inside execution and isn't
+trivially replicable by a gateway or a client — that's defensibility. (−) Proving it is a
+focused engineering sprint, not a one-shot benchmark. Decision: **gate the moat sprint on
+market validation** (the cheaper gate) rather than burn Modal runs guessing at internals.
+The prize is already proven (2.7× at −1% on high-res docs); whether the moat sprint is worth
+running depends on whether document-AI teams feel the cost pain acutely enough to move.

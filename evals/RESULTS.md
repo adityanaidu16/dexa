@@ -510,3 +510,36 @@ reuse is ~2×; the full prize needs *tolerant* reuse (validated against groundin
 a more-local encoder, or input-level delta preserving grounding — real R&D, uncertain
 payoff. Next measurement: embedding-perturbation tolerance vs grounding accuracy, which
 decides whether this is a 2× or 5× wedge. The de-risk worked — caught before a wasted sprint.
+
+### Tolerance sweep — the spill is HARD, not soft (5× path closed)
+
+**Run:** `modal run evals/agent_redundancy/modal_delta_tolerance.py`. Re-scored the SAME
+frames across a cosine-tolerance ladder and dumped the full distribution of the tokens that
+moved — testing the prior entry's open hypothesis ("much of the spill may be soft, cos
+0.98–0.999, reusable with tolerance").
+
+**Result — the hypothesis is false.** On small-action frames (n=8, the common step), of the
+tokens that moved (cos < 0.98) the **median cosine is 0.83** — a large perturbation, not a
+nudge. Distribution of moved tokens:
+
+| moved-token band | share |
+|------------------|------:|
+| 0.95–0.98 (soft) | 24% |
+| 0.90–0.95 | 15% |
+| 0.80–0.90 | 14% |
+| 0.50–0.80 | 27% |
+| <0.50 (hard) | 20% |
+
+Only ~24% of the spill is in the soft 0.95–0.98 band; ~47% dropped below 0.80 (carries real
+changed information — reusing it corrupts grounding).
+
+**Ceiling vs tolerance (common actions):** 2.34× at cos≥0.98 → ~3.1× if you also reuse the
+0.95–0.98 band → ~3.9× at a reckless cos≥0.90. Never approaches 7×, and everything past ~3×
+means reusing tokens that visibly changed.
+
+**Verdict:** loosening the reuse threshold does **not** rescue the multiple — the tokens that
+move, move hard. Realistic capturable ceiling on common actions is **~2.3× (maybe ~3× if a
+grounding test later clears the 0.95–0.98 band)**, not 5×. Beyond that needs a structurally
+more-local encoder or input-level delta — real R&D, not tolerance. **Do not fund the
+accuracy-tolerance sprint expecting 5×.** The agent wedge's honest number is a confirmed
+~2–2.3×; the decision now hinges on demand for a 2×, not on more encoder measurement.

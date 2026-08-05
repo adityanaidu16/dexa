@@ -587,3 +587,27 @@ and a clear reason a stateless per-token provider can't easily match it — a se
 architecture (warm GPU tier -> offload to CPU/NVMe -> restore on wake) is worth building for
 long-lived / large-context agent workloads. Next: reproduce on vLLM paged KV + LMCache to get
 production absolutes, and price session-residency vs re-prefill at realistic reuse patterns.
+
+### Production reproduction on vLLM paged KV (prefix-cache hit vs cold prefill)
+
+**Run:** `modal run evals/modal_vllm_warmstart.py`. Reproduces the restore-vs-re-prefill claim
+inside vLLM's real paged-KV engine, using its prefix cache as the "restore" path: cold TTFT
+(prompt never seen -> full prefill) vs warm TTFT (same prompt -> KV reused from the engine's
+cache). Qwen2.5-7B, A100-80GB, prefix caching on.
+
+| context | cold TTFT (prefill) | warm TTFT (KV reuse) | **speedup** |
+|--------:|--------------------:|---------------------:|------------:|
+| 4k  | ~280 ms   | ~24 ms | **~12×** |
+| 16k | ~1,250 ms | ~45 ms | **~25–34×** (3 runs: 34.4/27.9/25.0) |
+
+Consistent with — and stronger than — the HF raw-physics run at the warm tier: vLLM's warm path
+is a pure in-GPU cache hit (~no transfer), so it's *faster* than the HF CPU→GPU restore (45 ms
+vs 115 ms at 16k), while cold prefill matches HF (1,250 ms vs 1,321 ms). The production ratio
+also grows with context (12× → ~29×), same trend.
+
+**Honest limitation:** ≥32k crashed the vLLM V1 EngineCore subprocess in this harness (a hard
+OOM/kernel death under YaRN long-context that kills the container, not catchable per-size),
+across three configs (max_model_len 70k–133k, gpu-util 0.85–0.92, chunked prefill on/off). So
+the production curve is confirmed to 16k; the HF raw-physics run (`modal_stateful_session.py`)
+covers 32k–64k, where the same trend continues to 28.9×. Reaching ≥32k in-engine is an infra
+follow-up (production vLLM+LMCache deploy), not an open question about the physics.

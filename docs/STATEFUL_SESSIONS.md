@@ -164,16 +164,23 @@ the *session-as-a-product* architecture, not the KV trick.
 
 ## Proven vs. not proven
 
-**Proven (measured):** restoring KV beats re-prefilling, 11.8×→28.9×, growing with context;
-correctness of restore-then-decode; the idle-gap tail is where it pays.
+**Proven (measured), three independent ways that agree:**
+1. **Raw physics (HF):** restore vs re-prefill 11.8×→28.9×, growing with context; restore-then-
+   decode correctness checked. (`modal_stateful_session.py`)
+2. **In-GPU prefix cache (vLLM):** cold vs warm TTFT ~12×→~29× in the real engine.
+   (`modal_vllm_warmstart.py`)
+3. **Off-GPU offload→restore (vLLM + LMCache), the hard case:** KV evicted to CPU then restored
+   with vLLM's prefix cache OFF — 10.0× at 4k, 17.1× at 16k, LMCache logs confirming a CPU
+   retrieve at ~22 GB/s. (`modal_lmcache_restore.py`)
 
 **Not yet proven (next):**
-1. **Production absolutes** — reproduce on vLLM paged KV + a real KV store (LMCache/MoonCake)
-   rather than HF-level tensor copies. Expected to *beat* these conservative floors.
-2. **Residency unit economics** — is renting cheap CPU/NVMe for idle KV + a small restore
+1. **Residency unit economics** — is renting cheap CPU/NVMe for idle KV + a small restore
    genuinely cheaper than re-prefill at realistic reuse frequencies and session lifetimes? The
    compute side is proven; the memory-cost model is not.
-3. **Scale past 64k** on paged infra (HF OOM'd at 128k here for non-fundamental reasons).
+2. **Scale past ~16k in-engine** — both vLLM runs stopped at 16k (V1 EngineCore OOM/kernel death
+   under long context in this harness); HF raw-physics covers 32k–64k where the trend continues.
+3. **Idle-persistence across a real gap + NVMe tier** end-to-end (LMCache disk backend), and
+   concurrent multi-session residency/eviction under load.
 
 ---
 

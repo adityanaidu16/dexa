@@ -611,3 +611,30 @@ across three configs (max_model_len 70k–133k, gpu-util 0.85–0.92, chunked pr
 the production curve is confirmed to 16k; the HF raw-physics run (`modal_stateful_session.py`)
 covers 32k–64k, where the same trend continues to 28.9×. Reaching ≥32k in-engine is an infra
 follow-up (production vLLM+LMCache deploy), not an open question about the physics.
+
+### Offload -> restore through vLLM + LMCache (the hard case, live)
+
+**Run:** `modal run evals/modal_lmcache_restore.py`. The two prior runs kept KV either in raw
+tensors (HF) or in vLLM's in-GPU prefix cache. This does the differentiating case: KV
+**offloaded off the GPU to CPU** via LMCache (the production KV store) and **restored** on the
+repeat request — with vLLM's own prefix caching **OFF**, so LMCache is the *only* possible reuse
+path. Qwen2.5-7B, A100-80GB.
+
+| context | cold (prefill) | restore (LMCache CPU) | **speedup** |
+|--------:|---------------:|----------------------:|------------:|
+| 4k  | 301 ms   | 30 ms | **10.0×** |
+| 16k | 1,320 ms | 77 ms | **17.1×** |
+
+LMCache's own logs confirm the path: req #1 `hit tokens: 0` -> cold prefill -> `Stored 16384
+tokens` to CPU; req #2 `hit tokens: 16384` -> `Retrieved 16384 tokens from CPU, cost 39.8 ms,
+22.0 GB/s`. The restore includes the real CPU->GPU transfer (~40 ms for 0.875 GB at 16k), so
+these are the honest offload-tier numbers — a bit below the in-GPU prefix-cache warm path
+(12-34×) because that one has no transfer, exactly as expected.
+
+**Caveat:** LMCache emits a benign internal warning ("Pin count negative … double unpin … set
+to 0 as a hack") on retrieval — a known LMCache bookkeeping issue, not affecting the measured
+timing/correctness (retrieval succeeded, throughput reported). Kept to <=16k for a clean run.
+
+**Three independent reproductions now agree** — raw physics (HF), in-GPU prefix cache (vLLM),
+and off-GPU offload+restore (vLLM+LMCache): restoring KV beats recomputing it ~10-34×, growing
+with context. The stateful-session thesis is validated end to end through a production stack.

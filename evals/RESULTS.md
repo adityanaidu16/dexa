@@ -450,3 +450,35 @@ focused engineering sprint, not a one-shot benchmark. Decision: **gate the moat 
 market validation** (the cheaper gate) rather than burn Modal runs guessing at internals.
 The prize is already proven (2.7× at −1% on high-res docs); whether the moat sprint is worth
 running depends on whether document-AI teams feel the cost pain acutely enough to move.
+
+# Computer-use agent screen redundancy — the day-0 wedge for streaming visual AI
+
+**Run:** `python evals/agent_redundancy/bench.py`. A Playwright agent drives a realistic
+CRM web app through a 15-step task (search, select, edit, dropdown, save, navigate),
+screenshotting after each action; we measure the fraction of 28px patches (Qwen2.5-VL's
+patch size) that change between consecutive frames — i.e. the share of visual tokens that
+would need RE-ENCODING each step.
+
+| action type | % screen changed |
+|-------------|-----------------:|
+| type / edit field / pick dropdown | **2.5–6%** |
+| select a table row | ~28% |
+| full page navigation | 22–46% |
+| **average per action** | **13.7%** |
+
+**Result: agent screens are ~86% redundant per action → ~7.3× fewer visual tokens/step
+if you encode only what changed** — and 15–40× on the fine-grained actions (typing,
+clicking, editing) that dominate real agent loops. Full-page navs are the rare keyframes;
+everything else is a tiny delta. Video-codec logic applied to agent perception.
+
+**Why incumbents can't capture it (the moat).** The redundancy is *regional and
+interspersed*, so a prefix-hash exact-match cache never fires (the full frame differs
+every step). Exploiting it needs stateful, session-affinitized, delta-based KV reuse held
+warm across the whole trajectory — which conflicts with managed providers' stateless,
+load-balanced, evicted-in-seconds architecture. A large measured prize their core design
+forbids them from taking; a delta-native engine can.
+
+**Caveats:** this measures the prize (patch redundancy), not the realized win — capturing
+it needs the delta-KV-reuse engine (R&D) plus proof VLM accuracy holds on changed-region-
+only encoding. Synthetic-but-real-browser task; production numbers want real agent
+trajectories (OSWorld/WebArena). The shape (most actions barely change the screen) is robust.

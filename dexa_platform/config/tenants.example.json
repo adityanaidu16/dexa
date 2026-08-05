@@ -1,0 +1,20 @@
+[
+  {
+    "key": "dexa-live-abc123",
+    "name": "acme-hosted",
+    "mode": "hosted",
+    "backend_url": "https://your-managed-dexa-backend.modal.run",
+    "backend_model": "dexa-cua-vlm",
+    "default_baseline": "gpt-4o",
+    "cache_enabled": true
+  },
+  {
+    "key": "byoc-initech-xyz789",
+    "name": "initech-byoc",
+    "mode": "byoc",
+    "backend_url": "http://vllm-backend.internal:8000",
+    "backend_model": "dexa-cua-vlm",
+    "default_baseline": "gpt-4o-mini",
+    "cache_enabled": true
+  }
+]

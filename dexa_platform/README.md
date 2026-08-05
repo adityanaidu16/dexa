@@ -46,6 +46,47 @@ anything:
 Set `x-dexa-session` to group a trajectory and `x-dexa-baseline` (`gpt-4o` / `gpt-4o-mini` /
 `claude-3-5-sonnet`) to price against whatever you're switching from.
 
+## Deployment shapes: hosted or BYOC
+
+The same gateway runs two ways, selected per API key (a *tenant*):
+
+- **Hosted** — Dexa runs the gateway + backend; you send requests. Fastest to try.
+- **BYOC** — you run this gateway *and* the backend in your own cloud/VPC, so screenshots
+  never leave your network. Dexa is the serving recipe + savings telemetry, not a data path.
+
+BYOC in one command (gateway + real backend together, needs an 80GB GPU host):
+
+```bash
+cd dexa_platform && DEXA_API_KEY=byoc-yourkey docker compose -f docker-compose.byoc.yml up
+# gateway on :8080 -> backend on :8000, both in your network
+```
+
+Or run the gateway pointed at a backend you already operate:
+
+```bash
+DEXA_BACKEND_URL=http://your-vllm:8000 DEXA_MODE=byoc \
+  DEXA_API_KEY=byoc-yourkey DEXA_REQUIRE_AUTH=1 \
+  uvicorn dexa_platform.gateway.app:app --port 8080
+```
+
+Multi-tenant hosted control plane: put tenants in a JSON file (see
+`config/tenants.example.json`) and set `DEXA_TENANTS=/path/to/tenants.json`. Auth is a Bearer
+API key; unknown keys get `401`. `GET /healthz` shows tenant config with **no keys** exposed.
+
+**Data handling.** The gateway persists no screenshots or completions. The only image bytes
+held are a per-session hash of the last frame (for exact-duplicate dedup) plus the last
+completion, in process memory. Set `DEXA_CACHE=0` (or a tenant's `cache_enabled=false`) to
+disable even that.
+
+## The backend
+
+The model server the gateway forwards to is `../serve/cua_backend.py` — Qwen2.5-VL-7B tuned
+for computer-use agents (prefix caching on for the static system/tool prefix agents resend
+every step, a screenshot-appropriate `max_pixels` budget, multiple images per prompt). The
+launch flags live in one place and are shared byte-for-byte by the Modal deploy and the BYOC
+Docker/CLI launch, so hosted and self-hosted cost/quality are identical. Deploy guide:
+`../serve/BACKEND.md`.
+
 ## Redundancy meter + exact-frame cache (honest scope)
 
 Agents re-send near-identical screenshots every step. The gateway measures, per session, how
@@ -77,15 +118,22 @@ DEXA_BACKEND_URL=https://<your-modal-url> ./run_local.sh
 gateway/pricing.py      per-provider image→token accounting + cost comparison (the impact core)
 gateway/redundancy.py   per-session frame redundancy + exact-duplicate detection
 gateway/store.py        in-memory usage/savings ledger (swap for Redis/Postgres for accounts)
-gateway/app.py          OpenAI-compatible FastAPI gateway (/v1/chat/completions, /v1/usage)
+gateway/tenants.py      API-key -> tenant registry; hosted / BYOC / mock routing
+gateway/app.py          OpenAI-compatible FastAPI gateway (auth, routing, telemetry)
+config/tenants.example.json   multi-tenant config sample
 dashboard/index.html    live savings dashboard
+Dockerfile              gateway image (CPU-only)
+docker-compose.byoc.yml gateway + backend in your own cloud
 examples/switch.py      the two-line drop-in
 examples/agent_loop.py  a computer-use agent trajectory on Dexa
-tests/                  pricing + redundancy unit tests
+tests/                  pricing, redundancy, tenant tests + a vLLM-API stub for forwarding tests
+../serve/cua_backend.py the real Qwen2.5-VL CUA backend (Modal + BYOC); ../serve/BACKEND.md
 ```
 
 ## Status
 
-MVP: cost accounting, redundancy meter, exact-frame cache, gateway, dashboard, tests — all
-runnable. Not yet built: auth/accounts/billing, Redis-backed store, streaming passthrough,
-real agent-trajectory (OSWorld/WebArena) validation of the redundancy numbers.
+Runnable now: cost accounting, redundancy meter, exact-frame cache, multi-tenant gateway with
+API-key auth, hosted **and** BYOC routing, the real CUA-tuned backend (Modal deploy + BYOC
+Docker/CLI), live dashboard, 15 passing tests incl. a GPU-free BYOC forwarding stub. Not yet
+built: billing/quotas, Redis-backed store, streaming passthrough, and real agent-trajectory
+(OSWorld/WebArena) validation of the redundancy numbers.

@@ -1,17 +1,21 @@
 """Dexa gateway — an OpenAI-compatible endpoint for computer-use agents.
 
 Switching cost is two lines: point your OpenAI client's base_url at this server and use your
-Dexa key. Every `/v1/chat/completions` call is served by the optimized open VLM backend, and
-the response carries — in the body under `dexa` and in `x-dexa-*` headers — exactly what the
-call cost here vs what it would have cost on the frontier model you came from, plus the
-measured screen redundancy for the session. Immediate, per-request, auditable impact.
+Dexa key. Every `/v1/chat/completions` call is served by the optimized VLM backend for your
+tenant, and the response carries — in the body under `dexa` and in `x-dexa-*` headers — what
+the call cost here vs the frontier model you came from, plus the measured screen redundancy.
+
+Deployment shapes (same code):
+  * Hosted     — Dexa runs the gateway + backend; you just send requests.
+  * BYOC       — you run this gateway and the backend in your own cloud (docker-compose.byoc
+                 .yml). Screenshots never leave your network; Dexa is the serving recipe +
+                 telemetry. Set DEXA_BACKEND_URL to your backend and DEXA_MODE=byoc.
 
     uvicorn dexa_platform.gateway.app:app --port 8080
 
-Env:
-    DEXA_BACKEND_URL   OpenAI-compatible VLM backend (e.g. the Modal Qwen2.5-VL endpoint).
-                       Unset (or DEXA_MOCK=1) -> mock backend, runs with no GPU.
-    DEXA_BACKEND_MODEL served-model-name at the backend (default "doc-vlm").
+Privacy: the gateway persists no screenshots or completions. The only image bytes held are a
+per-session hash of the last frame (for exact-duplicate dedup) plus the last completion, in
+process memory; set DEXA_CACHE=0 (or a tenant's cache_enabled=false) to disable even that.
 """
 
 from __future__ import annotations
@@ -20,7 +24,6 @@ import base64
 import hashlib
 import io
 import math
-import os
 import re
 import time
 
@@ -31,16 +34,16 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from . import pricing
 from .redundancy import RedundancyMeter
 from .store import Store
+from .tenants import TenantRegistry
 
-BACKEND_URL = os.environ.get("DEXA_BACKEND_URL", "").rstrip("/")
-BACKEND_MODEL = os.environ.get("DEXA_BACKEND_MODEL", "doc-vlm")
-MOCK = os.environ.get("DEXA_MOCK") == "1" or not BACKEND_URL
+import os
 DASHBOARD = os.path.join(os.path.dirname(__file__), "..", "dashboard", "index.html")
 
-app = FastAPI(title="Dexa Gateway", version="0.1.0")
+app = FastAPI(title="Dexa Gateway", version="0.2.0")
+registry = TenantRegistry.load()
 meter = RedundancyMeter()
 store = Store()
-# per-session last (image_hash, text_hash) -> cached response, for exact-duplicate reuse
+# per internal-session last (image_hash, text_hash) -> cached response, for exact-dup reuse
 _cache: dict[str, tuple[str, str, dict]] = {}
 
 
@@ -51,8 +54,15 @@ def _tok_estimate(text: str) -> int:
 _DATA_URI = re.compile(r"^data:image/[^;]+;base64,(.*)$", re.DOTALL)
 
 
+def _bearer(request: Request) -> str | None:
+    auth = request.headers.get("authorization", "")
+    if auth.lower().startswith("bearer "):
+        return auth[7:].strip()
+    return request.headers.get("x-api-key")
+
+
 def _extract(messages: list) -> tuple[list[tuple[int, int]], list[bytes], str]:
-    """Return (image dims, image bytes for the *last* image, concatenated text)."""
+    """Return (image dims, image bytes, concatenated text)."""
     dims: list[tuple[int, int]] = []
     all_bytes: list[bytes] = []
     text_parts: list[str] = []
@@ -101,19 +111,19 @@ def _mock_completion(model: str, prompt: str) -> dict:
     }
 
 
-async def _forward(body: dict) -> dict:
+async def _forward(tenant, body: dict) -> dict:
     payload = dict(body)
-    payload["model"] = BACKEND_MODEL
+    payload["model"] = tenant.backend_model
     payload["stream"] = False
     async with httpx.AsyncClient(timeout=120) as client:
-        r = await client.post(f"{BACKEND_URL}/v1/chat/completions", json=payload)
+        r = await client.post(f"{tenant.backend_url}/v1/chat/completions", json=payload)
         r.raise_for_status()
         return r.json()
 
 
 @app.get("/healthz")
 async def healthz():
-    return {"ok": True, "backend": "mock" if MOCK else BACKEND_URL}
+    return {"ok": True, "version": app.version, **registry.summary()}
 
 
 @app.get("/v1/models")
@@ -138,9 +148,16 @@ async def dashboard():
 
 @app.post("/v1/chat/completions")
 async def chat_completions(request: Request):
+    tenant = registry.resolve(_bearer(request))
+    if tenant is None:
+        return JSONResponse(
+            {"error": {"message": "invalid or missing API key", "type": "invalid_request_error",
+                       "code": "invalid_api_key"}}, status_code=401)
+
     body = await request.json()
-    session = request.headers.get("x-dexa-session") or body.get("user") or "default"
-    baseline = request.headers.get("x-dexa-baseline", "gpt-4o")
+    raw_session = request.headers.get("x-dexa-session") or body.get("user") or "default"
+    session = f"{tenant.name}/{raw_session}"          # isolate tenants in the ledger
+    baseline = request.headers.get("x-dexa-baseline", tenant.default_baseline)
     if baseline not in pricing.PRICES:
         baseline = "gpt-4o"
 
@@ -148,9 +165,7 @@ async def chat_completions(request: Request):
     dims, img_bytes, text = _extract(messages)
     text_in = _tok_estimate(text)
 
-    # redundancy on the current (last) screenshot
-    redundant = 1.0
-    exact_dup = False
+    redundant, exact_dup = 1.0, False
     if img_bytes:
         obs = meter.observe(session, img_bytes[-1])
         redundant, exact_dup = obs.redundant_frac, obs.exact_duplicate
@@ -159,22 +174,27 @@ async def chat_completions(request: Request):
     img_hash = hashlib.sha256(img_bytes[-1]).hexdigest() if img_bytes else ""
     cache_hit = False
 
-    # exact-duplicate reuse: identical screenshot + identical prompt -> serve cached, skip model
-    prev = _cache.get(session)
-    if exact_dup and prev and prev[0] == img_hash and prev[1] == text_hash:
-        resp = dict(prev[2])
-        cache_hit = True
-    elif MOCK:
-        resp = _mock_completion("dexa-cua-vlm", text)
-    else:
-        resp = await _forward(body)
+    prev = _cache.get(session) if tenant.cache_enabled else None
+    try:
+        if exact_dup and prev and prev[0] == img_hash and prev[1] == text_hash:
+            resp, cache_hit = dict(prev[2]), True
+        elif tenant.uses_mock:
+            resp = _mock_completion("dexa-cua-vlm", text)
+        else:
+            resp = await _forward(tenant, body)
+    except httpx.HTTPError as e:
+        return JSONResponse(
+            {"error": {"message": f"backend error: {e}", "type": "backend_error"}},
+            status_code=502)
+
     resp["model"] = "dexa-cua-vlm"
-    _cache[session] = (img_hash, text_hash, resp)
+    if tenant.cache_enabled:
+        _cache[session] = (img_hash, text_hash, resp)
 
     out_tokens = (resp.get("usage") or {}).get("completion_tokens") or _tok_estimate(
         (resp["choices"][0]["message"].get("content") or ""))
     saved = pricing.compare(dims, text_in, out_tokens, baseline_model=baseline)
-    if cache_hit:  # a served-from-cache step costs us ~nothing
+    if cache_hit:
         saved.ours.usd = 0.0
         saved.saved_usd = saved.baseline.usd
         saved.saved_pct = 100.0
@@ -183,7 +203,8 @@ async def chat_completions(request: Request):
     store.record(session, saved=saved, redundant_frac=redundant, cache_hit=cache_hit)
 
     info = saved.as_dict()
-    info.update({"session": session, "screen_redundancy_pct": round(100 * redundant, 1),
+    info.update({"tenant": tenant.name, "mode": tenant.mode, "session": raw_session,
+                 "screen_redundancy_pct": round(100 * redundant, 1),
                  "served_from_cache": cache_hit})
     resp["dexa"] = info
 
@@ -196,5 +217,6 @@ async def chat_completions(request: Request):
         "x-dexa-screen-redundancy-pct": f"{100 * redundant:.1f}",
         "x-dexa-cache": "hit" if cache_hit else "miss",
         "x-dexa-baseline-model": baseline,
+        "x-dexa-tenant": tenant.name,
     }
     return JSONResponse(resp, headers=headers)

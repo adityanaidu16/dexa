@@ -482,3 +482,31 @@ forbids them from taking; a delta-native engine can.
 it needs the delta-KV-reuse engine (R&D) plus proof VLM accuracy holds on changed-region-
 only encoding. Synthetic-but-real-browser task; production numbers want real agent
 trajectories (OSWorld/WebArena). The shape (most actions barely change the screen) is robust.
+
+## Delta-perception viability — the de-risk found a real obstacle (naive capture ~2x, not 7x)
+
+**Run:** `modal run evals/agent_redundancy/modal_delta_viability.py`. For consecutive agent
+frames, ran Qwen2.5-VL's vision encoder on each and compared per-token embeddings (aligned
+by position) against the pixel-change fraction.
+
+| action | pixels changed | vision tokens shifted (cos<0.98) |
+|--------|---------------:|---------------------------------:|
+| type/edit small actions | 2.5–6% | 15–44% |
+| full-page nav | 45–46% | 93–95% (keyframe) |
+| **average** | **15.6%** | **52.8%** |
+
+**token-shift / pixel-change = 3.39× → the vision encoder is NOT purely local.** A small
+change spills into ~3.4× more tokens than the changed region, even with Qwen2.5-VL's
+windowed attention. So naive spatial reuse ("re-encode only the changed pixels, reuse the
+rest") captures **~2×, not the 7× pixel-redundancy prize.**
+
+**Nuance:** threshold-sensitive (cos<0.98 counts a token as shifted; much of the spill may
+be *soft* perturbation, cos 0.98–0.999, that's fine to reuse with tolerance). Small-action
+reuse is still real (63–85%); navs are keyframes anyway. The *true* capturable multiple is
+set by how much embedding perturbation downstream accuracy tolerates — not measured here.
+
+**Consequence for the sprint:** don't build the delta engine assuming a free 7×. Naive
+reuse is ~2×; the full prize needs *tolerant* reuse (validated against grounding accuracy),
+a more-local encoder, or input-level delta preserving grounding — real R&D, uncertain
+payoff. Next measurement: embedding-perturbation tolerance vs grounding accuracy, which
+decides whether this is a 2× or 5× wedge. The de-risk worked — caught before a wasted sprint.

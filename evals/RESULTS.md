@@ -638,3 +638,37 @@ timing/correctness (retrieval succeeded, throughput reported). Kept to <=16k for
 **Three independent reproductions now agree** — raw physics (HF), in-GPU prefix cache (vLLM),
 and off-GPU offload+restore (vLLM+LMCache): restoring KV beats recomputing it ~10-34×, growing
 with context. The stateful-session thesis is validated end to end through a production stack.
+
+### Residency cost model — the economics of a warm session (analysis)
+
+**Run:** `python evals/stateful_cost_model.py`. Turns the measured prefill/restore/KV numbers
+into economics: on a resume, stateless re-prefills (GPU compute) while stateful pays to store
+the KV during idle + a cheap restore. Rates (configurable): GPU $1.80/hr, RAM $0.006/GB-hr,
+NVMe $0.0002/GB-hr.
+
+**Latency win (unconditional):** resume a 64k session in ~0.3 s (restore) vs ~8.6 s (re-prefill)
+= 28.8×; 11–29× across sizes. Tier-independent — alone justifies it for interactive agents.
+
+**$ win (conditional on tiering)** — 64k context, 50-turn session:
+
+| idle gap / turn | stateful vs stateless |
+|----------------:|----------------------:|
+| 2 min  | **6.0×** cheaper |
+| 15 min | **4.9×** cheaper |
+| 120 min | **2.0×** cheaper |
+
+**Break-even idle per tier (the key operational number):**
+
+| context | warm GPU HBM | RAM | NVMe |
+|--------:|-------------:|----:|-----:|
+| 4k  | 1 min | 6 min  | 33 min |
+| 64k | 2 min | 11 min | 4.9 hr |
+
+**The load-bearing finding:** warm GPU HBM only pays for ~2 min of idle — hoarding GPU memory is
+a money-loser. The $ win is driven by demoting idle KV to **cheap NVMe**. So the architecture
+*requires* a memory hierarchy: warm while active → RAM → NVMe as idle grows → drop past the NVMe
+break-even and re-prefill. vs a *well-cached* stateless provider the differentiated $ win is the
+>~5-min idle tail (past typical prompt-cache TTL). Bigger models win MORE (costlier prefill);
+fp8 KV ~doubles every break-even. Verdict: economics are positive (2–6× $ + 11–29× latency) on
+long-context/idle-gapped agent sessions, given proper tiering — the thesis is a business, not
+just a benchmark.

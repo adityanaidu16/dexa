@@ -173,14 +173,19 @@ the *session-as-a-product* architecture, not the KV trick.
    with vLLM's prefix cache OFF — 10.0× at 4k, 17.1× at 16k, LMCache logs confirming a CPU
    retrieve at ~22 GB/s. (`modal_lmcache_restore.py`)
 
+4. **Residency economics (modelled):** `stateful_cost_model.py` — on long-context/idle-gapped
+   sessions, stateful is **2–6× cheaper in $** (64k, 50 turns, 2–120 min idle) **and 11–29×
+   faster to resume**, *given tiering*. Warm GPU HBM only pays for ~2 min of idle; the $ win
+   comes from demoting idle KV to cheap NVMe (break-even up to ~5 hr at 64k). The architecture
+   *requires* a memory hierarchy (warm→RAM→NVMe→drop); hoarding HBM loses money.
+
 **Not yet proven (next):**
-1. **Residency unit economics** — is renting cheap CPU/NVMe for idle KV + a small restore
-   genuinely cheaper than re-prefill at realistic reuse frequencies and session lifetimes? The
-   compute side is proven; the memory-cost model is not.
-2. **Scale past ~16k in-engine** — both vLLM runs stopped at 16k (V1 EngineCore OOM/kernel death
+1. **Scale past ~16k in-engine** — both vLLM runs stopped at 16k (V1 EngineCore OOM/kernel death
    under long context in this harness); HF raw-physics covers 32k–64k where the trend continues.
-3. **Idle-persistence across a real gap + NVMe tier** end-to-end (LMCache disk backend), and
+2. **Idle-persistence across a real gap + NVMe tier** end-to-end (LMCache disk backend), and
    concurrent multi-session residency/eviction under load.
+3. **Live unit-economics validation** at scale (the cost model uses representative rates;
+   confirm against real GPU/RAM/NVMe pricing and utilization).
 
 ---
 

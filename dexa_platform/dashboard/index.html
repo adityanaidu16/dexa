@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dexa · live savings</title>
+<style>
+  :root{--bg:#0b0e14;--card:#131824;--line:#222b3d;--fg:#e6ecf5;--mut:#8a97ad;--accent:#22e0b8;--warn:#ffcf6b}
+  @media (prefers-color-scheme:light){:root{--bg:#f4f6f9;--card:#fff;--line:#e3e8f0;--fg:#131824;--mut:#5b6b82;--accent:#0bb596;--warn:#b4740a}}
+  *{box-sizing:border-box;margin:0;padding:0;font-family:-apple-system,Segoe UI,Roboto,sans-serif}
+  body{background:var(--bg);color:var(--fg);padding:28px;max-width:1000px;margin:0 auto}
+  h1{font-size:20px;display:flex;align-items:center;gap:10px}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 0 var(--accent);animation:p 2s infinite}
+  @keyframes p{0%{box-shadow:0 0 0 0 rgba(34,224,184,.5)}70%{box-shadow:0 0 0 8px rgba(34,224,184,0)}100%{box-shadow:0 0 0 0 rgba(34,224,184,0)}}
+  .sub{color:var(--mut);font-size:13px;margin:4px 0 22px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:24px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px}
+  .card .k{color:var(--mut);font-size:12px;text-transform:uppercase;letter-spacing:.05em}
+  .card .v{font-size:30px;font-weight:700;margin-top:8px}
+  .card .v.accent{color:var(--accent)}.card .v.warn{color:var(--warn)}
+  .card .u{color:var(--mut);font-size:12px;margin-top:4px}
+  table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  th,td{text-align:right;padding:11px 14px;border-bottom:1px solid var(--line);font-size:13px}
+  th:first-child,td:first-child{text-align:left}
+  th{color:var(--mut);text-transform:uppercase;font-size:11px;letter-spacing:.04em}
+  tr:last-child td{border-bottom:none}
+  .empty{color:var(--mut);padding:20px;text-align:center}
+  code{background:var(--line);padding:2px 6px;border-radius:5px;font-size:12px}
+</style></head>
+<body>
+  <h1><span class="dot"></span> Dexa — live savings</h1>
+  <div class="sub">Every computer-use request, priced against the frontier model it replaced. Auto-refreshing.</div>
+  <div class="grid" id="cards"></div>
+  <table><thead><tr><th>Session</th><th>Reqs</th><th>Cache hits</th><th>Screen redundancy</th><th>Baseline $</th><th>Dexa $</th><th>Saved</th><th>×cheaper</th></tr></thead>
+  <tbody id="rows"><tr><td colspan="8" class="empty">Waiting for the first request… send one and watch it land.</td></tr></tbody></table>
+
+<script>
+const $ = id => document.getElementById(id);
+const usd = n => "$" + (n < 0.01 ? n.toFixed(6) : n.toFixed(4));
+function card(k, v, cls, u){return `<div class="card"><div class="k">${k}</div><div class="v ${cls||''}">${v}</div><div class="u">${u||''}</div></div>`}
+async function tick(){
+  let d; try{ d = await (await fetch("/v1/usage")).json(); }catch(e){ return; }
+  const t = d.total;
+  $("cards").innerHTML =
+    card("Saved so far", usd(t.saved_usd), "accent", `${t.saved_pct}% off baseline`) +
+    card("Requests", t.requests, "", `${t.cache_hits} served from cache`) +
+    card("Cheaper than baseline", (t.x_cheaper||0).toFixed(1)+"×", "accent", "same screenshots, same task") +
+    card("Avg screen redundancy", (t.avg_screen_redundancy_pct||0)+"%", "warn", "unchanged pixels/step (headroom)") +
+    card("Visual tokens billed", (t.dexa_image_tokens||0).toLocaleString(), "", `vs ${(t.baseline_image_tokens||0).toLocaleString()} on baseline`);
+  const rows = Object.entries(d.sessions).sort((a,b)=>b[1].saved_usd-a[1].saved_usd);
+  $("rows").innerHTML = rows.length ? rows.map(([s,a])=>`<tr>
+    <td><code>${s}</code></td><td>${a.requests}</td><td>${a.cache_hits}</td>
+    <td>${a.avg_screen_redundancy_pct}%</td><td>${usd(a.baseline_usd)}</td><td>${usd(a.dexa_usd)}</td>
+    <td style="color:var(--accent)">${usd(a.saved_usd)}</td><td>${(a.x_cheaper||0).toFixed(1)}×</td></tr>`).join("")
+    : `<tr><td colspan="8" class="empty">Waiting for the first request…</td></tr>`;
+}
+tick(); setInterval(tick, 2000);
+</script>
+</body></html>

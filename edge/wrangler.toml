@@ -1,0 +1,50 @@
+# Dexa edge — the control plane + session orchestration on Cloudflare.
+# The GPU data plane (vLLM + LMCache) lives on Modal; this fronts it globally.
+name = "dexa-edge"
+main = "src/index.ts"
+compatibility_date = "2024-11-01"
+compatibility_flags = ["nodejs_compat"]
+
+# --- a session is a Durable Object: stateful, addressable, single-writer, backend-pinned ---
+[[durable_objects.bindings]]
+name = "SESSION"
+class_name = "SessionDO"
+
+[[migrations]]
+tag = "v1"
+new_classes = ["SessionDO"]
+
+# --- hot-path API-key -> tenant cache (short TTL; Postgres is source of truth) ---
+[[kv_namespaces]]
+binding = "KEYS"
+id = "REPLACE_WITH_KV_ID"           # wrangler kv namespace create KEYS
+
+# --- accounts / usage / billing: Postgres, accelerated + pooled from Workers via Hyperdrive ---
+[[hyperdrive]]
+binding = "DB"
+id = "REPLACE_WITH_HYPERDRIVE_ID"   # wrangler hyperdrive create dexa-db --connection-string=postgres://... (Neon/Supabase)
+
+# --- async usage metering: hot path emits, a consumer aggregates into Postgres ---
+[[queues.producers]]
+binding = "USAGE"
+queue = "dexa-usage"
+
+[[queues.consumers]]
+queue = "dexa-usage"
+max_batch_size = 100
+max_batch_timeout = 5
+
+# --- logs / opt-in request archive / artifacts ---
+[[r2_buckets]]
+binding = "ARCHIVE"
+bucket_name = "dexa-archive"
+
+[vars]
+# the GPU serving tier (vLLM + LMCache) — swap for your Modal deployment
+GPU_BACKEND_URL = "https://adityanaidu16344--dexa-stateful-backend-serve.modal.run"
+BACKEND_MODEL = "dexa-cua-vlm"
+KEY_CACHE_TTL_SECONDS = "30"
+FREE_CREDIT_USD = "5"
+
+# secrets (set with `wrangler secret put`): none required for the GPU backend if it's open;
+# add STRIPE_SECRET_KEY, GITHUB_OAUTH_* when wiring billing/auth.

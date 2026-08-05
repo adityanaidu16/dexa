@@ -1,0 +1,20 @@
+{
+  "name": "dexa-edge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Dexa control plane + stateful-session orchestration on Cloudflare Workers + Durable Objects, backed by Postgres via Hyperdrive.",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:init": "psql \"$DATABASE_URL\" -f schema.sql",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241106.0",
+    "typescript": "^5.6.0",
+    "wrangler": "^3.86.0"
+  },
+  "dependencies": {
+    "postgres": "^3.4.5"
+  }
+}

@@ -543,3 +543,47 @@ grounding test later clears the 0.95–0.98 band)**, not 5×. Beyond that needs 
 more-local encoder or input-level delta — real R&D, not tolerance. **Do not fund the
 accuracy-tolerance sprint expecting 5×.** The agent wedge's honest number is a confirmed
 ~2–2.3×; the decision now hinges on demand for a 2×, not on more encoder measurement.
+
+## Stateful warm-session vs re-prefill — the thesis that GREW instead of collapsing
+
+**Run:** `modal run evals/modal_stateful_session.py`. The stateful-inference bet reduces to one
+physical question: when an idle agent session resumes (past a stateless provider's prompt-cache
+TTL), is RESTORING its saved KV cache faster than RE-PREFILLING the context from scratch?
+Measured on A100-80GB, Qwen2.5-7B bf16, across context sizes.
+
+| context | KV size | re-prefill (stateless) | restore CPU (stateful) | **speedup** | restore NVMe |
+|--------:|--------:|-----------------------:|-----------------------:|------------:|-------------:|
+| 4k  | 0.23 GB | 296 ms   | 25 ms  | **11.8×** | 1.2× |
+| 16k | 0.94 GB | 1,321 ms | 115 ms | **11.5×** | 3.4× |
+| 32k | 1.88 GB | 3,167 ms | 182 ms | **17.4×** | 4.9× |
+| 64k | 3.76 GB | 8,567 ms | 297 ms | **28.9×** | 7.0× |
+
+(128k OOM'd — HF non-paged artifact where restore briefly doubles memory, not fundamental;
+paged KV handles it. Decode/step is ~equal in both regimes, 39–108 ms — not the differentiator.)
+
+**The win GROWS with context (11.8× → 28.9×).** Restore is bandwidth-bound and scales *linearly*
+with KV bytes; re-prefill is compute-bound and scales *super*-linearly (attention). They diverge
+as context grows — the opposite of every efficiency thesis in this ledger, all of which shrank
+toward parity/commoditization. Correctness checked: after a CPU round-trip the KV still advances
+one token per decode step.
+
+**Projected long-lived session** (context re-warmed after each idle gap that would evict a
+stateless cache): 64k context × 50 turns = **18.3×** less GPU prefill-time stateful vs stateless
+(23 s vs 428 s); 32k × 50 = 12.9×.
+
+**Honest scope (where it does and doesn't pay):**
+- The win is the **idle-gap / eviction tail**. Within a stateless cache's TTL (no idle gap),
+  stateless ≈ stateful. Target workloads with idle gaps > ~5-min TTL or contexts too large/
+  numerous to keep cached: long-lived agents, human-in-the-loop, async/scheduled agents,
+  enterprise-corpus sessions. (Exactly the long-context-agent bet.)
+- The **warm/pinned-CPU tier is the prize** (11–29×, grows). NVMe is a secondary tier (1.2–7×,
+  only pays ≥16k; naive torch.load deserialization dominates). A production zero-copy/direct-IO
+  store (LMCache/MoonCake-style) would beat these naive copies — so these are conservative floors.
+- Measures primitive physics at the HF level, not production vLLM paged KV. Absolutes shift; the
+  move-bytes-vs-recompute ratio is architecture-independent.
+
+**Verdict:** the first candidate this session with a large, measured, *scale-growing* advantage
+and a clear reason a stateless per-token provider can't easily match it — a session-stateful
+architecture (warm GPU tier -> offload to CPU/NVMe -> restore on wake) is worth building for
+long-lived / large-context agent workloads. Next: reproduce on vLLM paged KV + LMCache to get
+production absolutes, and price session-residency vs re-prefill at realistic reuse patterns.

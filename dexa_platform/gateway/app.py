@@ -39,7 +39,17 @@ from .tenants import TenantRegistry
 import os
 DASHBOARD = os.path.join(os.path.dirname(__file__), "..", "dashboard", "index.html")
 
-app = FastAPI(title="Dexa Gateway", version="0.2.0")
+# Accounts mode: resolve DB-backed API keys, enforce free-credit quota, meter durably.
+# Off by default so the static/BYOC self-host + local-demo paths keep working unchanged.
+ACCOUNTS = os.environ.get("DEXA_ACCOUNTS") == "1"
+if ACCOUNTS:
+    from ..control import db as cp_db
+    from ..control import metering as cp_metering
+    from ..control.resolver import KeyResolver
+    cp_db.init()
+    resolver = KeyResolver()
+
+app = FastAPI(title="Dexa Gateway", version="0.3.0")
 registry = TenantRegistry.load()
 meter = RedundancyMeter()
 store = Store()
@@ -134,6 +144,9 @@ async def models():
 
 @app.get("/v1/usage")
 async def usage():
+    if ACCOUNTS:
+        with cp_db.session() as s:
+            return cp_metering.global_snapshot(s)
     return store.snapshot()
 
 
@@ -148,11 +161,28 @@ async def dashboard():
 
 @app.post("/v1/chat/completions")
 async def chat_completions(request: Request):
-    tenant = registry.resolve(_bearer(request))
-    if tenant is None:
-        return JSONResponse(
-            {"error": {"message": "invalid or missing API key", "type": "invalid_request_error",
-                       "code": "invalid_api_key"}}, status_code=401)
+    org_id = key_id = None
+    if ACCOUNTS:
+        principal = resolver.resolve(_bearer(request))
+        if principal is None:
+            return JSONResponse(
+                {"error": {"message": "invalid or missing API key",
+                           "type": "invalid_request_error", "code": "invalid_api_key"}},
+                status_code=401)
+        with cp_db.session() as s:
+            if not cp_metering.quota_ok(s, principal.org_id):
+                return JSONResponse(
+                    {"error": {"message": "free credit exhausted — add a payment method to "
+                               "continue", "type": "insufficient_quota",
+                               "code": "insufficient_quota"}}, status_code=402)
+        tenant, org_id, key_id = principal.tenant, principal.org_id, principal.key_id
+    else:
+        tenant = registry.resolve(_bearer(request))
+        if tenant is None:
+            return JSONResponse(
+                {"error": {"message": "invalid or missing API key",
+                           "type": "invalid_request_error", "code": "invalid_api_key"}},
+                status_code=401)
 
     body = await request.json()
     raw_session = request.headers.get("x-dexa-session") or body.get("user") or "default"
@@ -200,7 +230,16 @@ async def chat_completions(request: Request):
         saved.saved_pct = 100.0
         saved.x_cheaper = float("inf")
 
-    store.record(session, saved=saved, redundant_frac=redundant, cache_hit=cache_hit)
+    if ACCOUNTS:
+        with cp_db.session() as s:
+            cp_metering.record(
+                s, org_id, key_id,
+                dexa_usd=saved.ours.usd, baseline_usd=saved.baseline.usd,
+                saved_usd=saved.saved_usd, dexa_image_tokens=saved.ours.image_tokens,
+                baseline_image_tokens=saved.baseline.image_tokens,
+                redundant_frac=redundant, cache_hit=cache_hit)
+    else:
+        store.record(session, saved=saved, redundant_frac=redundant, cache_hit=cache_hit)
 
     info = saved.as_dict()
     info.update({"tenant": tenant.name, "mode": tenant.mode, "session": raw_session,

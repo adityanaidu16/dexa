@@ -78,6 +78,43 @@ held are a per-session hash of the last frame (for exact-duplicate dedup) plus t
 completion, in process memory. Set `DEXA_CACHE=0` (or a tenant's `cache_enabled=false`) to
 disable even that.
 
+## Accounts, keys & metering (self-serve / PLG)
+
+The control plane (`control/`) turns the gateway into something people can sign up for. It's
+SQLite in dev, Postgres in prod — one env var (`DATABASE_URL`) changes it.
+
+- **PLG sign-up** (`POST /v1/signup`): an OAuth identity in → an org, a user, a first API key,
+  and a **free credit grant** out. No card. Idempotent — the key secret is shown exactly once.
+- **API keys**: `dexa_live_…` secrets, SHA-256 hashed at rest (only a short prefix is stored
+  for display). Create / list / rotate / revoke from the control API.
+- **Durable metering**: every request upserts a per-key daily rollup and debits the org's
+  credit. When free credit runs out, the gateway returns `402` until a card is added.
+- **Hot-path safe**: the gateway resolves keys from a short-TTL cache (Redis-swappable), so
+  auth doesn't hit Postgres per request; a revoke propagates within the TTL.
+
+Run both planes locally (shared SQLite):
+
+```bash
+# control plane (console/CLI call this) on :8090
+DATABASE_URL=sqlite:///./dexa.db uvicorn dexa_platform.control.api:app --port 8090
+# data plane in accounts mode on :8080
+DATABASE_URL=sqlite:///./dexa.db DEXA_ACCOUNTS=1 ./dexa_platform/run_local.sh
+```
+
+```bash
+# self-serve in three calls:
+KEY=$(curl -s :8090/v1/signup -d '{"provider":"github","subject":"me","email":"me@co.com"}' \
+      -H 'content-type: application/json' | jq -r .api_key)
+curl :8080/v1/chat/completions -H "authorization: Bearer $KEY" -H 'content-type: application/json' -d @req.json
+curl :8090/v1/me -H "authorization: Bearer $KEY"      # remaining credit + usage
+```
+
+Accounts mode is **off by default** (`DEXA_ACCOUNTS` unset) so the static/BYOC self-host and
+local-demo paths keep working with no database.
+
+Control-plane env: `DATABASE_URL` (dev SQLite / prod Postgres), `DEXA_FREE_CREDIT_USD`
+(default 5), `DEXA_KEY_CACHE_TTL` (default 30s).
+
 ## The backend
 
 The model server the gateway forwards to is `../serve/cua_backend.py` — Qwen2.5-VL-7B tuned

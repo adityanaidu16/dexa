@@ -4,3 +4,4 @@ httpx>=0.27
 pillow>=10.0
 numpy>=1.24
 # examples/ also need: openai>=1.0
+sqlalchemy>=2.0

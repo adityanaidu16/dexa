@@ -115,6 +115,37 @@ local-demo paths keep working with no database.
 Control-plane env: `DATABASE_URL` (dev SQLite / prod Postgres), `DEXA_FREE_CREDIT_USD`
 (default 5), `DEXA_KEY_CACHE_TTL` (default 30s).
 
+## Stateful sessions (the differentiated product)
+
+The thing a stateless provider structurally can't do: a **durable, warm session**. Prefill a
+big context once; on later turns its KV is **restored** (from GPU/CPU/NVMe via LMCache) instead
+of re-prefilled. Measured advantage: 11–34× faster resume, growing with context, and 2–6×
+cheaper per long-context session — see `../docs/STATEFUL_SESSIONS.md` and `../evals/RESULTS.md`.
+
+```
+POST   /v1/sessions            create a session (optionally with a big initial context)
+POST   /v1/sessions/{id}/turn  run a turn — KV restored (warm), not re-prefilled
+GET    /v1/sessions/{id}        state + accumulated savings
+DELETE /v1/sessions/{id}        drop it (frees the KV)
+```
+
+Each turn returns whether the KV was **restored (warm)** or **prefilled (cold)**, the tiering
+decision (warm→ram→nvme→drop, with break-even rationale from the cost model), and the modeled
+GPU compute saved vs a stateless re-prefill.
+
+```bash
+# real backend (vLLM + LMCache) on Modal:
+modal deploy serve/vllm_lmcache_backend.py
+DEXA_SESSION_BACKEND=https://<url> uvicorn dexa_platform.sessions.service:app --port 8070
+# or GPU-free, simulated from the measured profile:
+DEXA_SESSION_MOCK=1 uvicorn dexa_platform.sessions.service:app --port 8070
+```
+
+Verified live: a 12k-token session cold-prefills in ~5.4 s (turn 1), then restores warm in
+~1.5 s (turn 2) end-to-end through the deployed vLLM+LMCache backend — 3.7× faster turn-over-
+turn (the isolated in-engine restore win is ~11×; HTTP + decode overhead compresses the
+end-to-end ratio). `tiering.py` encodes the warm/RAM/NVMe break-evens from the cost model.
+
 ## The backend
 
 The model server the gateway forwards to is `../serve/cua_backend.py` — Qwen2.5-VL-7B tuned

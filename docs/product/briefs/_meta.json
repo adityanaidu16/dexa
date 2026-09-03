@@ -78,13 +78,97 @@
   "weeks_to_proof": "10-14 weeks to a first credible public proof, defined as: median-of-3-seeds sessions-per-GPU at full-load-window p95 <= 300 ms on H100, with a 26-35B-class model, against vanilla vLLM 0.28, vLLM's native OffloadingConnector (lru/arc), LMCache 0.5.4 layerwise and SGLang HiCache, with a shuffled-hint ablation and at least one real-transcript trace set, raw events.jsonl published. Assumptions: 1-2 engineers; ~120-150 GPU-hours (~$1-2k on Modal at $1.95/hr L40S and $3.95/hr H100; more on bare metal minimums); a design partner supplies transcripts by week 4 (none exists today); the week-1 H100 arm-A test does not kill the L40S/7B framing \u2014 if it does, add 2-4 weeks for TP>1 and hybrid-attention connector work to re-scope to 30B-on-H100. The brief's 6-week plan is the build schedule, not the proof schedule; weeks 1-2 (port of an experimental API from vLLM 0.9.2 to 0.28.0) and week 4 (30B/TP>1) are the slip points."
  },
  "C": {
+  "attacks": [
+   [
+    "serious",
+    "The proof benchmark does not isolate the claimed advantage. The arm D 'win' is 44.6 ms of p95 at one N over the same connector without hints (316.8 vs 272.2 ms "
+   ],
+   [
+    "serious",
+    "An 80 GB GPU or a buyer-sized model dissolves the voice wall. Conflicts #5 arithmetic: with 7B weights on 80 GB the KV pool is ~60 GB, the N=300 working set (~4"
+   ],
+   [
+    "serious",
+    "FP8 KV halves the working set for everyone; untested (vi-open-fp8-kv), and it moves the baseline's wall as much as the policy does. The fp8 interchange result ("
+   ],
+   [
+    "serious",
+    "The 1.5x is inside seed noise. Margin 27.8 ms whole-run and 8.1 ms on the full-load window; 3 of 7 full-load buckets exceeded 300 ms; all GPU data is seed 1; de"
+   ],
+   [
+    "serious",
+    "The predictor knows the generating distribution. Arm D's hint is max_tokens x 308 ms minus generation at 45 tok/s plus the trace's own median gap (400 ms), utte"
+   ],
+   [
+    "fatal",
+    "The agent regime has no in-engine evidence at all above 16k. vLLM crashed at >=32k in three configs; the 32k/64k ratios and the 4.9 hr NVMe break-even are HF te"
+   ],
+   [
+    "serious",
+    "The hour-scale idle regime the pricing model monetizes is the tail of every measured distribution: TraceLab median human gap 1.4 min (p90 20.6 min), llm-d 2 s m"
+   ],
+   [
+    "serious",
+    "RAM-tier restore has never been measured under concurrency at buyer context sizes. The only concurrent restore data are 2.5k-token voice sessions (~140 MB) and "
+   ],
+   [
+    "serious",
+    "The architecture overstates what the stock hooks allow. The KVConnector API cannot express HBM eviction ordering or request-less prefetch; the connector only de"
+   ],
+   [
+    "serious",
+    "Version-pinned, experimental API. The voice connector targets vLLM 0.9.2's batched CachedRequestData shape; dexa's targets 0.24.0 with a 3-arg ctor found only b"
+   ],
+   [
+    "minor",
+    "Shared-prefix slab thrash: the connector evicts the entry it matched when a store extends it, so sessions sharing a system prompt (5 customers across 300 sessio"
+   ],
+   [
+    "minor",
+    "Restore correctness is unarchived. The bitwise round-trip and forced-evict probe exist (evals/modal_kv_correctness.py) but no output is committed; a missing-ent"
+   ],
+   [
+    "serious",
+    "The 6-week plan slips on three fronts: the port (2-3 weeks, not 1), the never-demonstrated 100K in-engine run (unknown), and a router plus llm-d EPP plugin plus"
+   ],
+   [
+    "minor",
+    "SGLang is assumed reachable. HiCacheStorage is get/exist/set with no delay-free or pin hook; RFC #27574's first POC maps Pin to a Mooncake L3 lease; #24656 is i"
+   ],
+   [
+    "serious",
+    "Trace realism: 5 system prompts flatter baseline prefix caching (RESULTS.md says varied prompts move the wall earlier), the --shared-prompt confound arm was nev"
+   ]
+  ],
   "chars": 24713,
+  "evidence_grade": "C",
+  "evidence_grade_reason": "The differentiating claim (a return-time hint beats reactive/LRU residency at matched memory) is measured exactly once in-engine and the ledger labels it BOUNDED: voice arm D, seed 1, L40S 46 GB, synthetic traces whose medians the predictor was given, 8.1 ms margin on the full-load-window p95, 3 of 7 full-load buckets over the gate, N=400 collapsed. The restore-vs-re-prefill physics is PROVEN single-request but is LMCache's mechanism, and the same repo holds CONTRADICTED results (0.37x single-request, P99 1.6-2.2x worse under concurrency on a disk tier). The agent regime that the brief's larger customer and pricing depend on has zero in-engine evidence above 16k tokens (vLLM crashed at >=32k), the cost model is HF-level and modeled, and tiering enforcement does not exist in code. Nothing has been reproduced across seeds, GPUs, engines or real traces, so this is 'measured but bounded/contradicted', not B.",
+  "final": "C.md",
   "founder_decisions": 8,
   "kind": "draft",
+  "missing_founder_decisions": [
+   "The SLA gate: the brief adopts the voice PRD's 300 ms p95 TTFT; Twilio's published budget is 375 ms target / 750 ms max for LLM TTFT. A looser gate changes every N and could erase or enlarge the arm D delta.",
+   "The ship threshold: the voice README's decision table put 1.5x in its '<2x kill' band; RESULTS.md re-scored it against the Phase-2 arm-B gate as 'above kill, below proceed'; the brief chose >=2x as ship and <1.3x as kill without saying which table governs.",
+   "The proof rig: 7B fp16 on an L40S (what exists) versus a buyer-shaped rig (26-35B on H100/H200), which decides whether the memory wall the product sells even appears.",
+   "Own connector versus a cache_policy_module_path plugin on vLLM's native OffloadingConnector (or waiting on RFC #38260 TieringManager); the brief chose to own the connector.",
+   "Engine order: vLLM-first for six weeks with SGLang deferred; the brief made this call although LiveKit (a named buyer archetype) runs SGLang and the hint RFCs are SGLang's.",
+   "Which idle regime to sell: the brief priced the hour-scale regime (2 h rung, NVMe tier, session-hour billing) although measured gap distributions put hour-scale idle in the p90-p99 tail.",
+   "Three SKUs at once (hosted endpoint, BYOC license, optimization engagements) versus one; the brief assumed all three ship from the same six weeks.",
+   "Router form factor: the brief chose a standalone process plus an llm-d EPP plugin rather than vLLM production-stack's router, Dynamo's KV-aware router, or none (session-affinity headers only).",
+   "Whether to keep dexa's connector losses and arm C's collapse in the public benchmark write-up as the honesty argument, or publish only wins.",
+   "Hosting substrate for the hosted SKU: the brief assumed Modal serverless (all existing runs; ~1.7x box-to-box variance noted) rather than reserved GPUs.",
+   "Whether the hint protocol is an open spec aligned to SGLang RFC #27574's vocabulary (pin/demote/prefetch/TTL) or proprietary; the brief chose alignment.",
+   "Design-partner shape: the brief fixed 'one voice platform, one agent product' by week 6 rather than one segment first.",
+   "Whether the evidence-grade benchmark harness is a product in its own right (sellable from week 2) or only an internal tool; the brief lists it as a combination but plans it as the first deliverable.",
+   "Whether to price against sessions-per-GPU (the voice buyer's unit) or per-token with a residency line (the agent buyer's unit) first; the two SKUs need different metering code."
+  ],
   "name": "Session-aware serving engine: one residency scheduler for every idle regime (hosted + BYOC)",
   "numeric_claims": 48,
-  "one_line": "A residency scheduler inside vLLM/SGLang (stock KV-connector hooks) plus a session router and control plane that decides per session, from predicted return time, context size and per-tier break-evens, whether KV stays in HBM, moves to RAM/NVMe, or is dropped; sold as a hosted session-addressed endpoint and as BYOC software/optimization engagements for voice and agent platforms and inference providers.",
-  "unproven": 9
+  "one_line": "A hint-driven KV residency scheduler (pin / RAM / NVMe / drop per session) inside stock vLLM, sold hosted and BYOC, whose one in-engine win (voice arm D, 300 vs 200 sessions per L40S) is single-seed, synthetic-trace and 8 ms from failing, and whose agent-regime claim has no in-engine measurement above 16k tokens.",
+  "revised_by_run": "wf_593bb1bc-ee9",
+  "strongest_version": "The strongest honest form is a benchmark-first BYOC product on stock vLLM: a session-aware connector plus an enforced residency policy and a published hint protocol, sold to voice and agent platforms that already self-host open models and pay by concurrency, with the vkv harness as the proof instrument they can run themselves. Its one measured advantage is narrow but real in-engine: on a 46 GB L40S with a 7B model, per-request return-time hints lifted the 300 ms-p95 ceiling from 200 to 300 synthetic sessions where vanilla vLLM, LMCache 0.3.2 and the same connector without hints all stopped at 200, and the physics underneath (pinned-RAM restore 10-17x faster than re-prefill single-request) is proven. Every shipping KV layer evicts by LRU-family policy and the hint RFCs that would change that are unimplemented, so the policy layer is genuinely unoccupied. The claim earns a public benchmark only after three seeds, a modern OffloadingConnector/LMCache 0.5.x baseline, FP8 KV and an H100 point, because each of those could erase an 8 ms margin; and the agent regime, where the larger customer and the session-hour pricing live, must first show that vLLM can restore 100K-token sessions in-engine at all, which neither repo has done. If both gates pass, the product is 'more sessions per GPU inside the SLA, with hits you can see'; if only the voice gate passes, it is a voice-serving optimization sold per GPU-hour.",
+  "unproven": 9,
+  "weeks_to_proof": "8-10 weeks to a credible public Metric A (voice) proof; 12-14 weeks for Metric B (agent). Assumptions: 1-2 engineers; the voice connector port from vLLM 0.9.2 to 0.28 (changed KVConnector hooks and CachedRequestData shape, 3-arg ctor) takes 2-3 weeks including provenance and server-metric capture; 3-seed sweeps at N {250,300,350,400} on L40S and H100 against vLLM OffloadingConnector LRU/ARC, LMCache 0.5.x and FP8 KV take ~100-150 GPU-h (~$300-600 at the $1.95-3.95/GPU-h Modal rates in 05-research-gpu-pricing.md) and 1-2 weeks wall-clock; 1 week write-up. Synthetic traces are acceptable for v1 only if the write-up says so; transcript-derived traces depend on a design partner. Metric B is gated on something never demonstrated in either repo: stable in-engine restore at 32k-128k on a native-128k model, plus RAM-tier restore under concurrency, so add 4+ weeks and treat the date as unknown until the week-4 in-engine test passes."
  },
  "D": {
   "attacks": [

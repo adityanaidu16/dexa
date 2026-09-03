@@ -1,0 +1,288 @@
+{
+ "id": "C",
+ "name": "Session-aware serving engine: one residency scheduler for every idle regime (hosted + BYOC)",
+ "one_line": "A residency scheduler inside vLLM/SGLang (stock KV-connector hooks) plus a session router and control plane that decides per session, from predicted return time, context size and per-tier break-evens, whether KV stays in HBM, moves to RAM/NVMe, or is dropped; sold as a hosted session-addressed endpoint and as BYOC software/optimization engagements for voice and agent platforms and inference providers.",
+ "numeric_claims": [
+  {
+   "claim": "Arm D: max passing N = 300 vs 200 for arms A/B/C at p95 TTFT <= 300 ms on one L40S (1.5x); N=300 p95 272.2 ms whole-run, 291.9 ms full-load window (min 5-40); pass margin 27.8 ms whole-run / 8.1 ms full-load; 3 of 7 full-load buckets > 300 ms; pin_budget_gb 10, pin_max_idle_ms 25,000; hold = idle x 1.3 + 2,000 ms",
+   "source": "context/02-evidence-ledger-voice.md, entry vi-armD-predictive-pinning; /home/user/voice-inference/runs/modal/sweep_d/seed1/n300/summary.json; /home/user/voice-inference/vkv/backends/voice_kv_connector.py lines 179-183, 348-359"
+  },
+  {
+   "claim": "Arm D N=400 p95 34,048 ms (FAIL) with 10 GB pin budget",
+   "source": "context/02-evidence-ledger-voice.md, vi-armD-n400-failure; runs/modal/sweep_d/seed1/n400/summary.json"
+  },
+  {
+   "claim": "Arm A (vanilla vLLM, prefix caching): max passing N = 200 (p95 93.1 ms); N=300 collapse; prefix-cache hit rate 92% at passing points -> 1.6-1.9% in the N=300 server log tail; ~42 GB KV working set vs ~26 GB HBM pool (doc estimate)",
+   "source": "context/02-evidence-ledger-voice.md, vi-armA-baseline-knee; runs/modal/sweep_a/results.json; runs/modal/sweep_a/seed1/n300/server_log_tail.txt"
+  },
+  {
+   "claim": "Arm B LMCache 0.3.2: max passing N = 200; N=300 p95 25,997.7 ms (default) / 6,025.1 ms (layerwise diag); N=200 p95 170.6 ms",
+   "source": "context/02-evidence-ledger-voice.md, vi-armB-lmcache-reactive; runs/modal/sweep_b/results.json; runs/modal/diag_b_n300_lw/armB_n300_seed1/summary.json"
+  },
+  {
+   "claim": "VoiceKVConnector (574 lines) without hints: N=300 p95 316.8 ms whole-run (336.8 ms full-load window), 16.8 ms over the 300 ms gate; max passing N still 200; 82x / 19x tail ratio vs LMCache default/layerwise is stable-vs-collapsed; '7 ms restore' is a docstring estimate",
+   "source": "context/02-evidence-ledger-voice.md, vi-armB-voice-connector-reactive and vi-contiguous-vs-chunked-transfer; context/03-build-inventory.md (574 LOC)"
+  },
+  {
+   "claim": "Arm C (audio-triggered warmup prefetch): N=200 p95 118.2 ms; N=300 p95 14,958 ms computed over 17,177 of 27,338 turns; server unreachable from minute 41.1 (10,146 ConnectionRefused); ~37% of turns without TTFT",
+   "source": "context/02-evidence-ledger-voice.md, vi-armC-vad-warmup-prefetch and vi-armC-n300-archived-run-integrity; runs/modal/sweep_c/seed1/n300/events.jsonl"
+  },
+  {
+   "claim": "Voice rig: L40S 46,068 MiB; vLLM 0.9.2; lmcache 0.3.2; Qwen2.5-7B-Instruct fp16 at 57,344 B/token; ~2.5k-token session ~140 MB; seed 1 only; 6-30 turns per session (uniform); 19 archived runs totaling 287,015 measured turns; 27 tests pass with pytest-asyncio",
+   "source": "context/02-evidence-ledger-voice.md common setup, vi-harness-methodology-lessons, vi-open-multi-seed; context/03-build-inventory.md voice-inference Tests run"
+  },
+  {
+   "claim": "Phase 0 duty cycle: 95.2% idle (0.9519), idle-window p50 24,046 ms, on 300 synthetic sessions; assumed decode 60 tok/s while GPU runs measured ~45 tok/s (ITL ~22 ms)",
+   "source": "context/02-evidence-ledger-voice.md, vi-phase0-duty-cycle and discrepancy 4; /home/user/voice-inference/docs/phase0/phase0.json"
+  },
+  {
+   "claim": "Arm D client hint: idle_ms = max(0, max_tokens x 308 ms TTS - max_tokens/45 tok/s) + 400 ms gap + 2,500 ms utterance + STT final delay; ~6-line client function",
+   "source": "/home/user/voice-inference/vkv/run.py lines 86-92 (_idle_hint); context/03-build-inventory.md reusability summary"
+  },
+  {
+   "claim": "Voice repo docs estimate ~2 GPU-hours per tuning idea; proposed next runs: 16 GB pin budget, tuned holds, N=350/400",
+   "source": "context/02-evidence-ledger-voice.md, vi-open-armD-tuning"
+  },
+  {
+   "claim": "LMCache offload/restore on vLLM 0.24.0 + A100-80GB, Qwen2.5-7B, single request: 4k cold 301 ms -> restore 30 ms (10.0x); 16k 1,320 ms -> 77 ms (17.1x); 16,384 tokens (~0.875 GB) retrieved from CPU in 39.8 ms at 22.0 GB/s",
+   "source": "context/01-evidence-ledger-dexa.md, lmcache-offload-restore; /home/user/dexa/evals/RESULTS.md section 'Offload -> restore through vLLM + LMCache'; /home/user/dexa/evals/modal_lmcache_restore.py"
+  },
+  {
+   "claim": "vLLM in-GPU prefix-cache hit vs cold TTFT: ~12x at 4k (280 -> 24 ms), 25-34x at 16k (1,250 -> 45 ms over 3 runs); >=32k crashed the V1 engine, so in-engine runs never exceeded 16k",
+   "source": "context/01-evidence-ledger-dexa.md, vllm-warmstart-prefix-cache; /home/user/dexa/evals/modal_vllm_warmstart.py"
+  },
+  {
+   "claim": "HF-level restore vs re-prefill (Qwen2.5-7B, A100): 11.8x at 4k, 11.5x at 16k, 17.4x at 32k, 28.9x at 64k; NVMe restore 246/390/646/1,228 ms; KV 0.23/0.94/1.88/3.76 GB; prefill 296/1,321/3,167/8,567 ms",
+   "source": "context/01-evidence-ledger-dexa.md, stateful-warm-session-hf; /home/user/dexa/evals/stateful_cost_model.py DATA table"
+  },
+  {
+   "claim": "Residency cost model (modeled, not measured): 6.0x / 4.9x / 2.0x cheaper at 2 / 15 / 120 min idle (64k, 50 turns); break-even idle 64k: HBM ~2 min, RAM ~11 min, NVMe ~4.9 hr; assumed rates GPU $1.80/hr, RAM $0.006/GB-hr, NVMe $0.0002/GB-hr, 60 GB usable HBM; dexa_platform/README.md presents '2-6x cheaper' as measured",
+   "source": "context/01-evidence-ledger-dexa.md, residency-cost-model; /home/user/dexa/evals/stateful_cost_model.py lines 20-24; /home/user/dexa/dexa_platform/sessions/tiering.py"
+  },
+  {
+   "claim": "Dexa connector single-request resume: Llama-3.1-8B/A100/8k 1,681 ms vs vLLM cold re-prefill 617 ms (0.37x); under 24 x 3072-token concurrency async P99 8,930 vs vanilla 5,596 ms; 16 x 8192 P99 20,296 vs 9,379 ms (1.6-2.2x worse); load path ~1 GB/s from Modal Volume",
+   "source": "context/01-evidence-ledger-dexa.md, connector-session-resume-single-request, connector-under-concurrency-sync-async, restore-vs-reprefill-cross-repo-contradiction; /home/user/dexa/docs/RESULTS.md 2026-07-09 updates"
+  },
+  {
+   "claim": "Cross-instance resume bit-identical (TP=1); DexaConnector 10/10 KVConnectorBase_V1 hook signatures match vLLM 0.24.0; 3-arg constructor required in vLLM >=0.24",
+   "source": "context/01-evidence-ledger-dexa.md, cross-instance-resume and connector-conformance; /home/user/dexa/benchmarks/results/2026-07-09-vllm-connector-check.json"
+  },
+  {
+   "claim": "KV interchange formats: fp8 (e4m3) and int8 at 0.5x bytes give 100% greedy agreement over 48 tokens; int4 29% (diverges at token 14)",
+   "source": "context/01-evidence-ledger-dexa.md, kv-interchange-formats"
+  },
+  {
+   "claim": "End-to-end session service demo: 12k-token session turn 1 cold ~5.4 s, turn 2 warm ~1.5 s (3.7x); single run, no artifact",
+   "source": "context/01-evidence-ledger-dexa.md, stateful-session-service-live; /home/user/dexa/dexa_platform/README.md 'Stateful sessions'"
+  },
+  {
+   "claim": "Computer-use delta-perception naive reuse ~2x (capturable ceiling 2.34x at cos>=0.98)",
+   "source": "context/01-evidence-ledger-dexa.md, delta-perception-viability and delta-tolerance-sweep"
+  },
+  {
+   "claim": "Dexa build state: src/dexa/engine/vllm_connector.py 917 lines; dexa_platform gateway 692 lines, control 620 lines, sessions 383 lines (tiering.py 111); dexa_platform 29 tests pass; core suite 136 passed / 18 skipped; gateway/app.py:127 forces stream=False; tiering is advisory (no evict/demote call); serve/vllm_lmcache_backend.py configures a 40 GB CPU tier and no disk tier; vkv harness ~2,000 lines",
+   "source": "context/03-build-inventory.md, dexa Components and Gaps; voice-inference reusability summary"
+  },
+  {
+   "claim": "LMCache eviction: LocalCPUBackend LRU by default; MP EvictionController LRU / IsolatedLRU / noop; no TTL-, time- or idle-window-aware policy documented; Apache-2.0, 11.6k stars; latest release 0.5.4 (Aug 20, 2026)",
+   "source": "context/05-research-kvcache.md; https://docs.lmcache.ai/mp/architecture.html; https://pypi.org/project/lmcache/"
+  },
+  {
+   "claim": "Tensormesh: $4.5M seed (Oct 2025) + $20M (May 2026) = $24.5M; SaaS bills cached input tokens at $0; Operator 'Coming Soon'; FAQ says SaaS 'in beta'; post-v1 pricing 30% of estimated savings; does not support alternative inference servers; CEO: in-house build takes '20 engineers and three or four months'",
+   "source": "context/05-research-kvcache.md; https://www.tensormesh.ai/pricing; https://www.tensormesh.ai/faq; https://techcrunch.com/2025/10/23/tensormesh-raises-4-5m-to-squeeze-more-inference-out-of-ai-server-loads/"
+  },
+  {
+   "claim": "Mooncake Store: approximate LRU; default KV lease TTL 10 s; soft-pin TTL default 30 min (max 24 h); hard pins never evicted; SSD offload; DFS tier 'not production-ready'; draft PR #2835 (Jul 10, 2026) TTL-bounded group retention leases, experimental",
+   "source": "context/05-research-kvcache.md; https://github.com/kvcache-ai/Mooncake/blob/main/docs/source/design/store/mooncake-store.md; https://github.com/kvcache-ai/Mooncake/issues/2835"
+  },
+  {
+   "claim": "NVIDIA Dynamo KVBM: G1 GPU / G2 host / G3 disk / G4 object tiers; offload policies pass_all, presence, presence_lfu; per-tier eviction algorithm not detailed and no published performance numbers in the design doc; NVIDIA blog says KVBM exposes cache_control-style TTL retention semantics",
+   "source": "context/05-research-kvcache.md (https://docs.nvidia.com/dynamo/design-docs/component-design/kvbm-design); context/05-research-agents.md (https://developer.nvidia.com/blog/full-stack-optimizations-for-agentic-inference-with-nvidia-dynamo/)"
+  },
+  {
+   "claim": "llm-d: v0.9.0 (Aug 17, 2026); precise KV-event prefix-cache routing default; OffloadingConnector LRU/ARC tiers; P2P KV pull over NIXL; session affinity; powers GKE Inference Gateway; 219 production Claude Code sessions: median 195K input / 317 output tokens, 96% of requests reuse >=90% of input as verbatim prefix (median 99.6%), inter-turn pauses median 2 s / p99 11.4 min; CPU-DRAM offload at concurrency 32 raised output 13% and cut median TTFT 32%; NVMe tier 'inactive in these measurements'",
+   "source": "context/05-research-kvcache.md; https://llm-d.ai/blog/serving-glm-5-2-agentic-workloads-on-llm-d; https://github.com/llm-d/llm-d/releases"
+  },
+  {
+   "claim": "vLLM OffloadingConnector: built-in eviction policies 'lru' and 'arc', custom policies via cache_policy_module_path, offload_prompt_only default true; RFC #38260 TieringManager open (Mar 26, 2026); KVConnector V1 merged Apr 17, 2025 and still 'experimental and subject to change'; vLLM 0.28.0 (Aug 26, 2026), SGLang 0.5.18 (Aug 21, 2026)",
+   "source": "context/05-research-kvcache.md; https://docs.vllm.ai/en/latest/features/kv_offloading_usage/; https://github.com/vllm-project/vllm/issues/38260; https://docs.vllm.ai/en/stable/api/vllm/distributed/kv_transfer/kv_connector/v1/base/; https://pypi.org/project/vllm/"
+  },
+  {
+   "claim": "SGLang: RFC #24656 (May 8, 2026) agent-aware KV hints, open and labeled 'inactive'; RFC #27574 (Jun 8, 2026) programmatic KV hints Share/Prefetch/Demote/Pin with bounded TTL, open, first POC pins at Mooncake L3; roadmap #21846 Q3 'Agentic KV Cache Scheduling (session-aware RadixTree, KV cache orchestrator)'; HiCache L1/L2 private per instance, L2 eviction policy undocumented",
+   "source": "context/05-research-kvcache.md; https://github.com/sgl-project/sglang/issues/24656; https://github.com/sgl-project/sglang/issues/27574; https://github.com/sgl-project/sglang/issues/21846"
+  },
+  {
+   "claim": "AIBrix L1 eviction S3FIFO (default), LRU, FIFO",
+   "source": "context/05-research-kvcache.md; https://aibrix.readthedocs.io/latest/features/kvcache-offloading.html"
+  },
+  {
+   "claim": "SJTU/Alibaba 'KVCache Cache in the Wild': ideal hit ratios 62% / 54%; 80% of reuses within 10 min (A) or 10 s (B); P99 KV lifespan 97 s; reuse-probability eviction beats LRU/FIFO/LFU by 1.5-3.9% hit rate and up to 41.4% mean response time",
+   "source": "context/05-research-kvcache.md; https://arxiv.org/html/2506.02634v1"
+  },
+  {
+   "claim": "Continuum: TTL pinning from reload cost and queueing delay; >8x average job-completion-time improvement on SWE-Bench, BFCL, OpenHands with Llama-3.1 8B/70B, Gemma-3 12B, GLM-4.5 355B",
+   "source": "context/05-research-kvcache.md and 05-research-agents.md; https://arxiv.org/abs/2511.02230"
+  },
+  {
+   "claim": "NVIDIA CMX/ICMS flash tier announced for 'second half of 2026'; storage-vendor KV extenders (WEKA, VAST, DDN, Pliops, MinIO) with no pricing found",
+   "source": "context/05-research-kvcache.md; https://nvidianews.nvidia.com/news/nvidia-bluefield-4-powers-new-class-of-ai-native-storage-infrastructure-for-the-next-frontier-of-ai"
+  },
+  {
+   "claim": "TraceLab (~4,300 Claude Code/Codex sessions): median prefix 126,180 (Claude) / 115,584 (Codex) tokens per step; median new input 857/886; median output 252/184; human gap median 1.4 min, p90 20.6 min; prefix-cache hits 95.7% overall, 84.4% on user-initiated steps",
+   "source": "context/05-research-agents.md; https://arxiv.org/html/2606.30560"
+  },
+  {
+   "claim": "OpenHands recommends Qwen3.6-35B-A3B served via vLLM/SGLang; open-weight models a majority of OpenRouter tokens by mid-2026, concentrated in coding and agentic workloads",
+   "source": "context/05-research-agents.md; https://docs.openhands.dev/openhands/usage/llms/local-llms; https://stateofopensource.ai/"
+  },
+  {
+   "claim": "Fireworks prompt caching 'only works within 1 replica'; session-affinity headers; cached tokens default 50% discount; retention 'at least several minutes... up to several hours'",
+   "source": "context/05-research-agents.md; https://docs.fireworks.ai/guides/prompt-caching"
+  },
+  {
+   "claim": "openai/codex #25604: Azure long sessions past ~150K tokens suffer total prompt-cache misses; 3.28M re-billed tokens = 71% of fresh input",
+   "source": "context/05-research-agents.md; https://github.com/openai/codex/issues/25604"
+  },
+  {
+   "claim": "anthropics/claude-code #46829: 119,866 API calls; 17.1% higher spend vs all-1h TTL baseline after 1h->5m cache-write change",
+   "source": "context/05-research-agents.md and 05-research-caching.md; https://github.com/anthropics/claude-code/issues/46829"
+  },
+  {
+   "claim": "Anthropic caching: 5-minute default TTL, 1-hour option; 5m write 1.25x, 1h write 2x, reads 0.1x; Managed Agents $0.08 per session-hour billed only while 'running'",
+   "source": "context/05-research-caching.md; https://platform.claude.com/docs/en/about-claude/pricing"
+  },
+  {
+   "claim": "OpenAI: GPT-5.6+ 30-minute TTL, 1.25x write / 0.1x read; pre-5.6 in_memory (5-10 min) or 24h retention; prompt_cache_key 'do not pin requests to a machine'",
+   "source": "context/05-research-caching.md; https://developers.openai.com/api/docs/guides/prompt-caching"
+  },
+  {
+   "claim": "Gemini explicit caching: 1-hour default TTL; storage $0.50-$4.50 per 1M tokens per hour by model",
+   "source": "context/05-research-caching.md; https://ai.google.dev/gemini-api/docs/pricing"
+  },
+  {
+   "claim": "DeepSeek disk cache cleared 'within a few hours to a few days'; xAI cache entries 'can be evicted at any time'",
+   "source": "context/05-research-caching.md; https://api-docs.deepseek.com/guides/kv_cache; https://docs.x.ai/developers/advanced-api-usage/prompt-caching/best-practices"
+  },
+  {
+   "claim": "LiveKit: Gemma 4 31B on SGLang, 192 ms TTFT; $0.40 input / $1.20 output per 1M tokens; 'reserves more headroom than a throughput-maximized deployment would'; inference concurrency 5/20/50 by plan",
+   "source": "context/05-research-voice.md; https://livekit.com/blog/latency-optimized-inference-gemma-4-on-livekit; https://livekit.com/pricing/inference; https://livekit.com/pricing"
+  },
+  {
+   "claim": "ElevenLabs hosts Qwen3.6-35B-A3B and Qwen3.5-397B-A17B; burst pricing 2x ($0.160/min) beyond workspace concurrency; 10M+ conversations per week",
+   "source": "context/05-research-voice.md; https://elevenlabs.io/docs/agents-platform/customization/llm; https://elevenlabs.io/pricing/agents; https://elevenlabs.io/agents"
+  },
+  {
+   "claim": "Inworld serves Gemma 4 26B; its cost model puts the LLM under 5% of a voice minute; smallest.ai example puts LLM at ~30% ($0.020 of $0.066/min); Deepgram offers Nemotron-3-nano-30B-A3B",
+   "source": "context/05-research-voice.md; https://inworld.ai/resources/voice-agent-cost-per-minute-2026; https://smallest.ai/blog/what-are-the-true-costs-associated-with-operating-a-voice-agent-at-scale; https://developers.deepgram.com/docs/voice-agent-llm-models"
+  },
+  {
+   "claim": "Vapi: 10 concurrent lines included + $10/line/month; 1-5M calls/day; Retell: first 20 concurrency free then $8/concurrency/month; every orchestrator fetched except Bland supports BYO OpenAI-compatible LLM",
+   "source": "context/05-research-voice.md; https://vapi.ai/pricing; https://techcrunch.com/2026/05/12/vapi-hits-500m-valuation-as-amazon-ring-chose-its-ai-platform-over-40-rivals/; https://www.retellai.com/pricing"
+  },
+  {
+   "claim": "Wafer: $4M seed (Apr 14, 2026), $40M Series A (Sep 1, 2026), $200M+ valuation; team 10; profile/explore/deploy agents across vLLM/SGLang and NVIDIA/AMD hardware; dedicated endpoints custom-priced; Neon Health voice TTFT 800 ms -> ~550 ms and 'doesn't go off a cliff' testimonial; YC-era optimization contracts 'would save $5k/day once deployed'",
+   "source": "context/05-research-wafer.md; https://www.wafer.ai/blog/series-a; https://www.wafer.ai/; https://www.wafer.ai/cases; https://www.wafer.ai/technology; https://www.artificialintelligencemadesimple.com/p/meet-wafer-the-yc-startup-making"
+  },
+  {
+   "claim": "Morph: sticky KV placement via prompt_cache_key / x-session-id headers; per-request TTL control on prefix caching; engine 'forked from vLLM'; self-reported ~$7M run rate; YC lists team size 3",
+   "source": "context/05-research-morph.md; https://docs.morphllm.com/sdk/components/fast-models; https://news.ycombinator.com/item?id=48739038; https://www.ycombinator.com/companies/morph"
+  },
+  {
+   "claim": "Proposed thresholds in this brief (not measurements): Metric A ship target >=2x on 3 seeds, kill <1.3x; Metric B kill <15% over LRU, proceed >=25%; predictor hit rate kill <60% / proceed >=80%; NVMe kill >3x modeled restore and break-even >12 h; connector-drift kill >1 engineer-week per release twice; idle ladder {10 s, 2 min, 20 min, 2 h} at C=32",
+   "source": "This brief, section 4 and section 10 (pre-registered proposals). Modeled on the voice repo's pre-registered thresholds (<2x kill, 2-3x conditional, >3x proceed) in context/02-evidence-ledger-voice.md vi-armC-vad-warmup-prefetch, and on llm-d's concurrency-32 measurement in context/05-research-kvcache.md"
+  },
+  {
+   "claim": "GPU-hour and calendar estimates in the Unproven table (~40 GPU-h H100 / 7 days; ~10 GPU-h / 2 days; ~24 GPU-h L40S / 3 days; ~24 GPU-h H100 / 3 days; ~8 GPU-h; ~1 GPU-h; ~30 GPU-h / 10 days; ~15 GPU-h / 7 days)",
+   "source": "Estimates in this brief, anchored on the voice repo's '~2 GPU-hours per idea' (context/02-evidence-ledger-voice.md vi-open-armD-tuning) and its doc-claimed ~$45 total GPU spend for 19 runs (vi-harness-methodology-lessons; unverifiable from the repo)"
+  }
+ ],
+ "unproven": [
+  {
+   "claim": "Session-aware residency beats LRU-family eviction in the agent regime (100K+-token contexts, minute-to-hour idle gaps) on TTFT p95 and GPU-seconds per turn",
+   "experiment": "Replay TraceLab/llm-d-shaped traces (median prefix ~116-126K tokens, ~860 new tokens/step, gaps 1.4 min median / 20.6 min p90) at concurrency 32 on vLLM 0.28 with vanilla re-prefill, LMCache-LRU, OffloadingConnector-ARC, and the policy engine under a fixed CPU-RAM + NVMe budget; report TTFT p95 and GPU-s/turn per idle rung {10 s, 2 min, 20 min, 2 h}; kill if policy is <15% better than LRU on both metrics",
+   "cost_estimate": "~40 GPU-hours H100; 7 calendar days"
+  },
+  {
+   "claim": "NVMe-tier restore is fast enough that the modeled ~4.9 hr break-even at 64k is real (nothing in either repo enforces or measures an NVMe tier)",
+   "experiment": "Enable LMCache local disk or vLLM FS tier on the stateful backend; measure restore ms at 16k/32k/64k/128k under single-request and C=32 load; compare to the cost model's 246/390/646/1,228 ms HF-level numbers; kill if >3x modeled and break-even >12 h",
+   "cost_estimate": "~10 GPU-hours; 2 days"
+  },
+  {
+   "claim": "Stateful residency is cheaper in dollars than re-prefill at idle gaps of 2-20 min for >=16k contexts (the '2-6x cheaper' figure is a model with assumed rates)",
+   "experiment": "Run the Metric B ladder with metered GPU-seconds and storage bytes; replace GPU $1.80/hr, RAM $0.006/GB-hr, NVMe $0.0002/GB-hr with invoice rates; kill if stateful is not cheaper at any rung <=20 min",
+   "cost_estimate": "Included in the Metric B run; ~1 engineer-day of accounting"
+  },
+  {
+   "claim": "Arm D reaches >=2x (the voice repo's proceed line) with tuning and replicates across seeds",
+   "experiment": "Config-only sweep on L40S: pin_budget_gb 16, tuned hold multiplier, seeds 1-3, N in {250, 300, 350, 400}; full-load-window p95; kill if median ratio <1.3x",
+   "cost_estimate": "~24 GPU-hours L40S; 3 days"
+  },
+  {
+   "claim": "The voice-regime gain survives an 80 GB GPU (both repos name larger HBM the top threat)",
+   "experiment": "Same sweep with evals/modal_arm_a.py --gpu H100; record the N at which vanilla collapses and the policy's added sessions or GPU-h/session saved; kill if vanilla holds >=2x voice-realistic N and policy adds <10%",
+   "cost_estimate": "~24 GPU-hours H100; 3 days"
+  },
+  {
+   "claim": "A real return-time predictor (from real call transcripts and turn-taking, not the trace's own medians) achieves a pin hit rate high enough to hold the 1.5x",
+   "experiment": "Write a converter from partner transcripts to SessionTrace JSONL (vkv/traces/schema.py); measure hint error distribution, pin hit rate, and wasted-pin bytes; kill if hit <60% or waste >40% of budget",
+   "cost_estimate": "Partner data required; ~8 GPU-hours; 5 days"
+  },
+  {
+   "claim": "The connector's CPU->HBM restore path reproduces the originally computed KV under eviction pressure (correctness suite exists, no output archived)",
+   "experiment": "Run evals/modal_kv_correctness.py (bitwise slab round-trip + forced-evict restore probe) on the ported connector and archive results; kill on any missing-entry load",
+   "cost_estimate": "~1 GPU-hour; 1 day"
+  },
+  {
+   "claim": "The same residency semantics can be delivered on SGLang via HiCacheStorage or the RFC #27574 hint vocabulary (the repos have zero SGLang connector code)",
+   "experiment": "Port pin/restore/demote semantics to SGLang; reproduce Metric A on SGLang with HiCache baseline; kill if Metric A ratio on SGLang <1.3x",
+   "cost_estimate": "~30 GPU-hours; 10 days"
+  },
+  {
+   "claim": "The connector can persist and restore long (chunked-prefill, multi-step) sessions and TP>1 deployments, which the 64k+ crossover regime requires",
+   "experiment": "Implement scheduled_cached_reqs scanning and TP-sharded save/load in the connector; rerun the 64k resume bench vs vLLM re-prefill; kill if resume is not faster than re-prefill at 64k",
+   "cost_estimate": "~15 GPU-hours; 7 days"
+  }
+ ],
+ "founder_decisions": [
+  {
+   "decision": "Hosted endpoint vs BYOC software vs open-source core with paid policy/router/support",
+   "options": "(a) Hosted session-addressed endpoint first (dexa FINDINGS direction, dexa_platform + Modal); (b) BYOC connector + policy engine + harness first (voice repo shape); (c) Apache-2.0 connector with a commercial policy engine, router and support",
+   "why_not_ours_to_make": "Depends on the founder's view of PLG vs enterprise motion and on which week-6 design partner converts; the only market data point is Tensormesh selling SaaS in beta while its on-prem Operator is 'coming soon' (05-research-kvcache.md), which is a fact, not a verdict"
+  },
+  {
+   "decision": "Voice-first vs agent-first as the launch regime",
+   "options": "(a) Voice: the only measured win (arm D 1.5x, one seed), buyers already priced by concurrency, 26-35B open models on vLLM/SGLang; (b) Agents: 100K+ contexts where measured restore ratios are 10-30x and the SGLang RFCs document the gap, but no policy-vs-LRU measurement exists yet",
+   "why_not_ours_to_make": "The evidence is asymmetric (voice measured, agents unmeasured) and the answer depends on Metric A (week 2) and Metric B (week 4) results plus the founder's judgment about which buyer is reachable"
+  },
+  {
+   "decision": "Whether the adjacency of Tensormesh/LMCache, NVIDIA Dynamo KVBM, llm-d, Mooncake, and the SGLang RFCs disqualifies or validates the direction",
+   "options": "(a) Treat LRU-only eviction and open/inactive RFCs as an unowned layer to occupy now; (b) Treat them as a signal the engines will absorb the policy layer within quarters; (c) Build as an upstream contributor (RFC #27574 implementer) and sell the hosted/BYOC operationalization",
+   "why_not_ours_to_make": "The brief's hard rule: competitor existence is stated neutrally in section 9; whether it matters is the founder's call, informed by whether the RFCs land and whether Tensormesh's Operator ships"
+  },
+  {
+   "decision": "Model class and GPU class for the proof-of-value",
+   "options": "(a) Keep 7B fp16 on L40S (what is measured); (b) Move to buyer-realistic 26-35B models (Gemma 4 26B/31B, Qwen3.6-35B-A3B) on 80 GB H100/H200; (c) Both, with the H100 sweep as the gate",
+   "why_not_ours_to_make": "Both repos flag larger HBM as the #1 threat (vi-open-larger-hbm-gpu); the H100 sweep is the evidence, and the choice of which hardware to optimize for is a capital and go-to-market decision"
+  },
+  {
+   "decision": "vLLM-only for the six weeks, or vLLM plus SGLang from the start",
+   "options": "(a) vLLM 0.28 only (all existing connector code targets vLLM KVConnectorBase_V1); (b) Add SGLang via HiCacheStorage / RFC #27574 hints (LiveKit runs SGLang; the RFC vocabulary matches this brief's hints); (c) SGLang-first as the RFC implementer",
+   "why_not_ours_to_make": "Trades six-week scope against buyer coverage; the repos have zero SGLang connector code and the SGLang path is unmeasured (~30 GPU-h, 10 days estimated)"
+  },
+  {
+   "decision": "Build and measure the NVMe tier now, or after the RAM-tier win is banked",
+   "options": "(a) RAM tier only for launch (the only measured tier); (b) NVMe in week 4 (the ~4.9 hr break-even is modeled only); (c) Defer NVMe to storage-vendor partners (WEKA/VAST/DDN on Dynamo/NIXL)",
+   "why_not_ours_to_make": "Depends on whether the founder wants to claim hour-scale idle coverage at launch; the number that decides it does not exist yet"
+  },
+  {
+   "decision": "Whether the open-model voice/agent serving market is large enough to build a company on",
+   "options": "Volumes in the files: Vapi 1-5M calls/day, ElevenLabs 10M+ conversations/week, Bland 639M calls to date; LLM share of a voice minute ranges from under 5% (Inworld, self-hosted Gemma) to ~30% (smallest.ai) to 'usually the largest line' (Deepgram); open-weight models a majority of OpenRouter tokens by mid-2026",
+   "why_not_ours_to_make": "Market-size judgments are explicitly reserved for the founder per the hard rules; the brief states the volumes and cost shares neutrally"
+  },
+  {
+   "decision": "Whether the return-time hint protocol is an open spec or proprietary",
+   "options": "(a) Publish it and drive SGLang RFC #27574 / vLLM adoption so orchestrators (LiveKit, Pipecat, OpenHands, Claude Code harnesses) emit hints natively; (b) Keep it proprietary as the moat; (c) Open the wire format, keep the policy engine closed",
+   "why_not_ours_to_make": "A strategic openness decision; the evidence that informs it is whether hint adoption by orchestrators is the bottleneck (unmeasured) and whether the RFCs land without the company"
+  }
+ ]
+}

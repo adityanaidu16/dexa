@@ -247,13 +247,81 @@
   "unproven": 8
  },
  "I": {
+  "attacks": [
+   [
+    "fatal",
+    "Combined engine-kill: if a well-configured vLLM (same max_pixels, FP8, prefix caching, built-in n-gram speculation with OCR text in the prompt) captures most of"
+   ],
+   [
+    "serious",
+    "No full-page parse measurement exists anywhere in the repos. Every in-repo number is max_tokens=32 short-answer output from one offline LLM.chat batch of 200 im"
+   ],
+   [
+    "serious",
+    "Copy speculation is unmeasured for documents and its off-the-shelf form is not proprietary: n-gram/prompt-lookup drafts ship in Baseten BIS-LLM and Together ATL"
+   ],
+   [
+    "serious",
+    "Version/API dependency: whether vLLM 0.24's speculative-decoding path accepts multimodal (Qwen3-VL image) inputs is not covered by any research file. If it does"
+   ],
+   [
+    "serious",
+    "The accuracy claim rests on a 2024 comparator with unrecorded output. 'As accurate as the frontier models' is supported only by 0.925 vs GPT-4o 0.880 (BOUNDED; "
+   ],
+   [
+    "serious",
+    "The model half of the Morph playbook is entirely unproven: neither ledger contains a training result; the fine-tune must beat Nanonets 87.4 / Mistral 85.2 / dot"
+   ],
+   [
+    "serious",
+    "Workload assumptions are unsupported by the research files: no document-API volume disclosures, no telemetry on batch-vs-interactive mix, no evidence buyers val"
+   ],
+   [
+    "minor",
+    "Instruction/schema prefix caching is overstated: the 12x number is for a 4k text prefix on a text model; in a VLM prompt only tokens before the first image are "
+   ],
+   [
+    "minor",
+    "Content-aware pruning is blocked (Qwen2.5-VL mRoPE; Qwen3-VL unknown) while model-level token compression already exists in the open (DeepSeek-OCR < 800 vision "
+   ],
+   [
+    "minor",
+    "Evidence base is single-seed, single-GPU, 200 pages, one run, and the reusable platform code is thinner than 'gateway with 29 tests' implies: 7 of the tests are"
+   ],
+   [
+    "minor",
+    "The 6-week plan slips on five identifiable lines: week 2 (spec-decode on VLM inputs may be engine work), week 3 (LLMEngine scheduler needs an HTTP serving loop;"
+   ]
+  ],
   "chars": 24665,
+  "evidence_grade": "C",
+  "evidence_grade_reason": "The one in-engine measurement that touches this workload is real but bounded: Qwen2.5-VL-7B at 1024 px gives 2.7x throughput at -1.0 pt on 200 DocVQA pages (vLLM 0.24.0, A100, one run, max_tokens=32, one offline LLM.chat batch), and the ledger itself labels it a naive resize \"a client can apply before any API\" that \"sizes the prize but isn't yet the moat\". The accuracy-parity claim (0.925 vs GPT-4o 0.880) is ledger-status BOUNDED: the GPT-4o run output is unrecorded except that number, GPT-4o-mini is unrecorded, and GPT-4o is a 2024 comparator. Every Morph-playbook-specific mechanism the thesis rests on \u2014 copy fraction, copy speculation, a trained draft head, content-aware pruning (OPEN, blocked by Qwen2.5-VL mRoPE), the fine-tuned model, full-page parse throughput, and behavior under concurrency \u2014 is unmeasured in both repos (D on its own). C rather than D because the economics precondition was measured in-engine once; C rather than B because what was measured is explicitly not the differentiated claim and was never replicated or run on the product's actual output length.",
+  "final": "I.md",
   "founder_decisions": 9,
   "kind": "draft",
-  "name": "Fast Parse: the Morph playbook on document-to-structure",
+  "missing_founder_decisions": [
+   "Task choice: the draft selected document parse from seven Morph-style candidates (voice turn model, context compaction, agent-trace classifiers, code-search subagent, screenshot-diff perception, tool-call routing) on qualitative ratings; the founder should pick, or pick two tasks that share the speculator.",
+   "Engine base: vLLM 0.24.0 (ledger-pinned) vs SGLang (better at branched decode per the ledger's SGLang gate) vs a fork (Morph's Reflexes engine is 'forked from vLLM'); the draft assumed vLLM.",
+   "MVP shape: hosted per-page API first (vs BYOC-first or open-weights-first); the draft assumed hosted with a 10,000-page free tier copied from Unstructured.",
+   "Synthetic-data teacher and terms of service: the olmOCR recipe uses Claude Sonnet 4 at ~$0.12/page; frontier teacher vs open teacher (Qwen3-VL-235B) vs human-labeled subset; ~$6k budget assumed 50k pages.",
+   "Accuracy metric that buyers will be shown: relaxed-match DocVQA on 200 validation pages (the repo's) vs ANLS on test vs olmOCR-Bench vs a schema-extraction eval; the draft mixed them.",
+   "Kill-gate thresholds: 40%/70% copy fraction, 1.5x/2x speculation, 2x/3x throughput, 82.4/85.2 accuracy, $5/$1 per 1K COGS, 0/2 of 3 pilots were all chosen by the draft and need ratification.",
+   "Team size and calendar: the 6-week plan implicitly assumes 1-2 engineers plus GPU budget; the realistic 8-10 (engine) or 14-18 (with fine-tune) week calendar depends on it.",
+   "First GPU class: A100-80GB (matches the ledger) vs H100 (the GPU buyers benchmark on) vs MI355X ($2.29-$2.95/hr per Wafer); the draft chose A100 first.",
+   "Model size and base: Qwen3-VL-8B vs 4B vs 2B vs dots.mocr 3B vs olmOCR-2-7B; the draft defaulted to 8B.",
+   "Parse-first vs extract-first SKU: parse has public benchmarks and a higher expected copy fraction; extract has $20-$50/1K price points.",
+   "Speculator form: prompt-lookup only (buyer-replicable) vs trained draft head (Morph's differentiator); the draft assumed both.",
+   "Whether to publish the harness and benchmark openly (Wafer-style) or not (Morph's benchmark pages returned HTTP 429 in research).",
+   "Whether the first public proof is the engine alone (stock Qwen3-VL-8B, 8-10 weeks) or engine plus fine-tuned model (14-18 weeks).",
+   "Third-party listing (e.g., OpenRouter) as an independent throughput check, which the draft assumed 'if available'."
+  ],
+  "name": "Fast Parse \u2014 the Morph playbook on document-to-structure (one specialized VLM plus a page-shaped engine)",
   "numeric_claims": 58,
-  "one_line": "One specialized 2B-8B document-to-structure model (page image in; markdown + schema JSON out) served on a purpose-built vLLM path with visual-token budgeting, OCR-draft copy-speculation and constrained JSON decoding, priced per page \u2014 the Morph playbook applied to the one task where the repos hold a measured model-side result (Qwen2.5-VL-7B 0.925 vs GPT-4o 0.880 on DocVQA at 2.7x throughput).",
-  "unproven": 9
+  "one_line": "A one-model inference company serving document-page-to-markdown/JSON on a purpose-built vLLM-based engine (copy speculator, visual-token budgeter, page scheduler) priced per page; the only in-repo evidence is a buyer-replicable resize lever on 200 short-answer pages, and every Morph-specific mechanism is unmeasured.",
+  "revised_by_run": "wf_2398f999-206",
+  "strongest_version": "A per-page document-parse API built on an open 4B-8B VLM, where the company's proprietary work is (a) a task-trained draft head that exploits the copy-like structure of parse output, (b) a page-shaped engine with batch and latency lanes and a visual-token budgeter, and (c) a fine-tuned model evaluated on public benchmarks with a rerunnable harness \u2014 all sold in the unit buyers already use, against per-page list prices from $1.50 to $50 per 1,000 pages. The in-repo evidence supports only the economics precondition: an open 7B at 1024 px matched a 2024 frontier model on 200 short-answer pages at 2.7x its own higher-resolution throughput, in-engine, on an A100. Everything Morph-specific \u2014 copy fraction, copy speculation, the trained speculator, engine-level pruning, the fine-tune, full-page throughput under load \u2014 is unmeasured, and the first two weeks decide whether a well-configured vLLM already captures the gain. If gates 1-4 pass, the company has a measured engine advantage on a workload with public benchmarks, Apache-2.0 bases and a published data recipe, and can publish a proof buyers can rerun. If gates 2 and 4 fail, the honest fallback is a fine-tuned-model-plus-per-page-pricing company, which the founder must weigh against Reducto r-1, Mistral OCR 4 and the open OCR models as facts, not verdicts.",
+  "unproven": 9,
+  "weeks_to_proof": "8-10 weeks to the first credible public proof of the engine claim (well-configured vLLM baseline vs engine v0 on full-page parse, olmOCR-Bench + DocVQA, 3 seeds, A100 + H100, public rerunnable harness), assuming 1-2 engineers, ~$3-5k of Modal GPU and frontier-API spend, that vLLM's speculative-decoding path accepts Qwen3-VL image inputs (unverified; not in the research files), and that the week-1 copy-fraction gate passes. 14-18 weeks if speculation must be built into the multimodal path (the week-2 slip risk) or if the fine-tuned model is part of the proof (~50k synthetic pages at ~$0.12 = ~$6k plus ~40 GPU-h, three weeks not one). The draft's 6 weeks assumed engine, fine-tune, load harness generalization, and three signed pilots with zero prior customer conversations in the repos."
  },
  "J": {
   "attacks": [

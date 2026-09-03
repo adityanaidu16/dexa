@@ -1,0 +1,234 @@
+{
+ "id": "I",
+ "name": "Fast Parse \u2014 the Morph playbook on document-to-structure (one specialized VLM plus a page-shaped engine)",
+ "one_line": "A one-model inference company serving document-page-to-markdown/JSON on a purpose-built vLLM-based engine (copy speculator, visual-token budgeter, page scheduler) priced per page; the only in-repo evidence is a buyer-replicable resize lever on 200 short-answer pages, and every Morph-specific mechanism is unmeasured.",
+ "evidence_grade": "C",
+ "evidence_grade_reason": "The one in-engine measurement that touches this workload is real but bounded: Qwen2.5-VL-7B at 1024 px gives 2.7x throughput at -1.0 pt on 200 DocVQA pages (vLLM 0.24.0, A100, one run, max_tokens=32, one offline LLM.chat batch), and the ledger itself labels it a naive resize \"a client can apply before any API\" that \"sizes the prize but isn't yet the moat\". The accuracy-parity claim (0.925 vs GPT-4o 0.880) is ledger-status BOUNDED: the GPT-4o run output is unrecorded except that number, GPT-4o-mini is unrecorded, and GPT-4o is a 2024 comparator. Every Morph-playbook-specific mechanism the thesis rests on \u2014 copy fraction, copy speculation, a trained draft head, content-aware pruning (OPEN, blocked by Qwen2.5-VL mRoPE), the fine-tuned model, full-page parse throughput, and behavior under concurrency \u2014 is unmeasured in both repos (D on its own). C rather than D because the economics precondition was measured in-engine once; C rather than B because what was measured is explicitly not the differentiated claim and was never replicated or run on the product's actual output length.",
+ "build_cost_weeks_to_proof": "8-10 weeks to the first credible public proof of the engine claim (well-configured vLLM baseline vs engine v0 on full-page parse, olmOCR-Bench + DocVQA, 3 seeds, A100 + H100, public rerunnable harness), assuming 1-2 engineers, ~$3-5k of Modal GPU and frontier-API spend, that vLLM's speculative-decoding path accepts Qwen3-VL image inputs (unverified; not in the research files), and that the week-1 copy-fraction gate passes. 14-18 weeks if speculation must be built into the multimodal path (the week-2 slip risk) or if the fine-tuned model is part of the proof (~50k synthetic pages at ~$0.12 = ~$6k plus ~40 GPU-h, three weeks not one). The draft's 6 weeks assumed engine, fine-tune, load harness generalization, and three signed pilots with zero prior customer conversations in the repos.",
+ "factcheck": [
+  {
+   "claim": "Section 6 'Proven': accuracy parity vs GPT-4o, 0.925 vs 0.880 on 200 DocVQA pages",
+   "verdict": "misquoted",
+   "correction": "Numbers are right but the ledger status is BOUNDED (01-ledger gpt4o-docvqa-head-to-head): the GPT-4o run output is unrecorded except the single number in docs/FINDINGS.md, GPT-4o-mini accuracy is unrecorded, and GPT-4o is a 2024 model. Moved to Bounded; added a current-frontier rerun to Unproven and kill gate 7."
+  },
+  {
+   "claim": "'$0.023 per 1,000 pages ... consistent with the repo's printed \"$0.02-0.06 / 1k pages\"'",
+   "verdict": "unsupported",
+   "correction": "The repo figure is a hardcoded string in evals/modal_incumbent_docvqa.py line 98 ('$0.02-0.06', '(Our row from the measured Qwen run; cost = rented-A100 serving, not tokens)'), not a derivation (04-conflicts.md conflict 10). The brief's $0.023 arithmetic (30.2 x 3600 = 108,720 pages/GPU-h; $2.50/108.72) is correct but is offline-batch, max_tokens=32 field-QA throughput, not served full-page parse. Rewritten."
+  },
+  {
+   "claim": "'30.2 img/s' used as pages per GPU-second for the batch metric",
+   "verdict": "misquoted",
+   "correction": "The 30.2 img/s is one offline LLM.chat batch over 200 images in evals/modal_vlm_frontier.py (lines 92-101) at max_tokens=32, after a warmup batch; it is not a served-endpoint throughput and not full-page output. Caveat added everywhere the number appears."
+  },
+  {
+   "claim": "Competitive table: Azure / Google / AWS 'No open weights or BYOC'",
+   "verdict": "misquoted",
+   "correction": "05-research-docai.md lists Azure Document Intelligence disconnected-container tiers priced per year (e.g., Read Disconnected 16000K $77,760/year) and Google custom-processor hosting at $0.05/hour; only AWS has no self-host option found. Table corrected."
+  },
+  {
+   "claim": "Competitive table: 'Together / DeepInfra / Fireworks / Baseten \u2014 Hosted Qwen3-VL per token'",
+   "verdict": "unsupported",
+   "correction": "Research files show Together (Qwen3-VL-32B $0.50/$1.50), DeepInfra (235B $0.20/$0.88), and an aggregator listing for 8B on DeepInfra/Fireworks; nothing shows Baseten hosting Qwen3-VL. Baseten's documented fact is BIS-LLM with NGram/Eagle/MTP speculative decoding. Row rewritten."
+  },
+  {
+   "claim": "Schema-prefix cache 'measured ~12x TTFT at 4k on a text model' as a component win",
+   "verdict": "misquoted",
+   "correction": "280 -> 24 ms at 4k (Qwen2.5-7B text, in-GPU hit) is correct, but it is a 4k text prefix; in a VLM prompt only tokens before the first image are a shared prefix, so a schema placed after the image is not cacheable and a few-hundred-token instruction prefix saves milliseconds. Renamed 'instruction-prefix cache' with the caveat."
+  },
+  {
+   "claim": "Task-selection table: screenshot-diff perception has an 'mRoPE blocker'",
+   "verdict": "misquoted",
+   "correction": "The mRoPE constraint is recorded for document visual-token pruning (01-ledger vlm-moat-mrope, evals/modal_vlm_moat.py), not for CUA delta encoding; the CUA entries record a 2.34x capturable ceiling at cos >= 0.98 on n=8 frames. Misattribution removed."
+  },
+  {
+   "claim": "Accuracy target '>= 85.2 on olmOCR-Bench' framed as the specialist bar (Mistral OCR 4)",
+   "verdict": "misquoted",
+   "correction": "05-research-docai.md lists Nanonets OCR-3 at 87.4 on olmOCR-Bench (leaderboard front page, medium confidence) and Chandra at 83.1; the brief omitted the higher bar. Added to baselines and the competitive table; 85.2 kept as the pre-registered target with the 87.4 fact stated."
+  },
+  {
+   "claim": "Baseline (1) 'vanilla vLLM, Qwen3-VL-8B, default resolution, no speculation'",
+   "verdict": "unsupported",
+   "correction": "A default-resolution baseline lets the buyer-replicable resize count toward the 3x target; the ledger says the 2.7x is a resize 'a client can apply before any API'. Baseline (1) redefined as well-configured vLLM (same max_pixels, prefix caching, FP8, built-in n-gram speculation if it accepts image inputs) and a kill gate added."
+  },
+  {
+   "claim": "Decode-step reference n=1 ~22 ms/step flat across context (Llama-3.1-8B, vLLM 0.24.0, A100)",
+   "verdict": "correct",
+   "correction": "Ledger caveats omitted by the draft and now added: eager mode, prefix caching off, gen=64, one run (01-ledger vllm-decode-pathology)."
+  },
+  {
+   "claim": "Gateway 'with 29 passing tests'",
+   "verdict": "correct",
+   "correction": "03-build-inventory.md: 29 collected, 29 pass, but 7 are session-service tests under DEXA_SESSION_MOCK=1, the Dockerfile copies only gateway/ + dashboard/ (control/ absent), no streaming, no integration test against a live backend. Caveats added to the architecture table and week 3."
+  },
+  {
+   "claim": "Voice row: '287k turns; arm D 300 vs 200 sessions, 1.5x'",
+   "verdict": "correct",
+   "correction": "287,015 archived turns (docs say ~180k); arm D N=300 p95 272.2 ms vs 200 for A/B/C. Omitted caveats now stated: single seed, L40S 46 GB, synthetic traces, 27.8 ms whole-run margin (8.1 ms in the full-load window), below the PRD's 2x proceed line."
+  },
+  {
+   "claim": "Qwen3-VL-8B DocVQA 96.1 / OCRBench 896 vs GPT-5 high 91.5 / 810; 4B 95.3; 2B 93.3",
+   "verdict": "correct",
+   "correction": "Numbers match the Qwen3-VL technical report table as quoted in 05-research-docai.md; the research file's unknowns note they are Qwen-reported and not independently replicated. Caveat added."
+  },
+  {
+   "claim": "Visual-token budget lever: 1536 px 0.935 / 11.4 img/s / 2,201 tokens; 1024 px 0.925 / 30.2 / 1,017 (2.7x, -1.0 pt); 768 px 0.885 / 47.2 (4.1x); 512 px 0.735; 384 px 0.445",
+   "verdict": "correct",
+   "correction": "Matches evals/RESULTS.md 'Multimodal execution thesis' and 01-ledger doc-vlm-frontier; added omitted caveats (one run, one GPU, no seeds, v2 after an invalid ChartQA v1, offline batch, max_tokens=32)."
+  },
+  {
+   "claim": "'~40x cheaper' decomposes into 3.4x tokens (1,105 vs 322 for 1280x800) x 12.5x assumed price ($0.20/M vs $2.50/M); accuracy measured at 1,017 tokens",
+   "verdict": "correct",
+   "correction": "Matches 04-conflicts.md conflict 10 and dexa_platform/gateway/pricing.py rates (gpt-4o 2.50/10.00; dexa-cua-vlm 0.20/0.20). Kept as Bounded."
+  },
+  {
+   "claim": "vLLM has only --video-pruning-rate; image-pruning RFC #45098 opened 2026-06-10 with no maintainer comment; SGLang EVS incompatible with Qwen2.5-VL positions",
+   "verdict": "correct",
+   "correction": "Matches 05-research-docai.md ('no maintainer comments were visible at fetch time'). Wording changed to 'at fetch time'."
+  },
+  {
+   "claim": "Relace apply recipe: 3-8B base, ~145k examples, LoRA rank 128, one H200; Relace FAS search 8xH200 ~1.5 days; Morph 3.07x vs 1.93x task-trained vs generic draft; OpenRouter 1,537 tps observed vs 10,500 claimed",
+   "verdict": "correct",
+   "correction": "All match 05-research-morph.md; Morph's 3.07x/1.93x comes from search snippets (medium confidence) and is for code, now stated."
+  },
+  {
+   "claim": "Prices: Azure Read $1.50 / Layout $10 / Custom $30; Google OCR $1.50 / Form Parser $30; Textract $1.50/$15/$15/$50; Reducto r-1 $0.01 (2026-09-01), legacy 3-6 cents; Unstructured $0.015 after 10,000 free; Extend $0.025/$0.0375; LlamaParse 1-45 credits at $1.25/1,000; Mistral OCR 4.1 $4/1K, batch half; Claude 1,296 tokens ~$1.30/1K on Haiku 4.5; GPT-5.4 1,229 tokens ~$0.0031; Gemini 560 tokens ~$0.42/1K (derived); Together Qwen3-VL-32B $0.50/$1.50; Fireworks 4B-16B $0.20/M",
+   "verdict": "correct",
+   "correction": "All trace to 05-research-docai.md / 05-research-providers.md; the Qwen3-VL-8B $0.20/M on DeepInfra/Fireworks is an aggregator figure (medium confidence), now labeled."
+  },
+  {
+   "claim": "GPU rates: A100-80GB $1.39-$2.79/hr (RunPod, Modal, Lambda), H100 $3.29-$3.99, L40S $0.99-$1.95, MI355X $2.29-$2.95 (Wafer); Modal A100 $2.50/hr",
+   "verdict": "correct",
+   "correction": "Match 05-research-gpu-pricing.md and 05-research-wafer.md (RunPod community H100 SXM $2.69 sits below the quoted H100 range; range is a subset, not wrong)."
+  },
+  {
+   "claim": "DeepSeek-OCR 97% precision at <10x compression, 200k+ pages/day on one A100-40G; olmOCR-2-7B 82.4; dots.mocr 83.9; olmOCR synthetic data ~$0.12/page; dots in vLLM 0.11.0",
+   "verdict": "correct",
+   "correction": "Match 05-research-docai.md; the $0.12/page used Claude Sonnet 4 as teacher, now stated as a founder decision (terms of service)."
+  },
+  {
+   "claim": "CUA screenshots 86% redundant per patch; capturable ceiling 2.34x at cos >= 0.98",
+   "verdict": "correct",
+   "correction": "Matches 01-ledger cua-screen-redundancy (13.7% changed) and delta-tolerance-sweep; n=8 frames, synthetic CRM. Kept in the task-choice decision only."
+  },
+  {
+   "claim": "Verifier early-stop 2.63x fewer tokens at equal pass@16 (HumanEval)",
+   "verdict": "correct",
+   "correction": "Continuous scheduler run: 0.884 = 0.884, 327,607 vs 862,050 tokens; verifier is the full hidden test suite (oracle). Stated."
+  },
+  {
+   "claim": "'KV loading loses to re-prefill below ~64k on the disk tier'",
+   "verdict": "correct",
+   "correction": "docs/RESULTS.md connector results (0.37x at 8k; crossover ~64k) are for the Dexa connector's Modal-Volume disk path; not a general KV statement (04-conflicts.md conflict 1)."
+  },
+  {
+   "claim": "Repo facts: app.py:127 forces stream=False; docker-compose.byoc.yml runs vllm/vllm-openai:v0.24.0 with Qwen2.5-VL-7B and max_pixels 1050000; serve/modal_doc_vlm_serve.py max_pixels 1048576, served name 'doc-vlm'; modal_verifier_sched.py drives LLMEngine add_request/step/abort; modal_vlm_frontier.py five budgets, 200 pages, max_tokens=32; modal_incumbent_docvqa.py temperature 0",
+   "verdict": "correct",
+   "correction": "Verified against the files; added that the frontier script uses temperature 0 and one offline LLM.chat batch and that the incumbent script uses detail high with a 2048 px cap and hardcodes the Qwen cost row."
+  },
+  {
+   "claim": "LiveKit serves Gemma 4 31B with speculative decoding at 192 ms TTFT; Morph Compact 33k tok/s; Fireworks >95% of tokens from customer-specialized models; Morph Reflexes 'forked from vLLM'",
+   "verdict": "correct",
+   "correction": "Match 05-research-voice.md (SGLang, LiveKit-hosted), 05-research-morph.md, 05-research-providers.md (Series D post). 'Forked from vLLM' appears only for Reflexes, now stated."
+  },
+  {
+   "claim": "Superseded-list check: none of the SUPERSEDED claims (14-25x, 3.7-5.5x vs vLLM, 7.3x CUA headroom, 20-95x decode, 'latency win unconditional', '~40x measured', 'matched-token-budget ~2.7x')",
+   "verdict": "correct",
+   "correction": "The draft cites the ~40x and the FINDINGS '~2.7x matched-budget' items only as bounded/misattributed, which is the correct usage; no superseded number is cited as fact."
+  },
+  {
+   "claim": "Free tier '10,000 pages, matching Unstructured's'; per-page pricing; A100 first; Qwen3-VL-8B base; vLLM as engine; document parse as the task; 6-week timeline",
+   "verdict": "unsupported",
+   "correction": "These are decisions the draft made on the founder's behalf, not facts; moved to Section 11 with options and evidence."
+  }
+ ],
+ "attacks": [
+  {
+   "attack": "Combined engine-kill: if a well-configured vLLM (same max_pixels, FP8, prefix caching, built-in n-gram speculation with OCR text in the prompt) captures most of the gain AND the trained draft head adds little over n-gram, the 'purpose-built engine' has no measured advantage and the thesis reduces to a fine-tuned open VLM behind a per-page API \u2014 a product shape Reducto r-1, Mistral OCR 4 and the open OCR models already occupy (fact, not verdict). The ledger already says the 2.7x is a resize 'a client can apply before any API' and FINDINGS calls the VLM result 'copyable'.",
+   "severity": "fatal",
+   "what_would_settle_it": "Weeks 1-2: baseline (1) vs default vLLM pages/GPU-s at equal accuracy (kill if baseline (1) captures >= 80% of the engine gain) and trained draft head vs n-gram vs none single-stream s/page on 1,000 full-page parses (kill if < 1.5x over n-gram). Both gates fail = engine half dead; founder then decides whether a model-plus-pricing company is worth building."
+  },
+  {
+   "attack": "No full-page parse measurement exists anywhere in the repos. Every in-repo number is max_tokens=32 short-answer output from one offline LLM.chat batch of 200 images; the product's real workload is 300-800 output tokens per page, where decode dominates (~22 ms/step single-stream implies ~11 s per 500-token page before speculation) and the batch lane's economics depend on decode batching that was never measured. The $0.023/1K floor is field-QA only.",
+   "severity": "serious",
+   "what_would_settle_it": "Prefill/decode split at 1024 px for 50/200/500-token outputs, then pages/GPU-s over HTTP at 300-800 output tokens, N = 8..256, 3 seeds, A100 and H100; COGS per 1K pages from measured pages/GPU-h. Kill gate 8: COGS > $5/1K."
+  },
+  {
+   "attack": "Copy speculation is unmeasured for documents and its off-the-shelf form is not proprietary: n-gram/prompt-lookup drafts ship in Baseten BIS-LLM and Together ATLAS, and vLLM has its own n-gram method. Morph's 3.07x-vs-1.93x is for code. For scanned pages there is no text layer, so the draft depends on CPU OCR quality; and speculative gains shrink at high batch as decode becomes compute-bound, so the batch metric cannot rely on it. The CUA analog shows 'redundancy' (86%) and 'realized speedup' (2.34x ceiling) can diverge widely.",
+   "severity": "serious",
+   "what_would_settle_it": "Copy fraction on 1,000 pages split scanned vs native-text; acceptance length and s/page for trained head vs n-gram vs none at N=1 and N=64. Kill gate 1 (< 40% verbatim) and gate 4 (< 1.5x over n-gram)."
+  },
+  {
+   "attack": "Version/API dependency: whether vLLM 0.24's speculative-decoding path accepts multimodal (Qwen3-VL image) inputs is not covered by any research file. If it does not, week 2 becomes an engine modification of unknown length \u2014 the same class of 'API cannot express it' wall the voice repo hit with the KVConnector and the dexa repo hit with Qwen2.5-VL mRoPE. The scheduler pattern (modal_verifier_sched.py) drives LLMEngine directly, so a new HTTP serving loop is also required.",
+   "severity": "serious",
+   "what_would_settle_it": "Week-1 smoke test: enable n-gram speculation on the doc endpoint and confirm acceptances > 0 with identical greedy output; gate 4's '> 3 weeks to make the path work' kill. Same check on SGLang before choosing the engine base."
+  },
+  {
+   "attack": "The accuracy claim rests on a 2024 comparator with unrecorded output. 'As accurate as the frontier models' is supported only by 0.925 vs GPT-4o 0.880 (BOUNDED; only the number survives in FINDINGS.md); GPT-5.4, Gemini 3.x and Claude 5 were never run on those pages, Qwen3-VL's 96.1 is Qwen-reported, and the best specialist bar on olmOCR-Bench is 87.4 (Nanonets OCR-3), above the brief's 85.2 target.",
+   "severity": "serious",
+   "what_would_settle_it": "Rerun modal_incumbent_docvqa.py with current frontier models (record accuracy and $/1K pages this time); olmOCR-Bench for full parse; kill gate 7 (trail by > 3 pts on both)."
+  },
+  {
+   "attack": "The model half of the Morph playbook is entirely unproven: neither ledger contains a training result; the fine-tune must beat Nanonets 87.4 / Mistral 85.2 / dots.mocr 83.9 with ~50k synthetic pages from a frontier teacher (terms-of-service exposure) in a plan that allotted one week to data generation, pipeline and training. Relace's and olmOCR's recipes are external analogs, not evidence.",
+   "severity": "serious",
+   "what_would_settle_it": "LoRA-SFT 8B/4B on ~50k olmOCR-recipe pages (~$6k, ~40 GPU-h, three weeks), evaluated on olmOCR-Bench, DocVQA and a held-out extraction set; kill gate 6 (< base or < 82.4)."
+  },
+  {
+   "attack": "Workload assumptions are unsupported by the research files: no document-API volume disclosures, no telemetry on batch-vs-interactive mix, no evidence buyers value per-page latency in agent loops, and no customer interviews in the repos. The 'pain' quotes are paraphrases. The two-lane scheduler is designed for a demand shape nobody measured.",
+   "severity": "serious",
+   "what_would_settle_it": "Three design-partner pilots with logged s/page and lane usage; kill gate 9 (0 of 3 pilots use the agent lane). Outreach must start in week 1, not week 6."
+  },
+  {
+   "attack": "Instruction/schema prefix caching is overstated: the 12x number is for a 4k text prefix on a text model; in a VLM prompt only tokens before the first image are a shared prefix, a schema placed after the image is not cacheable, and a few-hundred-token instruction prefix saves milliseconds, not the 4k win.",
+   "severity": "minor",
+   "what_would_settle_it": "TTFT with and without APC on the real prompt template at 1024 px; report the cached fraction."
+  },
+  {
+   "attack": "Content-aware pruning is blocked (Qwen2.5-VL mRoPE; Qwen3-VL unknown) while model-level token compression already exists in the open (DeepSeek-OCR < 800 vision tokens; InternVL3.5 ViR ~50% fewer tokens). An engine-level pruner may be overtaken by base models that are natively token-efficient \u2014 the shelf-life risk the 'fast apply is dead' essay raised for Morph.",
+   "severity": "minor",
+   "what_would_settle_it": "Qwen3-VL position-handling check and a matched-budget pruning-vs-resize sweep (gate 3); quarterly tracking of stock open-model s/page (gate 10)."
+  },
+  {
+   "attack": "Evidence base is single-seed, single-GPU, 200 pages, one run, and the reusable platform code is thinner than 'gateway with 29 tests' implies: 7 of the tests are session-service tests, the Dockerfile omits control/, there is no streaming, rate limiting, payments or integration test against a live backend, and the voice load harness needs a tokenizer, aiohttp, server-metric scraping and multi-seed aggregation before it can drive this workload.",
+   "severity": "minor",
+   "what_would_settle_it": "Three seeds x two GPUs for every headline; an integration test of gateway -> vLLM endpoint; the harness generalization list in 03-build-inventory.md completed before week 4."
+  },
+  {
+   "attack": "The 6-week plan slips on five identifiable lines: week 2 (spec-decode on VLM inputs may be engine work), week 3 (LLMEngine scheduler needs an HTTP serving loop; gateway image lacks control/), week 4 fine-tune in one week (50k teacher pages + pipeline + training), week 5 harness generalization, week 6 three signed pilots with zero prior conversations. Realistic: 8-10 weeks to the engine proof, 14-18 with the fine-tune.",
+   "severity": "minor",
+   "what_would_settle_it": "The calendar itself: the week-1 spec-decode smoke test and copy-fraction gate determine which branch (8-10 vs 14-18 weeks) applies."
+  }
+ ],
+ "missing_founder_decisions": [
+  "Task choice: the draft selected document parse from seven Morph-style candidates (voice turn model, context compaction, agent-trace classifiers, code-search subagent, screenshot-diff perception, tool-call routing) on qualitative ratings; the founder should pick, or pick two tasks that share the speculator.",
+  "Engine base: vLLM 0.24.0 (ledger-pinned) vs SGLang (better at branched decode per the ledger's SGLang gate) vs a fork (Morph's Reflexes engine is 'forked from vLLM'); the draft assumed vLLM.",
+  "MVP shape: hosted per-page API first (vs BYOC-first or open-weights-first); the draft assumed hosted with a 10,000-page free tier copied from Unstructured.",
+  "Synthetic-data teacher and terms of service: the olmOCR recipe uses Claude Sonnet 4 at ~$0.12/page; frontier teacher vs open teacher (Qwen3-VL-235B) vs human-labeled subset; ~$6k budget assumed 50k pages.",
+  "Accuracy metric that buyers will be shown: relaxed-match DocVQA on 200 validation pages (the repo's) vs ANLS on test vs olmOCR-Bench vs a schema-extraction eval; the draft mixed them.",
+  "Kill-gate thresholds: 40%/70% copy fraction, 1.5x/2x speculation, 2x/3x throughput, 82.4/85.2 accuracy, $5/$1 per 1K COGS, 0/2 of 3 pilots were all chosen by the draft and need ratification.",
+  "Team size and calendar: the 6-week plan implicitly assumes 1-2 engineers plus GPU budget; the realistic 8-10 (engine) or 14-18 (with fine-tune) week calendar depends on it.",
+  "First GPU class: A100-80GB (matches the ledger) vs H100 (the GPU buyers benchmark on) vs MI355X ($2.29-$2.95/hr per Wafer); the draft chose A100 first.",
+  "Model size and base: Qwen3-VL-8B vs 4B vs 2B vs dots.mocr 3B vs olmOCR-2-7B; the draft defaulted to 8B.",
+  "Parse-first vs extract-first SKU: parse has public benchmarks and a higher expected copy fraction; extract has $20-$50/1K price points.",
+  "Speculator form: prompt-lookup only (buyer-replicable) vs trained draft head (Morph's differentiator); the draft assumed both.",
+  "Whether to publish the harness and benchmark openly (Wafer-style) or not (Morph's benchmark pages returned HTTP 429 in research).",
+  "Whether the first public proof is the engine alone (stock Qwen3-VL-8B, 8-10 weeks) or engine plus fine-tuned model (14-18 weeks).",
+  "Third-party listing (e.g., OpenRouter) as an independent throughput check, which the draft assumed 'if available'."
+ ],
+ "strongest_version": "A per-page document-parse API built on an open 4B-8B VLM, where the company's proprietary work is (a) a task-trained draft head that exploits the copy-like structure of parse output, (b) a page-shaped engine with batch and latency lanes and a visual-token budgeter, and (c) a fine-tuned model evaluated on public benchmarks with a rerunnable harness \u2014 all sold in the unit buyers already use, against per-page list prices from $1.50 to $50 per 1,000 pages. The in-repo evidence supports only the economics precondition: an open 7B at 1024 px matched a 2024 frontier model on 200 short-answer pages at 2.7x its own higher-resolution throughput, in-engine, on an A100. Everything Morph-specific \u2014 copy fraction, copy speculation, the trained speculator, engine-level pruning, the fine-tune, full-page throughput under load \u2014 is unmeasured, and the first two weeks decide whether a well-configured vLLM already captures the gain. If gates 1-4 pass, the company has a measured engine advantage on a workload with public benchmarks, Apache-2.0 bases and a published data recipe, and can publish a proof buyers can rerun. If gates 2 and 4 fail, the honest fallback is a fine-tuned-model-plus-per-page-pricing company, which the founder must weigh against Reducto r-1, Mistral OCR 4 and the open OCR models as facts, not verdicts.",
+ "changes_made": [
+  "Moved 'accuracy parity vs GPT-4o (0.925 vs 0.880)' from Proven to Bounded per ledger status, with the unrecorded-output, GPT-4o-mini-unrecorded and 2024-comparator caveats; added a current-frontier rerun to Unproven and a new kill gate (7).",
+  "Redefined proof baseline (1) as a well-configured vLLM (same max_pixels, prefix caching, FP8, built-in n-gram speculation if it accepts image inputs) so the buyer-replicable 2.7x resize cannot count toward the 3x target; added kill gate 2 (baseline erases the lever).",
+  "Added the unverified dependency on vLLM's speculative-decoding path accepting Qwen3-VL image inputs as an explicit unproven claim, a week-2 slip risk, and part of kill gate 4.",
+  "Stated on every use that the 30.2 img/s / 2.7x number is one offline LLM.chat batch at max_tokens=32 (not a served endpoint, not full-page parse), single run, single GPU, no seeds; flagged that no full-page parse measurement exists in either repo.",
+  "Corrected the pricing floor: the repo's '$0.02-0.06 / 1k pages' is a hardcoded string; the $0.023/1K derivation is field-QA only; added the ~11 s per 500-token page single-stream implication and moved margin claims to 'must be confirmed'.",
+  "Renamed 'schema-prefix cache' to 'instruction-prefix cache' with the constraint that only pre-image tokens are cacheable and that the 12x figure is for a 4k text prefix.",
+  "Fixed the competitive table: Azure disconnected containers and Google custom-processor hosting (draft said 'no BYOC'); removed the unsupported Baseten Qwen3-VL hosting implication; added Nanonets OCR-3 87.4 and Chandra 83.1; added DeepSeek-OCR/InternVL3.5 model-level token compression as facts.",
+  "Removed the misattributed 'mRoPE blocker' from the screenshot-diff row and compressed the task-selection table into a 'Task choice' founder decision.",
+  "Added omitted ledger caveats: decode reference is eager/prefix-caching-off/gen=64/one run; gateway's 29 tests include 7 session tests and the Dockerfile omits control/; voice evidence is single-seed, L40S, synthetic, 27.8 ms margin; Qwen3-VL numbers are Qwen-reported; both repos are single-seed for every headline.",
+  "Rewrote the 6-week plan with slip risks (spec-decode engine work, HTTP serving loop for the LLMEngine scheduler, three-week fine-tune, harness generalization list, pilot outreach from week 1) and added a realistic 8-10 / 14-18 week calendar.",
+  "Added kill gates for current-frontier parity, well-configured baseline, spec-decode feasibility, seed/GPU replication, and base-model shelf life driven by token-efficient architectures; merged pruning into the prefill-bound gate.",
+  "Expanded founder decisions with task choice, engine base, synthetic-data teacher/ToS, accuracy metric, team size, kill-gate ratification, free tier and pricing unit; merged market-size and adjacency into one 'not judged' item with the facts listed neutrally.",
+  "Deleted words to meet the 3,500-word cap: dropped the Deployables and CUA-analog bullets, the Extend/LlamaParse and Wafer/Relace/Cognition table rows, two combination bullets and one pain quote; no numbers were changed in the process."
+ ]
+}

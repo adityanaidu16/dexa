@@ -1,0 +1,254 @@
+{
+ "id": "E",
+ "name": "Verifier-guided search inference for code (pass@16 quality at pass@4 cost)",
+ "one_line": "A code-specialized endpoint that takes a prompt plus the customer's tests and returns the first passing sample via an in-engine verify-abort-refill scheduler; measured 2.63x fewer decode tokens at identical pass@16 on HumanEval/Llama-3.1-8B (one run, one seed), with the 2.12x wall-clock now flagged as confounded by asymmetric synchronous verification, the in-engine-vs-client-loop delta unmeasured, and serving-time demand undocumented in the research files, all pre-registered as gates.",
+ "evidence_grade": "C",
+ "evidence_grade_reason": "The token-saving physics alone would grade A (equal pass@16 at ~2.6x fewer decode tokens, reproduced three ways in-engine: post-hoc 2.85x, round engine 2.60x, continuous scheduler 2.63x; 01-evidence-ledger-dexa.md verifier-early-stop), but that is exactly the part the repo itself labels buyer-replicable. Every claim the product needs beyond it is bounded, contradicted, or unmeasured: the 2.12x wall-clock is single-run, single-seed, Llama-3.1-8B/HumanEval only, and (found by reading modal_verifier_sched.py) confounded by the naive arm running 2,624 synchronous subprocess verifications inside the step loop versus far fewer in the scheduler arm; the cleaner GPU-only number is the rounds engine's 1.53x, which its own docstring calls directional. On an idle SGLang GPU early-stop is 1.00-1.02x GPU-seconds (ledger status FALSIFIED); under load it is 1.38-1.87x with a simulated verifier (BOUNDED). The in-engine-vs-client-loop delta was never measured under controlled conditions, the weak-verifier result is post-hoc, long-prefix branching as prefix-cached independent requests is unmeasured on either engine, nothing was run above max_model_len 4096, on a model larger than 8B, off A100, or on a current vLLM, and the research files document no serving-time best-of-N demand. Measured but bounded/contradicted is the honest grade.",
+ "build_cost_weeks_to_proof": "7-9 weeks to the first credible public proof, defined as: a SWE-bench-Verified 100-task subset, 3 seeds, three arms (naive / streaming HTTP client loop with close-on-pass / in-engine), real sandboxed tests with verification off the GPU critical path and verify latency logged, on Llama-3.1-8B and Qwen3.6-35B-A3B, reporting tokens, GPU-step wall, end-to-end wall and pass@16. Assumptions: two engineers; Modal A100/H100 access at ~$2.50-4/GPU-hr; the SWE-bench sandbox harness is the long pole (~3 weeks, no repo precedent; the repo's only verifier is a 10 s python subprocess on HumanEval); async verification and the request queue on the LLMEngine loop are ~1-2 weeks; runs ~1 week; write-up ~1 week. A HumanEval-only page reproducing the existing 2.63x/1.53x/2.12x with the verification decomposition added is ~2 weeks but is not credible for the repo-level or larger-model claims the product depends on. Total GPU-hours are unmeasured because SWE-bench test execution dominates.",
+ "factcheck": [
+  {
+   "claim": "Setup: ... seed 0 ... (continuous scheduler)",
+   "verdict": "misquoted",
+   "correction": "modal_verifier_sched.py calls sp(1, launched[idx]+1) and sp(1, s+1): per-sample seeds 1..16 in both arms (which is why pass@16 is identical by construction). seed 0 is used by modal_verifier_search.py, modal_robustness.py and modal_eval_compute.py (SamplingParams n=N, seed=0). Fixed in section 4."
+  },
+  {
+   "claim": "pass@16 varies run to run at fixed seeds across scripts (0.909, 0.896/0.878, 0.884, 0.902); sampling noise",
+   "verdict": "misquoted",
+   "correction": "Values are correct, but seeds and request shapes differ per script (one n=16 seed-0 request; per-round seeds; 16 n=1 requests seeds 1..16), so variation is expected from different seeds and request shapes, not 'fixed seeds'. Rewritten."
+  },
+  {
+   "claim": "Baseline (d) LMCache/prefix-cached generic serving \u2014 measured in agentic-value v1 as the 'cached' column",
+   "verdict": "misquoted",
+   "correction": "Agentic-value v1 ran Llama-3.1-8B on SGLang; the cached column is RadixAttention prefix caching. LMCache appears only in the stateful-session evals on vLLM. Relabeled 'SGLang prefix-cached (RadixAttention)'."
+  },
+  {
+   "claim": "All engine measurements here are Llama-3.1-8B-Instruct and Qwen2.5-Coder-7B-Instruct on A100-80GB, vLLM 0.24.0",
+   "verdict": "misquoted",
+   "correction": "Contention v2, agentic-value v1 and the SGLang gate ran on SGLang (pip 'sglang[all]', version unpinned); Qwen2.5-Coder-7B appears only in the post-hoc robustness run on vLLM 0.24.0 (01-evidence-ledger-dexa.md Setup lines). Rewritten as 'Measurement scope'."
+  },
+  {
+   "claim": "Verify latency contrast: tests take 5-60 s (repo tests) vs 10 ms (HumanEval)",
+   "verdict": "unsupported",
+   "correction": "The 10 ms figure divides the round engine's 27.0 s naive verify wall by 164x16 samples, but modal_verifier_engine.py:124 verifies with any() and short-circuits, so far fewer checks ran; per-verification latency and counts are not logged anywhere. The 5-60 s repo-test range has no source. Both deleted; stated as unmeasured with a logging experiment."
+  },
+  {
+   "claim": "Cognition: SWE-grep/SWE-grep-mini on Cerebras (2,800 tok/s)",
+   "verdict": "misquoted",
+   "correction": "05-research-morph.md/05-research-agents.md: SWE-grep-mini over 2,800 tok/s, SWE-grep over 650 tok/s; SWE-1.6 up to 950 tok/s on Windsurf's Cerebras fast tier. Table corrected."
+  },
+  {
+   "claim": "Wafer: Turbo models \"2-2.8x faster than base SGLang/vLLM\" (in quotation marks)",
+   "verdict": "misquoted",
+   "correction": "A paraphrase presented as a quote. Source text: 'Qwen3.5-397B-Turbo is 2.8x faster than base SGLang', 'GLM5.1-Turbo is 2x faster than vLLM baseline', 'DeepSeek-V4-Pro is 2x faster than vLLM baseline' (YC launch, April 2026; company-stated). Wafer Pass $10/$25 per week is the April 2026 launch price with per-5-hour request caps; current status unknown. Rewritten without quotation marks and with qualifiers."
+  },
+  {
+   "claim": "Agentic-value v1 measured the prefix-cache win and the early-stop win as separate, additive levers (section 12)",
+   "verdict": "misquoted",
+   "correction": "RESULTS.md finding 2: against the cached baseline early-stop gave 1.00-1.02x GPU-seconds on an idle GPU; it saved decode tokens (2-4x) only. 'Additive' holds for a token-billed buyer, not in GPU-seconds. Rewritten."
+  },
+  {
+   "claim": "MVP ships on Qwen2.5-Coder-7B-Instruct, the measured higher-ceiling model, 0.963 oracle pass@16",
+   "verdict": "misquoted",
+   "correction": "0.963 is from modal_robustness.py's post-hoc N=16 generation; neither the continuous scheduler nor the round engine was ever run on Qwen2.5-Coder-7B, so the in-engine 2.63x/2.12x is unmeasured on that model. Plan now starts from Llama-3.1-8B (the only in-engine model) and reruns the scheduler on Qwen2.5-Coder-7B in week 2."
+  },
+  {
+   "claim": "Week 1: reuse evals/modal_robustness.py visible_check as the customer-tests adapter",
+   "verdict": "misquoted",
+   "correction": "visible_check(test_code, k) parses HumanEval's 'def check(candidate)' assert list (modal_robustness.py:51-69); it is not a general adapter for customer test files. Marked as new code."
+  },
+  {
+   "claim": "2.12x faster end-to-end (86.6 vs 183.8 s), listed under Proven as the in-engine advantage",
+   "verdict": "unsupported",
+   "correction": "The number matches RESULTS.md, but the arms verify asymmetrically: the naive loop calls passes() on all 2,624 finished samples synchronously inside engine.step() (modal_verifier_sched.py lines 156-165), while the scheduler verifies only finished samples of unsolved problems and skips aborted siblings (lines 120-139); the engine does not step during a subprocess. Verification time inside both walls is unlogged. Moved to Bounded; the rounds engine's 1.53x GPU-generation wall (verify timed separately, labeled 'directional') is cited as the cleanest GPU-side number; a decomposition experiment and kill gate were added."
+  },
+  {
+   "claim": "Baseline (c) SGLang under load \u2014 measured as the contention-v2 harness",
+   "verdict": "misquoted",
+   "correction": "Contention v2 is a separate experiment (generic vs agentic on SGLang, W=4k, B=8, k=2, simulated verifier), not a baseline of the HumanEval proof benchmark. Removed from the baseline list; replaced by the unmeasured streaming-HTTP client-loop baseline a competent buyer would build."
+  },
+  {
+   "claim": "C=1's 4.0x is a cold-start artifact (number cited)",
+   "verdict": "superseded",
+   "correction": "04-conflicts.md lists the contention-v2 C=1 '4.0x' as a do-not-cite superseded number; the revision mentions the artifact without the number."
+  },
+  {
+   "claim": "Fireworks: adaptive speculative decoding (350 ms TTFT case)",
+   "verdict": "misquoted",
+   "correction": "The 350 ms TTFT figure is from Inworld's May 2026 post (medium confidence, a case study), not a Fireworks page (05-research-voice.md). Removed from the competitive table."
+  },
+  {
+   "claim": "Morph: engine 'forked from vLLM', custom kernels (applied to the whole catalog)",
+   "verdict": "misquoted",
+   "correction": "'Forked from vLLM' appears only in the Reflexes Show HN; the engine behind Fast Apply, WarpGrep and open-model serving is unstated, and the org also forked NVIDIA Dynamo (05-research-morph.md Unknowns). Scoped to Reflexes."
+  },
+  {
+   "claim": "Morph: 50% standby tier",
+   "verdict": "misquoted",
+   "correction": "The Standby tier is GLM-5.3 only and admits requests only when fleet capacity is under ~25%, returning 429 otherwise (05-research-morph.md). Qualifier added."
+  },
+  {
+   "claim": "Morph: Fast Apply 10,500 tok/s; team size 3",
+   "verdict": "correct",
+   "correction": "Both are in 05-research-morph.md, but 10,500 tok/s is Morph's own B200 claim (OpenRouter observed 1,537 tps P50 for morph-v3-fast) and YC's 'Team Size: 3' coexists with the company being one person until ~2026-08-25. Qualifiers added."
+  },
+  {
+   "claim": "Unproven-table costs (40-80 A100-hours/10 days; 10 GPU-hours/3 days; 6 GPU-hours/2 days; 12 GPU-hours/4 days; ~$200 API spend)",
+   "verdict": "unsupported",
+   "correction": "No measurement in either repo or research file supports these; they are labeled 'our estimate', which the rules permit. The SWE-bench row now says GPU-hours unmeasured (test execution dominates); a $/solve anchor derived from the measured 86.6 s and Modal's ~$2.50/hr A100 price is added and flagged as arithmetic."
+  },
+  {
+   "claim": "HumanEval pass 0.689 -> 0.829 -> 0.902 at N=1/4/16; tokens 52k -> 858k; TriviaQA 0.680 -> 0.693",
+   "verdict": "correct",
+   "correction": "Matches RESULTS.md and the ledger. Caveat added: N=1 ran greedy at temperature 0.0 while N=4/16 ran at 0.8 (modal_eval_compute.py:114); pass@k is an oracle selector; 'directional, not a leaderboard'."
+  },
+  {
+   "claim": "Continuous scheduler pass@16 0.884 vs 0.884; 327,607 vs 862,050 decode tokens (2.63x)",
+   "verdict": "correct",
+   "correction": "Matches RESULTS.md 'Continuous-batch scheduler' and the ledger; aborted partials counted; naive ran second on a warm prefix cache (bias against the scheduler, stated only in the script docstring). Single run, single seed, Llama-3.1-8B only, max_model_len 4096, enforce_eager."
+  },
+  {
+   "claim": "Round engine: 330,174 tokens (2.60x), 110.0 vs 168.1 s GPU generation wall (1.53x), verify 18.6 vs 27.0 s, pass 0.878 vs 0.896",
+   "verdict": "correct",
+   "correction": "All match RESULTS.md 'Live engine'. Caveat added: the script docstring labels wall-clock 'directional (prefix-cache state persists across calls)' and names decode tokens the primary metric."
+  },
+  {
+   "claim": "Weak verifier: 93%/96% of oracle kept, FP 7.7%/3.8%, cost 3.04x/3.52x, oracle 0.909/0.963",
+   "verdict": "correct",
+   "correction": "Matches RESULTS.md 'Robustness'. Caveats added: post-hoc token accounting over one n=16 seed-0 generation (not a live run); 'first 3 asserts' is a proxy; 6-10 problems per model with no visible pass within N."
+  },
+  {
+   "claim": "Contention v2: 1.38x at C=8, 1.69x at C=32, 1.87x at C=96 on SGLang, W=4k, B=8, k=2",
+   "verdict": "correct",
+   "correction": "Matches RESULTS.md and ledger (BOUNDED). Verification simulated via pass probability (k=ceil(1/p)); distinct per-agent contexts; SGLang unpinned; W=4k only."
+  },
+  {
+   "claim": "Agentic-value v1: 1.00-1.02x vs cached baseline; 11.5x vs re-prefill is prefix caching",
+   "verdict": "correct",
+   "correction": "Matches RESULTS.md. Ledger status is FALSIFIED for the thesis; the draft filed it under bounded without the label. Label added."
+  },
+  {
+   "claim": "vLLM 0.24 n=8 decode/step 174x n=1 at 128k; SGLang 2.2x at 128k, 1.04x at 32k",
+   "verdict": "correct",
+   "correction": "Matches 'Decode-pathology sweep' and 'The SGLang gate'. Caveats: eager, prefix caching off, one run (vLLM); SGLang unpinned, 4k n=1 point in timing noise, first measurement polluted by RadixAttention caching (fixed in 4c4bc9f). Added: ~131 KB/token bf16 KV for Llama-3.1-8B and '8 x 128k contexts do not fit 80 GB HBM' (04-conflicts.md; context-scaling caveat)."
+  },
+  {
+   "claim": "'buyer-replicable, not a moat'; 'a buyer captures most of the 1.85x with round-based early-stop in their own orchestration'",
+   "verdict": "correct",
+   "correction": "Verbatim from docs/FINDINGS.md:22 and evals/RESULTS.md 'Contention v2' finding 3."
+  },
+  {
+   "claim": "dexa_platform: 29 tests pass; app.py:127 forces stream=False; voice-inference harness 27 tests with pytest-asyncio; runner.py 57 lines; metrics 273 lines",
+   "verdict": "correct",
+   "correction": "Verified: 03-build-inventory.md and app.py line 127 ('payload[\"stream\"] = False'); vkv/loadgen/runner.py is 57 lines, vkv/metrics/{events,manifest,analyze}.py 60+53+160 lines. Caveats added: no live-backend integration test, no payment path, pytest-asyncio unlisted, harness prompts are synthetic token ids, urllib cannot abort mid-stream."
+  },
+  {
+   "claim": "TraceLab median prefix 116-126K, ~860 new input, 200-250 output, 1.4 min human gap; Mooncake ~131:1; search 56.6% of tokens (Relace), 60% of turns (Morph)",
+   "verdict": "correct",
+   "correction": "All match 05-research-agents.md and 05-research-morph.md; 43-developer sample; vendor-stated for Relace/Morph. Added: none of these traces shows best-of-N at serving time (one sample per step)."
+  },
+  {
+   "claim": "Morph Fast Apply $0.80/$1.20, Relace Apply 3 $0.85/$1.25 per M; Router $0.005/request; Reflexes $0.001/event; Tensormesh H200 $2.50/hr and 30%-of-savings; MI355X $2.29-$2.95/hr; Modal A100 ~$2.50/hr",
+   "verdict": "correct",
+   "correction": "All match 05-research-morph.md, 05-research-kvcache.md, 05-research-wafer.md, 05-research-providers.md. Qualifiers: Tensormesh's formula is post-v1 from its FAQ while the SaaS is listed as in beta; MI355X is a rental range Wafer cites, not a cloud list price."
+  },
+  {
+   "claim": "Codex ~$15.9 for ~20M tokens across 112 model calls in 4 turns when caching failed",
+   "verdict": "correct",
+   "correction": "openai/codex #25604 (medium confidence); Azure OpenAI with in_memory retention evicted, not OpenAI direct. Qualifier added."
+  },
+  {
+   "claim": "OpenHands recommends Qwen3.6-35B-A3B on vLLM/SGLang with 32,768 context; Cursor Composer 2 from Kimi K2.5 with Fireworks per Moonshot; Anthropic ~400k sessions, ~4 turns, ~10 actions; Managed Agents $0.08/session-hour; caching TTLs 5 min/1 h and 30 min/24 h; WarpGrep +2.1/+3.1/+3.7",
+   "verdict": "correct",
+   "correction": "All match the research files. Qualifiers: Cursor/Fireworks is Moonshot's statement, not confirmed by Cursor; WarpGrep lifts are Morph's own evaluations with methodology pages blocked (HTTP 429)."
+  },
+  {
+   "claim": "The 2026-07-15 '2.8-4.7x cheaper at equal quality' product claim is superseded",
+   "verdict": "correct",
+   "correction": "The draft correctly did not cite it as a product number; 04-conflicts.md lists it as superseded by agentic-value v1 and contention v2."
+  },
+  {
+   "claim": "modal_verifier_sched.py is 194 lines; HumanEval sweep ~4.5 min of A100 per model-config",
+   "verdict": "correct",
+   "correction": "wc -l = 194. The 4.5 min is derived (183.8 + 86.6 s), excludes engine boot and model load, and is subject to ~1.7x Modal box-to-box variance (04-conflicts.md (f)); replaced in the revision by a per-solve $ anchor flagged as arithmetic."
+  }
+ ],
+ "attacks": [
+  {
+   "attack": "The 2.12x end-to-end wall-clock, the number that distinguishes in-engine from a client loop, is confounded: in modal_verifier_sched.py the naive arm runs passes() (a python subprocess, up to 10 s) synchronously inside engine.step() for all 2,624 finished samples, while the scheduler arm verifies only finished samples of unsolved problems and never verifies aborted siblings. The engine cannot step during a subprocess, so an unlogged, asymmetric amount of verification time sits inside both walls. Per-verification latency and counts are recorded nowhere; the only separately timed verify walls (27.0 s / 18.6 s, rounds engine) were any()-short-circuited. The cleanest GPU-side number is therefore the rounds engine's 1.53x, which its docstring calls directional.",
+   "severity": "serious",
+   "what_would_settle_it": "Rerun modal_verifier_sched.py with verification in a thread pool off the step loop, logging verify count and cumulative verify time per arm, and report GPU-step wall separately from end-to-end wall, 3 seeds. Kill gate added: GPU-step ratio < 1.3x kills the wall-clock claim; >= 1.8x proceeds."
+  },
+  {
+   "attack": "The in-engine advantage over a competent client-side loop was never measured under controlled conditions. The repo's client-loop proxy is discrete rounds via llm.chat (1.53x), which is a weak baseline; a buyer can open B streaming n=1 requests over HTTP and close the losers on the first pass, getting mid-batch abort on any vLLM/SGLang endpoint without the product. The rounds and continuous runs were separate runs with different baselines (168.1 s generation vs 183.8 s end-to-end), so the '1.53x -> 2.12x' increment is not a delta. In tokens, rounds (2.60x) and continuous (2.63x) are ~1% apart, which the repo itself reads as buyer-replicable.",
+   "severity": "fatal",
+   "what_would_settle_it": "One engine, three arms (naive / streaming HTTP client loop with connection-close on pass / in-engine), real tests, C in {8,32,96}, 3 seeds; report tokens, GPU-seconds per solve, wall. Pre-registered: < 1.15x in-engine over the HTTP loop means the hosted engine has no measured technical basis and the direction ships as an OSS scheduler/SDK (a founder decision on delivery form, not a kill of the token saving)."
+  },
+  {
+   "attack": "The workload the brief cites (TraceLab, Mooncake) is one sample per step with 116-126K cached prefixes and 200-250 output tokens; no research file documents any coding-agent product running best-of-N with tests at serving time. The documented many-samples-plus-verifier workload is RL post-training rollouts (Fireworks rollout docs, Cursor RL infra, Relace verl). The brief's 'customer sentence' is written on the founder's behalf, not observed.",
+   "severity": "serious",
+   "what_would_settle_it": "Customer discovery with a pre-set count: how many teams run or would run best-of-N-with-tests in production, and at what N; separately, whether RL-rollout teams would use the same endpoint. Added as a founder-set gate and a 'which buyer' decision."
+  },
+  {
+   "attack": "Long-prefix branching and HBM: the scheduler was measured at max_model_len 4096 with ~150-token prompts. At the agent-step shape (120K prefix), Llama-3.1-8B bf16 KV is ~131 KB/token (~15 GB per distinct prefix); the repo notes 8 x 128k contexts do not fit 80 GB HBM. B independent prefix-cached requests share the prefix blocks, but concurrent solves for different tasks do not, so an A100 holds only a handful of concurrent 120K-prefix solves. vLLM 0.24's 174x n>1 pathology was measured for parallel sampling, not for independent prefix-cached requests, and SGLang's 2.2x is unpinned; neither engine is measured for this product's request shape.",
+   "severity": "serious",
+   "what_would_settle_it": "8-way independent prefix-cached branches at 32k/64k/128k on current vLLM and SGLang (decode/step n=8 vs n=1), plus concurrent 100K-prefix solves per GPU at a p95 SLA on A100 and one larger-HBM GPU (H200/B200/MI355X). Kill: > 4x on both engines or < 4 concurrent solves per GPU."
+  },
+  {
+   "attack": "Every headline number is a single run at a single seed; pass@16 spans 0.878-0.909 across scripts (about 5 problems of 164) from seed and request-shape differences, and Modal box-to-box wall variance is noted at ~1.7x. The draft's kill gates (1.5x kill / 2.0x proceed on a 100-task subset) have no confidence interval and could flip on seed alone.",
+   "severity": "serious",
+   "what_would_settle_it": "3 seeds on every gate; report the range; a gate passes only if the worst seed clears it. Written into sections 6 and 10."
+  },
+  {
+   "attack": "HumanEval tests run in milliseconds in a subprocess; repository test suites run for seconds to minutes (duration unmeasured in the files). With real tests the GPU work per solve (hundreds of decode tokens) is small next to verification, so the sandbox pool, not the scheduler, sets wall-clock and unit economics; the repo has no sandbox, no async verification, and no measurement of verify latency on the critical path.",
+   "severity": "serious",
+   "what_would_settle_it": "SWE-bench-Verified 100-task subset with sandboxed pytest, verification async, verify latency logged per call; report end-to-end speedup and GPU-seconds per solve. Kill: end-to-end < 1.3x; proceed >= 1.8x."
+  },
+  {
+   "attack": "Operational dependency on a version-pinned, synchronous API: the scheduler drives vLLM 0.24.0's in-process LLMEngine add_request/step/abort_request loop; vLLM is at 0.28.0 (Aug 2026). A multi-tenant service on that loop must interleave request queueing, async verification callbacks and aborts in one process; nothing in the repo runs that loop under concurrency (contention v2 used SGLang's engine.generate, not this loop), and the OpenAI-compatible 'n plus stop_on_pass' fallback requires modifying the vLLM server with no repo evidence.",
+   "severity": "serious",
+   "what_would_settle_it": "Week-4 sweep run through the real service loop (not a batch script) at C in {8,32,96} with real verification on a current vLLM release; report p95 solve latency and aborted-token share. Also rerun the decode-pathology script on current vLLM to see whether the 0.24-specific n>1 behavior persists."
+  },
+  {
+   "attack": "The weak-verifier result is post-hoc token accounting over one n=16 seed-0 generation, and 'first 3 asserts of HumanEval check()' is a proxy with no clean visible/hidden split; customer example tests may be weaker, or may leak the hidden suite. The 7.7%/3.8% false-positive rates and 6-10 no-visible-pass problems per model set a floor the product must disclose.",
+   "severity": "minor",
+   "what_would_settle_it": "Replay customer-provided test sets over existing samples; measure false-positive and no-visible-pass rates; kill < 85% of oracle pass@16 kept, proceed >= 90%."
+  },
+  {
+   "attack": "Pricing: on a token-billed API a competent client loop already captures ~2.6x of the decode-token saving; the provider's unique additions are billing the shared prefix once per solve and charging for aborted partials. Whether a generic provider with session affinity and n>1 could bill a prefix once per request is not in the research files, so the durability of the pricing edge is unmeasured; and per-solve GPU-seconds at concurrency, the input to any price, do not exist.",
+   "severity": "minor",
+   "what_would_settle_it": "Log GPU-seconds per solve at C=32 in the three-arm run; compare to Morph-level token rates and to a client loop's Fireworks bill (cached tokens ~50% per request) for the same prompts and tests. Kill: gross margin < 0 at Morph-level rates."
+  },
+  {
+   "attack": "The 6-week plan front-loads three unmeasured experiments (decomposition in week 1, Qwen rerun in week 2, SWE-bench and 30B-A3B in week 5) onto new infrastructure (async verifier pool, sandboxes, streaming gateway, per-solve billing, harness port) with no repo precedent for sandboxed repo tests; if the SWE-bench harness takes three weeks the launch page in week 6 carries only HumanEval.",
+   "severity": "minor",
+   "what_would_settle_it": "Not a measurement; the build-cost estimate is revised to 7-9 weeks with the SWE-bench harness as the long pole, and 'which public proof' is moved to the founder-decision list."
+  }
+ ],
+ "missing_founder_decisions": [
+  "Delivery form was pre-decided as a hosted engine (weeks 1-3 build a service) before the in-engine-vs-client-loop gate that the brief itself says would send the direction to an OSS scheduler/SDK.",
+  "The MVP model (Qwen2.5-Coder-7B) was chosen on a post-hoc number; no in-engine scheduler run exists for it. Revised to start from Llama-3.1-8B with a week-2 rerun, but the model choice remains the founder's.",
+  "The buyer was chosen as serving-time coding agents; RL-rollout inference, the only many-samples-plus-verifier workload documented in the research files (Fireworks rollout docs, Cursor RL infra, Relace verl), was not offered as an option.",
+  "The benchmark shape (HumanEval-like short prompts, max_model_len 4096) was accepted as the proof while the customer section cites 116-126K-prefix agent steps; which workload shape the public proof should use is a founder call.",
+  "vLLM's LLMEngine loop was chosen over SGLang for the MVP although the load and long-prefix measurements are on SGLang and vLLM 0.24's n>1 pathology is measured.",
+  "Kill-gate thresholds (1.5x/2.0x, 1.3x/1.8x, 85%/90%, 1.15x/1.3x, 4x/2.5x) and single-seed acceptance were set by the brief; the founder should set thresholds and the seed count.",
+  "Publishing HumanEval first (measured, weak) versus waiting for SWE-bench (unmeasured, credible) was decided implicitly by the week-6 launch page.",
+  "Whether to bill the shared prefix once per solve (the one pricing capability a client loop cannot replicate) was not surfaced as a choice in the draft's pricing section.",
+  "The verifier scope (customer tests only) was fixed; a learned verifier or static pre-checks were listed but the draft's architecture excludes them.",
+  "All experiments are planned on A100 (the measured GPU) although a larger-HBM GPU changes concurrent long-prefix solves per GPU; the GPU class for the proof run is a founder decision."
+ ],
+ "strongest_version": "A test-guided code-generation endpoint that ships the one thing the repo proved three ways in-engine: identical pass@N at ~2.6x fewer decode tokens on HumanEval with an 8B model, with a weak first-3-asserts verifier keeping 93-96% of the oracle ceiling at 3.0-3.5x lower cost. The honest differentiator is not the token saving, which a client loop captures on any provider, but the contract and the price: tests are a first-class input, the prompt prefix is prefilled and billed once per solve instead of once per sample (an 8-way branch at 32k cost 1.02x the GPU-seconds of one cached turn on SGLang), losers are aborted mid-decode, and the customer pays per solve. Everything the hosted form depends on beyond that is pre-registered rather than assumed: whether in-engine beats a streaming HTTP client loop that closes losers on pass, whether the 2.12x wall-clock survives moving verification off the step loop, whether the gain transfers to repo-level tests and a 30B-A3B model, whether 100K-prefix branching and HBM allow enough concurrent solves per GPU, and whether any team runs serving-time best-of-N at all (the research files document it only for RL rollouts). If the client-loop gate fails, the same code ships as an OSS scheduler/SDK; if it passes on SWE-bench with three seeds, the public benchmark is the product and the price is the moat.",
+ "changes_made": [
+  "Added the verification-asymmetry finding (naive arm verifies all 2,624 samples synchronously inside engine.step(); scheduler verifies only unsolved problems' finished samples) as a section-4 caveat, an Unproven row, and a kill gate; moved the 2.12x wall-clock from Proven to Bounded and cited the rounds engine's 1.53x GPU-generation wall as the cleanest GPU-side number with its 'directional' label.",
+  "Fixed the misquoted setup: per-sample seeds 1..16 (not seed 0); pass@16 differences across scripts attributed to differing seeds and request shapes, not 'fixed seeds'.",
+  "Relabeled baseline (d) as SGLang RadixAttention prefix caching (not LMCache); removed contention v2 from the proof-benchmark baseline list; added the unmeasured streaming-HTTP client loop with close-on-pass as the baseline a competent buyer would build, with its own kill gate (< 1.15x ships as OSS/SDK).",
+  "Corrected the measurement-scope sentence: vLLM 0.24.0 for the verifier runs, unpinned SGLang for load and long-prefix runs; Qwen2.5-Coder-7B measured post-hoc only; MVP now starts from Llama-3.1-8B (the only in-engine model) with a week-2 Qwen rerun.",
+  "Deleted the unsupported '5-60 s vs 10 ms' verify-latency contrast; replaced with 'unmeasured' plus a logging experiment.",
+  "Corrected the competitive table: SWE-grep >650 tok/s vs SWE-grep-mini >2,800; Wafer Turbo claims un-quoted and marked company-stated with Wafer Pass status unknown; Morph's 'forked from vLLM' scoped to Reflexes, standby tier scoped to GLM-5.3, 10,500 tok/s marked self-reported vs OpenRouter's 1,537 tps, team size qualified; Fireworks' Inworld-sourced 350 ms TTFT removed; vLLM 0.28.0 latest release added.",
+  "Removed the superseded C=1 '4.0x' number; kept the artifact mention without it. Added FALSIFIED/BOUNDED ledger labels to agentic-value v1 and contention v2.",
+  "Added omitted caveats throughout: single-seed everywhere with ~1.7x Modal box-to-box wall variance; greedy N=1 baseline in the compute-allocation lever; weak-verifier result post-hoc with 6-10 no-visible-pass problems per model; naive arm second on a warm prefix cache stated only in the script docstring; visible_check is a HumanEval-specific parser; no live-backend integration test, no payment path, pytest-asyncio unlisted; ~131 KB/token KV and '8 x 128k contexts do not fit 80 GB HBM' for long-prefix concurrency.",
+  "Added the RL-rollout workload (Fireworks rollout docs, Cursor RL infra, Relace verl) as the only documented many-samples-plus-verifier buyer, stated that no research file shows serving-time best-of-N, and added a founder-set demand gate and a 'which buyer' decision.",
+  "Added the structural pricing point (prefix prefilled once per solve vs re-billed per sample on a token-billed API, grounded in agentic-value v1's 1.02x and Fireworks' per-request cached billing) and a derived $/solve anchor flagged as arithmetic; kept 'no price point until GPU-seconds per solve are measured'.",
+  "Rewrote section 12 so prefix caching and early-stop are additive only for a token-billed buyer (1.00-1.02x GPU-seconds on an idle GPU), and noted restore-vs-prefill is in-engine only to 16k.",
+  "Added founder decisions: which buyer (serving vs RL rollouts), prefix-billed-once pricing unit, engine fork vs stock, which public proof first, and merged model/GPU choices; added 3-seed requirements to gates; revised build-cost estimate to 7-9 weeks with the SWE-bench sandbox harness as the long pole; graded evidence C."
+ ]
+}

@@ -96,13 +96,73 @@
   "unproven": 7
  },
  "E": {
+  "attacks": [
+   [
+    "serious",
+    "The 2.12x end-to-end wall-clock, the number that distinguishes in-engine from a client loop, is confounded: in modal_verifier_sched.py the naive arm runs passes"
+   ],
+   [
+    "fatal",
+    "The in-engine advantage over a competent client-side loop was never measured under controlled conditions. The repo's client-loop proxy is discrete rounds via ll"
+   ],
+   [
+    "serious",
+    "The workload the brief cites (TraceLab, Mooncake) is one sample per step with 116-126K cached prefixes and 200-250 output tokens; no research file documents any"
+   ],
+   [
+    "serious",
+    "Long-prefix branching and HBM: the scheduler was measured at max_model_len 4096 with ~150-token prompts. At the agent-step shape (120K prefix), Llama-3.1-8B bf1"
+   ],
+   [
+    "serious",
+    "Every headline number is a single run at a single seed; pass@16 spans 0.878-0.909 across scripts (about 5 problems of 164) from seed and request-shape differenc"
+   ],
+   [
+    "serious",
+    "HumanEval tests run in milliseconds in a subprocess; repository test suites run for seconds to minutes (duration unmeasured in the files). With real tests the G"
+   ],
+   [
+    "serious",
+    "Operational dependency on a version-pinned, synchronous API: the scheduler drives vLLM 0.24.0's in-process LLMEngine add_request/step/abort_request loop; vLLM i"
+   ],
+   [
+    "minor",
+    "The weak-verifier result is post-hoc token accounting over one n=16 seed-0 generation, and 'first 3 asserts of HumanEval check()' is a proxy with no clean visib"
+   ],
+   [
+    "minor",
+    "Pricing: on a token-billed API a competent client loop already captures ~2.6x of the decode-token saving; the provider's unique additions are billing the shared"
+   ],
+   [
+    "minor",
+    "The 6-week plan front-loads three unmeasured experiments (decomposition in week 1, Qwen rerun in week 2, SWE-bench and 30B-A3B in week 5) onto new infrastructur"
+   ]
+  ],
   "chars": 24197,
+  "evidence_grade": "C",
+  "evidence_grade_reason": "The token-saving physics alone would grade A (equal pass@16 at ~2.6x fewer decode tokens, reproduced three ways in-engine: post-hoc 2.85x, round engine 2.60x, continuous scheduler 2.63x; 01-evidence-ledger-dexa.md verifier-early-stop), but that is exactly the part the repo itself labels buyer-replicable. Every claim the product needs beyond it is bounded, contradicted, or unmeasured: the 2.12x wall-clock is single-run, single-seed, Llama-3.1-8B/HumanEval only, and (found by reading modal_verifier_sched.py) confounded by the naive arm running 2,624 synchronous subprocess verifications inside the step loop versus far fewer in the scheduler arm; the cleaner GPU-only number is the rounds engine's 1.53x, which its own docstring calls directional. On an idle SGLang GPU early-stop is 1.00-1.02x GPU-seconds (ledger status FALSIFIED); under load it is 1.38-1.87x with a simulated verifier (BOUNDED). The in-engine-vs-client-loop delta was never measured under controlled conditions, the weak-verifier result is post-hoc, long-prefix branching as prefix-cached independent requests is unmeasured on either engine, nothing was run above max_model_len 4096, on a model larger than 8B, off A100, or on a current vLLM, and the research files document no serving-time best-of-N demand. Measured but bounded/contradicted is the honest grade.",
+  "final": "E.md",
   "founder_decisions": 9,
   "kind": "draft",
+  "missing_founder_decisions": [
+   "Delivery form was pre-decided as a hosted engine (weeks 1-3 build a service) before the in-engine-vs-client-loop gate that the brief itself says would send the direction to an OSS scheduler/SDK.",
+   "The MVP model (Qwen2.5-Coder-7B) was chosen on a post-hoc number; no in-engine scheduler run exists for it. Revised to start from Llama-3.1-8B with a week-2 rerun, but the model choice remains the founder's.",
+   "The buyer was chosen as serving-time coding agents; RL-rollout inference, the only many-samples-plus-verifier workload documented in the research files (Fireworks rollout docs, Cursor RL infra, Relace verl), was not offered as an option.",
+   "The benchmark shape (HumanEval-like short prompts, max_model_len 4096) was accepted as the proof while the customer section cites 116-126K-prefix agent steps; which workload shape the public proof should use is a founder call.",
+   "vLLM's LLMEngine loop was chosen over SGLang for the MVP although the load and long-prefix measurements are on SGLang and vLLM 0.24's n>1 pathology is measured.",
+   "Kill-gate thresholds (1.5x/2.0x, 1.3x/1.8x, 85%/90%, 1.15x/1.3x, 4x/2.5x) and single-seed acceptance were set by the brief; the founder should set thresholds and the seed count.",
+   "Publishing HumanEval first (measured, weak) versus waiting for SWE-bench (unmeasured, credible) was decided implicitly by the week-6 launch page.",
+   "Whether to bill the shared prefix once per solve (the one pricing capability a client loop cannot replicate) was not surfaced as a choice in the draft's pricing section.",
+   "The verifier scope (customer tests only) was fixed; a learned verifier or static pre-checks were listed but the draft's architecture excludes them.",
+   "All experiments are planned on A100 (the measured GPU) although a larger-HBM GPU changes concurrent long-prefix solves per GPU; the GPU class for the proof run is a founder decision."
+  ],
   "name": "Verifier-guided search inference for code (pass@16 quality at pass@4 cost)",
   "numeric_claims": 49,
-  "one_line": "A Morph-style specialized provider for coding agents: send a prompt plus tests, an in-engine verify-abort-refill scheduler returns the first passing sample; measured 2.63x fewer decode tokens and 2.12x faster at identical pass@16 on HumanEval with an 8B model, with the repo's own 'buyer-replicable' verdict confronted via pre-registered gates.",
-  "unproven": 8
+  "one_line": "A code-specialized endpoint that takes a prompt plus the customer's tests and returns the first passing sample via an in-engine verify-abort-refill scheduler; measured 2.63x fewer decode tokens at identical pass@16 on HumanEval/Llama-3.1-8B (one run, one seed), with the 2.12x wall-clock now flagged as confounded by asymmetric synchronous verification, the in-engine-vs-client-loop delta unmeasured, and serving-time demand undocumented in the research files, all pre-registered as gates.",
+  "revised_by_run": "wf_b2c0023f-038",
+  "strongest_version": "A test-guided code-generation endpoint that ships the one thing the repo proved three ways in-engine: identical pass@N at ~2.6x fewer decode tokens on HumanEval with an 8B model, with a weak first-3-asserts verifier keeping 93-96% of the oracle ceiling at 3.0-3.5x lower cost. The honest differentiator is not the token saving, which a client loop captures on any provider, but the contract and the price: tests are a first-class input, the prompt prefix is prefilled and billed once per solve instead of once per sample (an 8-way branch at 32k cost 1.02x the GPU-seconds of one cached turn on SGLang), losers are aborted mid-decode, and the customer pays per solve. Everything the hosted form depends on beyond that is pre-registered rather than assumed: whether in-engine beats a streaming HTTP client loop that closes losers on pass, whether the 2.12x wall-clock survives moving verification off the step loop, whether the gain transfers to repo-level tests and a 30B-A3B model, whether 100K-prefix branching and HBM allow enough concurrent solves per GPU, and whether any team runs serving-time best-of-N at all (the research files document it only for RL rollouts). If the client-loop gate fails, the same code ships as an OSS scheduler/SDK; if it passes on SWE-bench with three seeds, the public benchmark is the product and the price is the moat.",
+  "unproven": 8,
+  "weeks_to_proof": "7-9 weeks to the first credible public proof, defined as: a SWE-bench-Verified 100-task subset, 3 seeds, three arms (naive / streaming HTTP client loop with close-on-pass / in-engine), real sandboxed tests with verification off the GPU critical path and verify latency logged, on Llama-3.1-8B and Qwen3.6-35B-A3B, reporting tokens, GPU-step wall, end-to-end wall and pass@16. Assumptions: two engineers; Modal A100/H100 access at ~$2.50-4/GPU-hr; the SWE-bench sandbox harness is the long pole (~3 weeks, no repo precedent; the repo's only verifier is a 10 s python subprocess on HumanEval); async verification and the request queue on the LLMEngine loop are ~1-2 weeks; runs ~1 week; write-up ~1 week. A HumanEval-only page reproducing the existing 2.63x/1.53x/2.12x with the verification decomposition added is ~2 weeks but is not credible for the repo-level or larger-model claims the product depends on. Total GPU-hours are unmeasured because SWE-bench test execution dominates."
  },
  "F": {
   "attacks": [

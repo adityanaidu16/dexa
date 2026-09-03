@@ -1,0 +1,220 @@
+{
+ "id": "F",
+ "name": "Portable, persistent KV state layer for self-hosters (open-core infrastructure software)",
+ "one_line": "An Apache-2.0 vLLM/SGLang connector plus durable, tenant-keyed KV store that lets an agent session survive pod death and resume on any replica with the same output, sold with a commercial fleet control plane; the portability core is measured once in-engine at TP=1, the speed story is contradicted, and durability/governance are unbuilt.",
+ "evidence_grade": "C",
+ "evidence_grade_reason": "The one in-engine measurement of the core claim (cross-instance resume, bit-identical output, prefill skipped) is real but thin: OPT-125m with two external blocks on vLLM 0.24.0, plus a block-aligned 8k resume on Qwen3-0.6B that is only next-token-correct; the 8B lossless result is HF-level (HFBackend), not the serving engine. Every speed number is contradicted (0.37x single-request, 1.6-2.2x worse P99 under load for the repo's own connector vs 10-17x for LMCache single-request), the only concurrent result is single-seed synthetic voice traffic on vLLM 0.9.2 with a different connector, no pod-kill test exists, and the claimed differentiators (durable tiers, decode-KV save, tenant keying, audit, TP>1, MLA support) are unbuilt. Measured but bounded and contradicted is C.",
+ "build_cost_weeks_to_proof": "~10 weeks to the first credible public proof at TP=1 (a Preemption Survival Score run on vllm bench serve + Mooncake traces vs vanilla, OffloadingConnector+S3 and LMCache 0.5.x layerwise, Llama-3.1-8B on A100 and H100, with KV-byte identity and greedy-divergence reported), assuming two senior engineers full-time, ~150-200 GPU-hours, no vLLM fork, and that the vLLM 0.28 port of the two pinned connectors (0.24.0 and 0.9.2) plus chunked-prefill/decode-block save and layer-pipelined async restore each take about a week. The draft's 6 weeks assumed TP>1 in one week against its own 10-day/60-multi-GPU-hour estimate; a TP=2/4 point adds 3-4 weeks and an MLA/hybrid model adds an unestimated amount.",
+ "factcheck": [
+  {
+   "claim": "identical output on 100% of resumed sessions (held at TP=1 on OPT-125m and Qwen3-0.6B)",
+   "verdict": "misquoted",
+   "correction": "identical_output=True is recorded only for OPT-125m (cross-request 2 blocks; cross-instance pids 36 vs 216). For Qwen3-0.6B at 8k docs/RESULTS.md records 8,176/8,192 matched and 'next-token correctness vs cold: True (exact)'; Llama-3.1-8B/8k is 'next-token correct'. Full-sequence identity on a real model in-engine is unmeasured."
+  },
+  {
+   "claim": "External anchors put the pinned-CPU crossover between 8k and 48k (llm-d 48K pull 235 ms vs 1,988 ms; ~8K-12K crossover for GLM-5.2-FP8)",
+   "verdict": "misquoted",
+   "correction": "llm-d's 8K-12K crossover and the 48K pull are cross-node CPU-to-CPU P2P transfers over NIXL, not local pinned-CPU restore. In-repo, local pinned-CPU restore already wins at 4k single-request (LMCache 10.0x, dexa ledger lmcache-offload-restore); 04-conflicts #1 derives (arithmetic, not measurement) that a 10-20 GB/s RAM path crosses over below 4k."
+  },
+  {
+   "claim": "Architecture table: State connector = scheduler+worker hooks with block-hash keyed lookup, chunked-prefill-aware save, async load on side streams, pin-by-hint via request_finished",
+   "verdict": "unsupported",
+   "correction": "No existing connector has all four. src/dexa/engine/vllm_connector.py (917 lines, vLLM 0.24.0): whole-prompt keying (prefix_key over all tokens + model name), async load, line-608 TODO skips chunked prefills, zero TP handling. vkv/backends/voice_kv_connector.py (574 lines, vLLM 0.9.2): blake2b block-chain keying, pin-by-hint, loads synchronous within the scheduler step, decode KV not saved. Marked as target in the revision."
+  },
+  {
+   "claim": "State object format header carries weights hash, TP layout, attention backend, dtype, tenant",
+   "verdict": "unsupported",
+   "correction": "src/dexa/session/blob.py DEXAKV01 header holds spec, store_dtype, shapes, positions, token_ids, meta and payload offset. No weights-hash, TP-layout, attention-backend or tenant field exists; the connector store key has no tenant component (03-build-inventory gaps). These are Week 2 additions."
+  },
+  {
+   "claim": "Proven: purpose-built session-granular connector held N=300 voice sessions stable ... idle-hint pinning passed the 300 ms gate at N=300 (272.2 ms)",
+   "verdict": "misquoted",
+   "correction": "Numbers are correct (316.8/336.8 ms B-voice; 25,997.7/6,025.1 ms LMCache 0.3.2; 272.2 ms arm D) but the ledger status is BOUNDED, not PROVEN: single seed, synthetic traces, ~2.5k-token sessions, vLLM 0.9.2, B-voice fails the gate, arm D margin 27.8 ms whole-run / 8.1 ms full-load, 3 of 7 buckets above 300 ms, N=400 fails, restore latency never timed. Moved to Bounded."
+  },
+  {
+   "claim": "Lossless persisted state on a real 8B: bf16 blob save/resume bit-identical at 8k-64k (Llama-3.1-8B, A100)",
+   "verdict": "misquoted",
+   "correction": "The results JSON records identical_output=true (identical greedy output), measured through HFBackend persist bench, not in vLLM; the ledger entry is CONTRADICTED for speed. Reclassified as HF-level under Bounded; 3.7-5.5x correctly not cited as a vLLM speedup (it is on the SUPERSEDED list)."
+  },
+  {
+   "claim": "bitwise correctness suite from evals/modal_kv_correctness.py",
+   "verdict": "misquoted",
+   "correction": "The file is /home/user/voice-inference/evals/modal_kv_correctness.py (no such file in dexa). Its pass criterion is 'connector loads fired > 0 and no missing-entry errors' and it explicitly rejects exact text match because greedy decoding cascades cached-vs-full-prefill kernel numerics into divergent text; its output is not archived anywhere."
+  },
+  {
+   "claim": "The repos' own measurements cover only Llama-3.1-8B and Qwen2.5-7B on A100-80GB, A10G and L40S at 4k-64k, TP=1",
+   "verdict": "misquoted",
+   "correction": "Also OPT-125m and Qwen3-0.6B on A10G. In-engine coverage stops at 16k (vLLM V1 crashed at >=32k with Qwen2.5-7B+YaRN); 32k-64k points are HF-only (04-conflicts #11). Llama-3.1-8B did run at 128k in vLLM 0.24 eager in the branching-curve eval, without restore."
+  },
+  {
+   "claim": "Week 3: TP>1 shard-consistent layout (one week)",
+   "verdict": "unsupported",
+   "correction": "The brief's own Unproven table estimates TP>1 at ~60 multi-GPU-hours and 10 days; the connector has zero tensor_parallel references (03-build-inventory). Moved outside the six-week MVP."
+  },
+  {
+   "claim": "resumes ... with no re-prefill beyond block alignment / zero recompute",
+   "verdict": "unsupported",
+   "correction": "As current capability: neither connector saves decode-token KV (voice docstring line 38; dexa saves prompt KV for single-step prefills only), and the 8,176/8,192 figure is prompt-only. Agent turns put 184-317 median output tokens into the next prompt. Stated as a target with a decode-KV kill gate."
+  },
+  {
+   "claim": "\"Peers must share identical block size and hash seed or transfers silently drop to zero\" (llm-d P2P KV sharing)",
+   "verdict": "misquoted",
+   "correction": "The research file paraphrases the llm-d post; not a verbatim quotation. Presented as a paraphrase."
+  },
+  {
+   "claim": "Governance (tenant namespace, audit) is the v1 differentiator; tenant isolation of cached KV not documented (LMCache/Tensormesh)",
+   "verdict": "misquoted",
+   "correction": "Correct for LMCache/Tensormesh, but Mooncake v0.3.13 ships tenant-aware metadata isolation and the SGLang Mooncake backend has tenant_id; Dynamo v1.4.0 ships cache-salt-aware KV routing for tenant isolation; Fireworks documents x-prompt-cache-isolation-key. Added to the competitive table; audit of state operations remains undocumented anywhere."
+  },
+  {
+   "claim": "under 16-24-way concurrency its P99 TTFT was 1.6-2.2x worse than vanilla even with async loading",
+   "verdict": "correct",
+   "correction": "8,930/5,596 = 1.60x at 24x3072; 20,296/9,379 = 2.16x at 16x8192 (dexa ledger connector-under-concurrency-sync-async). Sync numbers (18,553 ms, 3.4x) are superseded and correctly not cited."
+  },
+  {
+   "claim": "LMCache CPU restore 10.0x at 4k (301 to 30 ms), 17.1x at 16k (1,320 to 77 ms), 0.875 GB moved at 22.0 GB/s",
+   "verdict": "correct",
+   "correction": "Correct; caveats added: single request, LMCache version unpinned, only 4k and 16k, 22.0 GB/s is LMCache-reported, mechanism is LMCache's not Dexa's."
+  },
+  {
+   "claim": "the ledger measured 8,176 of 8,192 tokens matched, i.e. 16 re-prefilled",
+   "verdict": "correct",
+   "correction": "docs/RESULTS.md session-resume benchmark, Qwen3-0.6B, A10G; prompt tokens only."
+  },
+  {
+   "claim": "Tensormesh resells reserved H200s at $2.50/hr; Wafer cites MI355X rental at $2.29-2.95/GPU-hr",
+   "verdict": "correct",
+   "correction": "tensormesh.ai/pricing (via Nebius and Yotta); wafer.ai/blog/qwen36-mi355x."
+  },
+  {
+   "claim": "TraceLab ~4,300 sessions: median cached prefix 115,584-126,180, ~857-886 new input, 184-252 output; human gap median 1.4 min, p90 20.6 min; hits 95.7% / 84.4%",
+   "verdict": "correct",
+   "correction": "arXiv 2606.30560 per 05-research-agents.md."
+  },
+  {
+   "claim": "llm-d 219 Claude Code sessions on GLM-5.2: median 195K/317, 96% reuse >=90%, pauses median 2 s p99 11.4 min, TP=8 keeps eight copies",
+   "verdict": "correct",
+   "correction": "llm-d.ai/blog/serving-glm-5-2-agentic-workloads-on-llm-d."
+  },
+  {
+   "claim": "A Codex user on Azure measured 3.28M re-billed tokens, 71% of fresh input, once a session passed ~150K tokens",
+   "verdict": "correct",
+   "correction": "openai/codex issue #25604; research confidence medium. Noted as medium confidence."
+  },
+  {
+   "claim": "Adaptive load policy never worse than vanilla (P99 5,603 vs 5,596 ms; 9,371 vs 9,379 ms) but ships OFF; crossover calibrated to 64k / 32k / 8k",
+   "verdict": "correct",
+   "correction": "dexa ledger connector-under-concurrency-sync-async; 04-conflicts #12."
+  },
+  {
+   "claim": "Residency cost model 2-6x cheaper with GPU $1.80/hr, RAM $0.006/GB-hr, NVMe $0.0002/GB-hr; tiering advisory",
+   "verdict": "correct",
+   "correction": "dexa ledger residency-cost-model (OPEN); correctly labeled modeled."
+  },
+  {
+   "claim": "OOM at 345 concurrent requests from connector staging buffers outside vLLM's budget",
+   "verdict": "correct",
+   "correction": "voice ledger vi-bypass-governor-policy; the cause was joint with unbounded bypassed warmup requests, and the pre-fix run is not archived. Caveat added."
+  },
+  {
+   "claim": "tests/test_vllm_connector.py (16 passing)",
+   "verdict": "correct",
+   "correction": "17 tests: 16 pass, 1 skipped (needs vllm) per 03-build-inventory."
+  },
+  {
+   "claim": "vLLM 0.28.0 (Aug 26 2026), SGLang 0.5.18, llm-d v0.9.0 Aug 17 2026, LMCache 0.5.4, KVConnectorBase_V1 'experimental' since April 2025 merge",
+   "verdict": "correct",
+   "correction": "05-research-kvcache.md."
+  },
+  {
+   "claim": "3.7-5.5x is versus HF eager prefill and not cited as a speedup",
+   "verdict": "correct",
+   "correction": "Consistent with the SUPERSEDED list in 04-conflicts.md; the brief does not cite 14-25x, 3.7-5.5x-as-vLLM-speedup, 'unconditional latency', or PROCEED_3X."
+  }
+ ],
+ "attacks": [
+  {
+   "attack": "Greedy-identical continuation may be unattainable at long context for ANY restore path, including vanilla prefix caching: the voice repo's correctness suite explicitly refuses text match because cached-vs-full-prefill kernel paths differ numerically. The only in-engine identity evidence is OPT-125m with 2 blocks; the 8B identity is HF-level. If the headline metric fails for vanilla vLLM too, the product's flagship number is undefined.",
+   "severity": "serious",
+   "what_would_settle_it": "Llama-3.1-8B on vLLM 0.28 at 8k/32k/128k: greedy text and per-block KV-byte diff for cold prefill vs in-GPU prefix hit vs CPU restore vs S3 restore; report divergence rate. If the prefix-hit control diverges from cold, redefine the metric as KV-bytes-identical plus bounded logit delta and divergence no worse than the control."
+  },
+  {
+   "attack": "Survival is not unique. vLLM OffloadingConnector has FS/S3 secondary tiers, LMCache runs as a daemon with S3/Redis/Mooncake L2 so KV survives engine crashes, and Mooncake v0.3.13 recovers SSD offload after master restart. A well-configured baseline passes the SIGKILL test; the benchmark as drafted does not isolate the claimed advantage.",
+   "severity": "serious",
+   "what_would_settle_it": "Run the kill test with all three baselines' remote tiers enabled and report tokens re-prefilled (block floor vs 256-token chunk floor), correctness, tenant-keyed hits and P99 under load; the product must win on at least two of these, not on survival."
+  },
+  {
+   "attack": "'Zero recompute' requires decode-token KV persistence. Neither repo connector saves decode KV (voice docstring; dexa saves prompt KV of single-step prefills only), and OffloadingConnector's offload_prompt_only defaults true. Agent turns put 184-317 median output tokens into the next prompt, so every turn re-prefills them.",
+   "severity": "serious",
+   "what_would_settle_it": "Multi-turn Mooncake trace replay with decode-block save on vs off; count tokens re-prefilled per turn; gate at <= 1 block."
+  },
+  {
+   "attack": "Model-class mismatch. Section 2 names GLM-5.2 (MLA, TP=8), Kimi, DeepSeek V4 (MLA), Qwen3.6 MoE and hybrid-attention models; both connectors assume a dense non-MLA fp16 paged layout, single attention backend, TP=1. The product may need per-architecture layout code and TP-shard reassembly before it touches a real customer model, which the six-week plan does not contain.",
+   "severity": "serious",
+   "what_would_settle_it": "Bitwise round-trip on one MLA model and one hybrid model at TP=1, then TP=2; days-to-green for each. If each architecture needs bespoke code, weeks-to-proof grows by months."
+  },
+  {
+   "attack": "Restore under concurrency is unsolved in either repo. Dexa's async loads from disk lost 1.6-2.2x at P99 at 3k-8k; the voice connector's loads are synchronous inside the scheduler step, fine at ~140 MB/session but an 8.4 GB 64k Llama-8B session at ~20 GB/s would stall the engine ~0.4 s per restore. No layer-pipelined async restore exists; the 'P99 <= 1.0x vanilla' gate has no code behind it yet.",
+   "severity": "serious",
+   "what_would_settle_it": "The 04-conflicts #1 crossover-surface experiment: 16k-64k sessions x concurrency 8-128 x tier (pinned RAM, NVMe, S3) on A100 and H100, P99 vs vanilla and aggregate restore GB/s, with the new pipelined loader."
+  },
+  {
+   "attack": "The six-week plan slips. It ports two connectors pinned to vLLM 0.9.2 and 0.24.0 onto 0.28 across an API labeled experimental (3-arg ctor, CachedRequestData shape changes, new HMA/prefer_cross_layer_blocks properties), fits TP>1 into one week against its own 10-day estimate, builds governance from zero in one week, and expects design partners it does not have. No staffing assumption is stated.",
+   "severity": "serious",
+   "what_would_settle_it": "Re-plan (done in the revision): TP=1-only MVP, TP>1 and MLA out of scope, two engineers, ~10 weeks to public proof; track weeks-to-green on the vLLM 0.28 port as the leading indicator."
+  },
+  {
+   "attack": "The pain section is hosted-API TTL pain (Claude Code docs, Codex on Azure), not a self-hoster losing KV to a pod kill. No self-hoster quote, no restart/preemption rate for GPU pools (spot interruption rates were unretrievable), and TraceLab's median 1.4-min gap may sit inside a CPU-tier LRU on an idle fleet, so the durability need is asserted, not shown.",
+   "severity": "serious",
+   "what_would_settle_it": "Five self-hoster interviews with restart/eviction logs; measure KV lifetime vs idle-gap distribution on one real fleet (Alibaba's P99 lifespan was 97 s in to-B; llm-d's p99 pause 11.4 min). Gate: >= 2 of 5 report KV loss to restarts/preemption with logs."
+  },
+  {
+   "attack": "Tenant keying and audit as the v1 differentiator: Mooncake ships tenant-aware metadata and tenant_id, Dynamo v1.4.0 ships cache-salt-aware routing for tenant isolation, Fireworks documents an isolation header. Only the audit log of state operations is undocumented everywhere, and whether buyers pay for it is unmeasured.",
+   "severity": "minor",
+   "what_would_settle_it": "Partner interviews asking whether audit-of-KV is a purchase criterion; the tenant-isolation overhead experiment; founder decision on positioning."
+  },
+  {
+   "attack": "A bigger-HBM GPU or FP8 KV halves the need to tier at all for 7-8B models (both repos name this their top unmeasured threat); at 128k on 70B+ models the KV per session grows and the argument reverses, but nothing at that scale is measured.",
+   "severity": "minor",
+   "what_would_settle_it": "H100/H200 points of the crossover experiment with FP8 KV on; one 70B-class TP=2 point."
+  },
+  {
+   "attack": "The LMCache baseline numbers are incomparable: dexa's 22 GB/s / 10-17x is single-request on an unpinned version over vLLM 0.24; voice's collapse is LMCache 0.3.2 default/layerwise on vLLM 0.9.2. A tuned LMCache 0.5.x layerwise-on with an L2 may erase both the speed gap and the survival gap.",
+   "severity": "minor",
+   "what_would_settle_it": "Run LMCache 0.5.4 (or 0.5.5) layerwise-on with S3 L2 as a named baseline in Week 4 on the same model/GPU/harness."
+  },
+  {
+   "attack": "The vLLM V1 crash at >=32k was a Qwen2.5-7B+YaRN harness issue; the 128k benchmark depends on picking a native-128k model and non-eager mode, which the draft did not specify.",
+   "severity": "minor",
+   "what_would_settle_it": "One 128k cold-prefill run of Llama-3.1-8B on vLLM 0.28 with chunked prefill on, non-eager, before Week 4."
+  }
+ ],
+ "missing_founder_decisions": [
+  "Licensing/monetization: the draft chose Apache-2.0 open-core with a per-GPU-month commercial control plane; alternatives are source-available/BSL, savings-share (Tensormesh's 30%-of-estimated-savings formula), or hosted-only (which the README excludes but edge/ and dexa_platform build).",
+  "Positioning: durability/governance-first for regulated and neocloud buyers vs a speed/cost positioning; the ledger currently contradicts the speed story, so the draft chose governance without evidence buyers pay for it.",
+  "Model class and TP scope: dense GQA 7-8B at TP=1 first (matches the evidence) vs the MoE/MLA/hybrid models at TP=8 that the workload research says customers run; this decides whether the product can touch a customer model in 6 weeks or 6 months.",
+  "Own the durable store vs build on LMCache's MP server / Mooncake Store / NIXL as the tier and sell only keying, policy and control plane.",
+  "Out-of-tree connector on an experimental API vs fork vLLM for scheduler-native prefetch and eviction ordering vs upstream contributions to vLLM's TieringManager RFC #38260 and SGLang RFC #27574.",
+  "Distribution channel: Kubernetes/llm-d well-lit path (the draft's choice) vs pip-only vs a Dynamo/NIXL plugin.",
+  "Proof metric: Preemption Survival Score (the draft's choice) vs a measured $/GPU-hour-saved metric that buyers actually pay on.",
+  "Go/no-go thresholds: '>= 2 of 5 design partners with audit log enabled', 'P99 <= 1.0x vanilla', '>= 2.0x at 64k' and the 10-day TP>1 limit are the draft's numbers; the founder sets them.",
+  "Which baseline configuration counts as 'well-configured' (LMCache layerwise-on with L2, OffloadingConnector with S3, Mooncake SSD) since that choice determines whether the benchmark can be won.",
+  "Whether the mutation/versioning DAG (the README's stated wedge, HF-only today) is the product or a later substrate."
+ ],
+ "strongest_version": "The one property both repos proved at every context length is portable, lossless KV state: a vLLM process can load KV another process saved, skip prefill, and produce the same output, using the same connector seam LMCache, Mooncake and NIXL use, on an unmodified engine. Nothing in the research files sells that as an operator-owned object with tenant keying, retention policy and an audit log of who read which state; Mooncake and Dynamo ship tenant isolation but no project documents state-operation audit. The honest product is therefore a durability-and-governance layer with speed parity as a gate, proven on an independent harness (vllm bench serve, Mooncake traces) against baselines configured to survive, where the differentiation must show up in re-prefilled tokens, correctness and P99 under load rather than in survival itself. It is worth building only if two things measure true within ~10 weeks: greedy identity (or bounded divergence no worse than vanilla's own prefix hit) holds at 32k-128k on a real model, and a pipelined restore from a durable tier keeps P99 at or below vanilla under load. Both are single experiments the repos already have harnesses for; the customer-side unknowns (do self-hosters lose KV to restarts, do they pay per GPU for audit) are interview questions, not benchmarks.",
+ "changes_made": [
+  "Corrected the identity claim: full-sequence identical output is recorded only for OPT-125m (2 blocks); Qwen3-0.6B and Llama-3.1-8B resumes are next-token-correct; the 8B lossless result is HF-level and moved from Proven to Bounded.",
+  "Moved the voice N=300 / 1.5x result from Proven to Bounded with its ledger caveats (single seed, synthetic traces, 2.5k-token sessions, vLLM 0.9.2, 316.8 ms fails the gate, 8.1 ms full-load margin, N=400 fails, restore never timed).",
+  "Fixed the crossover statement: llm-d's 8-12K crossover and 48K pull are cross-node P2P over NIXL, not local pinned CPU; in-repo pinned-CPU restore wins at 4k; the reconciliation rule is flagged as derived arithmetic.",
+  "Rewrote the architecture table so the connector row and the blob-header row describe targets, listing what each existing connector actually has (whole-prompt vs block-hash keying, async vs synchronous loads, no chunked prefill, no decode KV, no tenant in key, no TP handling).",
+  "Redefined benchmark metric (1) as KV-byte identity plus greedy divergence with a vanilla prefix-hit control, citing the voice correctness suite's rejection of text match; metric (2) now includes decode tokens; baselines are configured with remote tiers and the brief states survival alone will not separate the product.",
+  "Added the model-class mismatch (customers run MoE/MLA/hybrid at TP>1; all evidence is dense GQA at TP=1; connectors assume non-MLA layout) to Sections 2, 6, 10 and 11.",
+  "Added the pain-section caveat that quotes are hosted-API TTL pain and OSS docs, with no self-hoster preemption evidence, and a corresponding kill gate.",
+  "Re-sequenced the build plan: vLLM 0.28 port and decode-block save in Week 1, layer-pipelined async restore in Week 2, correctness week in Week 3, TP>1 and MLA moved outside the six weeks, staffing assumption stated, correctness-suite path corrected to the voice repo with its actual pass criterion.",
+  "Added four unproven rows (long-context identity, decode-KV zero recompute, MLA/hybrid support, self-hoster pain) and four kill gates (identity vs control, survival differentiation, decode-KV, customers' models).",
+  "Updated the competitive table neutrally: LMCache daemon survives engine crashes and names adopters Cohere/CoreWeave; Mooncake tenant_id and SSD-offload recovery after master restart; Dynamo v1.4.0 cache-salt-aware tenant routing; Fireworks isolation/affinity headers.",
+  "Added caveats the ledgers record: LMCache version unpinned and single-request; 22 GB/s self-reported; OOM at 345 requests jointly caused by bypassed warmups; Codex issue medium confidence; llm-d block-size quote is a paraphrase.",
+  "Expanded Section 11 with the decisions the draft had made on the founder's behalf (licensing, positioning, model class/TP scope, own store vs LMCache/Mooncake, out-of-tree vs fork vs upstream, distribution, proof metric, thresholds, baseline configuration).",
+  "Graded evidence C and set weeks-to-proof at ~10 (TP=1) rather than the draft's 6."
+ ]
+}

@@ -1,12 +1,81 @@
 {
  "B": {
+  "attacks": [
+   [
+    "fatal",
+    "An 80 GB GPU dissolves the wall. Both repos name this the #1 threat and neither measured it. Conflict 5 arithmetic: with 7B weights an H100 leaves a ~60 GB KV p"
+   ],
+   [
+    "serious",
+    "The proof benchmark does not isolate the claimed advantage because the baselines are stale. The only offload baseline measured is LMCache 0.3.2 on vLLM 0.9.2 (2"
+   ],
+   [
+    "serious",
+    "The 1.5x is a single-seed, aggregation-window-dependent pass. Full-load-window p95 is 291.9 ms (8.1 ms margin) and 3 of 7 five-minute buckets exceed 300 ms; who"
+   ],
+   [
+    "serious",
+    "The predictor is the trace generator in disguise. The idle_ms hint uses the synthetic trace's own median gap (400 ms) and utterance (2,500 ms); the 25 s thresho"
+   ],
+   [
+    "serious",
+    "Restore is synchronous inside the scheduler step and already costs +24.4 ms p95 at N=200 on a 7B model with ~140 MB sessions. Per-restore latency was never meas"
+   ],
+   [
+    "serious",
+    "The whole product sits on an API vLLM labels experimental. The connector is pinned to 0.9.2; the port to 0.28.0 crosses at least two known breaking changes (3-a"
+   ],
+   [
+    "serious",
+    "The connector is TP=1, fp16/bf16 only, non-MLA, prompt-KV only. Every documented production default is 26-35B (Gemma 4 31B/26B, Qwen3.6-35B-A3B MoE, Nemotron-3-"
+   ],
+   [
+    "serious",
+    "The workload is synthetic in every dimension the thesis depends on: 95.2% idle comes from 75-token replies played at 3.25 tok/s (~23 s), utterance/gap distribut"
+   ],
+   [
+    "serious",
+    "The 6-week plan slips. Weeks 1-2 carry an unknown-drift API port plus async loads plus correctness plus timing; week 4 packs 30B/TP>1/FP8/SGLang/shared-prompt i"
+   ],
+   [
+    "minor",
+    "A code-reading bug confounds the measured result: a store evicts the slab entry it matched, so a new session's first turn evicts a sibling sharing its system pr"
+   ],
+   [
+    "minor",
+    "Provenance would not survive a skeptical buyer today: every Modal manifest has git_sha 'unknown', no manifest records which connector or vLLM flags were used (t"
+   ],
+   [
+    "minor",
+    "The cost floor argument is L40S-specific and omits host RAM: on Modal the 96 GiB the tiered arms used adds ~40% to the GPU price, so the per-session-hour cost a"
+   ]
+  ],
   "chars": 23689,
+  "evidence_grade": "C",
+  "evidence_grade_reason": "The core claim (session-semantic pinning raises sessions-per-GPU at a TTFT SLA) was measured once in-engine (vLLM 0.9.2, Modal L40S 46 GB, Qwen2.5-7B, seed 1) and the ledger marks it BOUNDED, not PROVEN: 1.5x is 300/200 with no intermediate N (true ratio bracketed [~1.0x, 2.0x)); the full-load-window pass margin is 8.1 ms with 3 of 7 five-minute buckets above 300 ms; N=400 collapsed; the predictor uses the synthetic trace's own median constants; the baselines are a 2025 LMCache (0.3.2) and vanilla vLLM, not vLLM's native OffloadingConnector or LMCache 0.5.x; the PRD's audio-prefetch mechanism (arm C) was FALSIFIED and its proactive-free arm-B mechanism was never built; the docs' own #1 threat (80 GB GPU) is unmeasured. The supporting physics (LMCache CPU restore 10-17x single-request; fp8/int8 KV round-trip) are PROVEN but on A100/vLLM 0.24 or HF-level, single request. Measured but bounded, with a known ceiling and an aggregation-window contradiction, is grade C.",
+  "final": "B.md",
   "founder_decisions": 9,
   "kind": "draft",
+  "missing_founder_decisions": [
+   "Shipping order: the draft decided BYOC-first; hosted-first or open-sourcing the connector are equally open and depend on whether platforms will run a third-party plugin inside their engine.",
+   "Engine: the draft chose vLLM as primary with SGLang 'second'; LiveKit (the named platform buyer) runs SGLang, and SGLang's pin-with-TTL RFC #27574 is in flight.",
+   "The SLA number: 300 ms p95 is the repo PRD's choice; Twilio budgets 375 ms target / 750 ms max; a looser SLA moves every knee and every gate.",
+   "The ratio worth building on: the draft pre-registered 2x; the repo's own thresholds conflict (README '<2x kill' vs RESULTS.md '>=1.5x above kill gate'); 1.5x with 'no cliff' may be a product for some buyers.",
+   "Order of kill experiments: run the cheap lethal tests (H100 arm A; stock OffloadingConnector/LMCache 0.5.4) before the port, or port first.",
+   "Pricing unit: the draft's section 8 chose per-line-hour while its section 11 listed the unit as open; per-GPU-hour with a guarantee or per-token with a pinned-session surcharge remain options.",
+   "Replication order: 7B on L40S (week 3) before 30B on H100 (week 4), or go straight to the production-size configuration.",
+   "Upstream vs proprietary: vLLM's OffloadingConnector exposes a custom policy hook; the residency policy could be upstreamed for distribution or kept as the moat.",
+   "Public leaderboard timing: publishing the sessions-per-GPU harness before the product invites replication by engine maintainers; publishing after delays the proof.",
+   "Serverless (Modal, ~40% host-RAM surcharge) vs bare metal with bundled host RAM for both the benchmark and the hosted product.",
+   "Whether a design partner is a prerequisite for the MVP (the plan's week 6 assumes one; none is named in any file)."
+  ],
   "name": "Conversation-native inference for voice agents",
   "numeric_claims": 64,
-  "one_line": "Sessions-per-GPU at p95 TTFT <= 300 ms as the product metric, delivered by session-semantic KV residency (predictive pinning + contiguous pinned-CPU restore) as a vLLM connector plus session gateway, sold hosted and BYOC to voice platforms and their customers; measured 1.5x on one seed/L40S/7B, which sits in the repo's own pre-registered kill band until 2x replicates.",
-  "unproven": 13
+  "one_line": "A vLLM KVConnector plugin plus session gateway that pins voice sessions predicted to return soon and cheaply restores the rest, sold on a measured sessions-per-GPU at p95 TTFT <= 300 ms \u2014 today a single-seed 1.5x on an L40S/7B with an 8 ms margin, unmeasured against current stock offload tiers, on H100, or on production-size models.",
+  "revised_by_run": "wf_593bb1bc-ee9",
+  "strongest_version": "A voice-session-aware residency layer that runs inside the buyer's own vLLM (later SGLang) as a plugin, sells a single measured number \u2014 concurrent sessions per GPU at full-load-window p95 TTFT <= 300 ms \u2014 and ships the harness and raw logs so buyers reproduce it on their GPUs and transcripts. Its one genuinely new mechanism is actuating a per-request idle-window prediction as HBM pinning through the stock KVConnector delayed-free hook, which is the only configuration of five that moved the measured knee (seed 1, L40S, 7B, 1.5x, 8 ms margin); the contiguous pinned-slab restore path that kept N=300 stable where a 2025 LMCache collapsed is the supporting substrate. The honest proof is a four-baseline benchmark (vanilla vLLM, vLLM's native OffloadingConnector, LMCache 0.5.x, SGLang HiCache) with a shuffled-hint ablation, 3 seeds, on H100 with a 26-35B model and partner transcripts; if predicted-idle pinning beats client-fixed TTLs and stock LRU tiers by >= 2x there, the sessions-per-GPU number becomes a line-priced capacity guarantee no voice or KV vendor in the research publishes. If the H100 test dissolves the wall for 7B, the same code re-scopes to 30B models where the KV pool is small again, and the harness itself remains a publishable instrument.",
+  "unproven": 13,
+  "weeks_to_proof": "10-14 weeks to a first credible public proof, defined as: median-of-3-seeds sessions-per-GPU at full-load-window p95 <= 300 ms on H100, with a 26-35B-class model, against vanilla vLLM 0.28, vLLM's native OffloadingConnector (lru/arc), LMCache 0.5.4 layerwise and SGLang HiCache, with a shuffled-hint ablation and at least one real-transcript trace set, raw events.jsonl published. Assumptions: 1-2 engineers; ~120-150 GPU-hours (~$1-2k on Modal at $1.95/hr L40S and $3.95/hr H100; more on bare metal minimums); a design partner supplies transcripts by week 4 (none exists today); the week-1 H100 arm-A test does not kill the L40S/7B framing \u2014 if it does, add 2-4 weeks for TP>1 and hybrid-attention connector work to re-scope to 30B-on-H100. The brief's 6-week plan is the build schedule, not the proof schedule; weeks 1-2 (port of an experimental API from vLLM 0.9.2 to 0.28.0) and week 4 (30B/TP>1) are the slip points."
  },
  "C": {
   "chars": 24713,
@@ -36,13 +105,77 @@
   "unproven": 8
  },
  "F": {
+  "attacks": [
+   [
+    "serious",
+    "Greedy-identical continuation may be unattainable at long context for ANY restore path, including vanilla prefix caching: the voice repo's correctness suite exp"
+   ],
+   [
+    "serious",
+    "Survival is not unique. vLLM OffloadingConnector has FS/S3 secondary tiers, LMCache runs as a daemon with S3/Redis/Mooncake L2 so KV survives engine crashes, an"
+   ],
+   [
+    "serious",
+    "'Zero recompute' requires decode-token KV persistence. Neither repo connector saves decode KV (voice docstring; dexa saves prompt KV of single-step prefills onl"
+   ],
+   [
+    "serious",
+    "Model-class mismatch. Section 2 names GLM-5.2 (MLA, TP=8), Kimi, DeepSeek V4 (MLA), Qwen3.6 MoE and hybrid-attention models; both connectors assume a dense non-"
+   ],
+   [
+    "serious",
+    "Restore under concurrency is unsolved in either repo. Dexa's async loads from disk lost 1.6-2.2x at P99 at 3k-8k; the voice connector's loads are synchronous in"
+   ],
+   [
+    "serious",
+    "The six-week plan slips. It ports two connectors pinned to vLLM 0.9.2 and 0.24.0 onto 0.28 across an API labeled experimental (3-arg ctor, CachedRequestData sha"
+   ],
+   [
+    "serious",
+    "The pain section is hosted-API TTL pain (Claude Code docs, Codex on Azure), not a self-hoster losing KV to a pod kill. No self-hoster quote, no restart/preempti"
+   ],
+   [
+    "minor",
+    "Tenant keying and audit as the v1 differentiator: Mooncake ships tenant-aware metadata and tenant_id, Dynamo v1.4.0 ships cache-salt-aware routing for tenant is"
+   ],
+   [
+    "minor",
+    "A bigger-HBM GPU or FP8 KV halves the need to tier at all for 7-8B models (both repos name this their top unmeasured threat); at 128k on 70B+ models the KV per "
+   ],
+   [
+    "minor",
+    "The LMCache baseline numbers are incomparable: dexa's 22 GB/s / 10-17x is single-request on an unpinned version over vLLM 0.24; voice's collapse is LMCache 0.3."
+   ],
+   [
+    "minor",
+    "The vLLM V1 crash at >=32k was a Qwen2.5-7B+YaRN harness issue; the 128k benchmark depends on picking a native-128k model and non-eager mode, which the draft di"
+   ]
+  ],
   "chars": 24432,
+  "evidence_grade": "C",
+  "evidence_grade_reason": "The one in-engine measurement of the core claim (cross-instance resume, bit-identical output, prefill skipped) is real but thin: OPT-125m with two external blocks on vLLM 0.24.0, plus a block-aligned 8k resume on Qwen3-0.6B that is only next-token-correct; the 8B lossless result is HF-level (HFBackend), not the serving engine. Every speed number is contradicted (0.37x single-request, 1.6-2.2x worse P99 under load for the repo's own connector vs 10-17x for LMCache single-request), the only concurrent result is single-seed synthetic voice traffic on vLLM 0.9.2 with a different connector, no pod-kill test exists, and the claimed differentiators (durable tiers, decode-KV save, tenant keying, audit, TP>1, MLA support) are unbuilt. Measured but bounded and contradicted is C.",
+  "final": "F.md",
   "founder_decisions": 10,
   "kind": "draft",
+  "missing_founder_decisions": [
+   "Licensing/monetization: the draft chose Apache-2.0 open-core with a per-GPU-month commercial control plane; alternatives are source-available/BSL, savings-share (Tensormesh's 30%-of-estimated-savings formula), or hosted-only (which the README excludes but edge/ and dexa_platform build).",
+   "Positioning: durability/governance-first for regulated and neocloud buyers vs a speed/cost positioning; the ledger currently contradicts the speed story, so the draft chose governance without evidence buyers pay for it.",
+   "Model class and TP scope: dense GQA 7-8B at TP=1 first (matches the evidence) vs the MoE/MLA/hybrid models at TP=8 that the workload research says customers run; this decides whether the product can touch a customer model in 6 weeks or 6 months.",
+   "Own the durable store vs build on LMCache's MP server / Mooncake Store / NIXL as the tier and sell only keying, policy and control plane.",
+   "Out-of-tree connector on an experimental API vs fork vLLM for scheduler-native prefetch and eviction ordering vs upstream contributions to vLLM's TieringManager RFC #38260 and SGLang RFC #27574.",
+   "Distribution channel: Kubernetes/llm-d well-lit path (the draft's choice) vs pip-only vs a Dynamo/NIXL plugin.",
+   "Proof metric: Preemption Survival Score (the draft's choice) vs a measured $/GPU-hour-saved metric that buyers actually pay on.",
+   "Go/no-go thresholds: '>= 2 of 5 design partners with audit log enabled', 'P99 <= 1.0x vanilla', '>= 2.0x at 64k' and the 10-day TP>1 limit are the draft's numbers; the founder sets them.",
+   "Which baseline configuration counts as 'well-configured' (LMCache layerwise-on with L2, OffloadingConnector with S3, Mooncake SSD) since that choice determines whether the benchmark can be won.",
+   "Whether the mutation/versioning DAG (the README's stated wedge, HF-only today) is the product or a later substrate."
+  ],
   "name": "Portable, persistent KV state layer for self-hosters (open-core infrastructure software)",
   "numeric_claims": 62,
-  "one_line": "An Apache-2.0 vLLM/SGLang connector plus state store that makes session KV a durable, tenant-keyed, audited object that survives pod death and resumes on any replica with bit-identical output (proven at TP=1), with a commercial fleet control plane as the paid layer; speed parity vs re-prefill is a gate, not the headline.",
-  "unproven": 9
+  "one_line": "An Apache-2.0 vLLM/SGLang connector plus durable, tenant-keyed KV store that lets an agent session survive pod death and resume on any replica with the same output, sold with a commercial fleet control plane; the portability core is measured once in-engine at TP=1, the speed story is contradicted, and durability/governance are unbuilt.",
+  "revised_by_run": "wf_b2c0023f-038",
+  "strongest_version": "The one property both repos proved at every context length is portable, lossless KV state: a vLLM process can load KV another process saved, skip prefill, and produce the same output, using the same connector seam LMCache, Mooncake and NIXL use, on an unmodified engine. Nothing in the research files sells that as an operator-owned object with tenant keying, retention policy and an audit log of who read which state; Mooncake and Dynamo ship tenant isolation but no project documents state-operation audit. The honest product is therefore a durability-and-governance layer with speed parity as a gate, proven on an independent harness (vllm bench serve, Mooncake traces) against baselines configured to survive, where the differentiation must show up in re-prefilled tokens, correctness and P99 under load rather than in survival itself. It is worth building only if two things measure true within ~10 weeks: greedy identity (or bounded divergence no worse than vanilla's own prefix hit) holds at 32k-128k on a real model, and a pipelined restore from a durable tier keeps P99 at or below vanilla under load. Both are single experiments the repos already have harnesses for; the customer-side unknowns (do self-hosters lose KV to restarts, do they pay per GPU for audit) are interview questions, not benchmarks.",
+  "unproven": 9,
+  "weeks_to_proof": "~10 weeks to the first credible public proof at TP=1 (a Preemption Survival Score run on vllm bench serve + Mooncake traces vs vanilla, OffloadingConnector+S3 and LMCache 0.5.x layerwise, Llama-3.1-8B on A100 and H100, with KV-byte identity and greedy-divergence reported), assuming two senior engineers full-time, ~150-200 GPU-hours, no vLLM fork, and that the vLLM 0.28 port of the two pinned connectors (0.24.0 and 0.9.2) plus chunked-prefill/decode-block save and layer-pipelined async restore each take about a week. The draft's 6 weeks assumed TP>1 in one week against its own 10-day/60-multi-GPU-hour estimate; a TP=2/4 point adds 3-4 weeks and an MLA/hybrid model adds an unestimated amount."
  },
  "H": {
   "chars": 26006,

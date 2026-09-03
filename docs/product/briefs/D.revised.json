@@ -1,0 +1,207 @@
+{
+ "id": "D",
+ "name": "Document-VLM inference provider",
+ "one_line": "An OpenAI-compatible endpoint serving an open VLM (Qwen2.5-VL-7B measured) at a published accuracy-per-dollar operating point for document pages, sold on a same-pages rerunnable benchmark; the technical lever is a resize config flag, the dollar side is modeled, and the in-engine moat is blocked.",
+ "evidence_grade": "C",
+ "evidence_grade_reason": "The technical lever (visual-token budget vs accuracy frontier: 2.7x throughput at -1.0 pt from 1536px to 1024px) was measured once, in-engine (vLLM 0.24.0, A100-80GB), on 200 DocVQA pages, one run, relaxed match, offline eager batch \u2014 B-grade on its own. But the brief's core value claim is bounded and contradicted: the accuracy-parity half rests on a 200-page relaxed-match head-to-head against a 2024 model (GPT-4o) whose run output was never recorded beyond one number; the cost half has never been measured in dollars (the repo's headline '~40x cheaper' is a pricing model whose 56px-per-token formula contradicts the repo's own measured 1,017/2,201 prompt tokens, collapsing to ~9-10x at the same assumed rates); the moat (in-model pruning) is blocked with no result; and against a same-config vLLM baseline the engine advantage is 1.0x by construction.",
+ "build_cost_weeks_to_proof": "3-5 weeks to the first credible public proof (estimate): an ANLS benchmark on >= 1,000 DocVQA validation pages with bootstrap CIs, Qwen2.5-VL-7B and Qwen3-VL-8B on vLLM in serving mode with logged GPU-seconds, versus gpt-5.4 / gpt-5.6-luna / Gemini 3.8 Flash (medium) / Claude Haiku 4.5 / DeepSeek V4-flash-vision with usage-based $/1K pages, plus Textract Queries and Azure query fields as native OCR-QA baselines, published with the harness. Assumptions: 1-2 engineers; vendor accounts for Azure/GCP/AWS/DeepSeek obtained in week 1 (the main slip risk); Qwen3-VL-8B loads on vLLM 0.24.0 (unverified in-repo); roughly 15-25 A100-hours (estimate; at Modal's $2.50/hr about $40-65) plus a few hundred dollars of API spend (estimate). The moat spike is off this path. A sellable metered endpoint (auth, payments, batch queue, SSE, SLA) is 8-10 weeks (estimate), given the gaps in 03-build-inventory.md (no OAuth callback, no payments, Dockerfile omits control/, stream forced off).",
+ "factcheck": [
+  {
+   "claim": "Compute floor at '$2.50/hr (Tensormesh's listed reserved H200 rate, 05-research-kvcache.md)'",
+   "verdict": "misquoted",
+   "correction": "Tensormesh does list reserved H200 at $2.50/hr, but the relevant anchor is Modal's A100-80GB rate of $2.50/hr (05-research-gpu-pricing.md), the platform the eval actually ran on; RunPod A100-80GB is $1.39-1.59. Re-anchored to $1.39-2.50/GPU-hour A100-80GB."
+  },
+  {
+   "claim": "'A deployable endpoint config exists at the measured operating point' (max_pixels 1,048,576)",
+   "verdict": "misquoted",
+   "correction": "max_pixels 1,048,576 is not the 1024-long-side point. Running pricing.py's smart-resize at 28 px/token, a full-resolution page of DocVQA-like aspect lands at ~896x1148 = 1,312 tokens, an unmeasured point between the 1024 row (1,017) and 1536 row (2,201); the endpoint reproduces the measured point only if the client pre-resizes to <= 1024 long side. Added to Proven caveats, Unproven table, and the build plan (enforce 1024 resize)."
+  },
+  {
+   "claim": "'1,017 visual tokens' / '2,201 visual tokens' per page",
+   "verdict": "misquoted",
+   "correction": "evals/RESULTS.md labels the column 'visual tokens' but evals/modal_vlm_frontier.py records len(o.prompt_token_ids), i.e. average prompt tokens including the question text and chat template. Relabeled as prompt tokens."
+  },
+  {
+   "claim": "Proof benchmark target '>= 2.5x pages per GPU-hour versus vanilla-vLLM default' and kill gate 'measured 2.7x at -1.0 pt' against vLLM default",
+   "verdict": "unsupported",
+   "correction": "The measured 2.7x is between two non-default resolutions (1536px vs 1024px) of the same engine; no measurement against vLLM's default resolution exists, and at the same max_pixels the difference is nil by construction. Rewrote the baseline into two classes (same-config vLLM/SGLang expected 1.0x; incumbents for the product claim) and the gate."
+  },
+  {
+   "claim": "'Control plane ... 29 tests pass'",
+   "verdict": "misquoted",
+   "correction": "29 is all of dexa_platform (accounts 7, pricing 5, redundancy 5, sessions 7, tenants 5; 03-build-inventory.md); the control plane alone is 7. Also omitted: test_pricing.py::test_qwen_respects_pixel_budget asserts the wrong 56px result (big <= 325), so fixing pricing.py to patch 14/merge 2 requires rewriting the test."
+  },
+  {
+   "claim": "Week 2: 'New: five vendor adapters' while listing nine vendors, including Google Document AI as a DocVQA baseline",
+   "verdict": "unsupported",
+   "correction": "Nine adapters, not five. Google Document AI lists no question-answering endpoint in 05-research-docai.md (OCR, Layout, Form Parser, Custom Extractor), so a DocVQA score needs an OCR + text-LLM pipeline; the native QA endpoints are Textract Queries ($15/1K) and Azure DI query fields ($10/1K). Corrected in sections 4, 7 and 9."
+  },
+  {
+   "claim": "Moat experiment cost '6-15 A100-hours; 5-10 engineering days (estimate)'",
+   "verdict": "unsupported",
+   "correction": "No source in the context files; kept but labeled as an estimate. Added omitted facts: modal_vlm_moat.py defaults to n=80, runs on the HF path (transformers 4.49.0) not vLLM, and measures accuracy only; the prune path still runs the ViT at 1280px, so its throughput is unmeasured and a vLLM port would be a separate effort."
+  },
+  {
+   "claim": "'Qwen3-VL-8B hosted per-token at $0.20/M ... times 1,017 tokens is about $0.20/1K pages'",
+   "verdict": "unsupported",
+   "correction": "Arithmetic is right (1,017 x $0.20/M = $0.203/1K) but it applies Qwen2.5-VL's measured token count to Qwen3-VL, whose per-page token count is unmeasured on this harness; the $0.20/M is a medium-confidence secondary aggregator figure. Kept with that caveat."
+  },
+  {
+   "claim": "Section 8 asserts 'Bill per page' while section 11 lists per-page vs per-token as a founder decision",
+   "verdict": "unsupported",
+   "correction": "Internal inconsistency; section 8 rewritten as options (per page / per token / per-GPU-hour dedicated) and the decision left in section 11. Also added that Gemini already prices a PDF page at a fixed 560 tokens at medium, so fixed per-page cost is not unique."
+  },
+  {
+   "claim": "Competitive table omits DeepSeek",
+   "verdict": "unsupported",
+   "correction": "05-research-caching.md records deepseek-v4-flash-vision-exp (2026-08-21): images up to 384 tokens at V4-Flash pricing ($0.44/M peak, $0.22/M off-peak), i.e. about $0.17/1K images peak and $0.08 off-peak (derived, input only), below the draft's hosted-Qwen anchor; document accuracy unmeasured. Added to sections 2, 8, 9, 10, 11."
+  },
+  {
+   "claim": "'~40x cheaper' = (1,105/322) x (2.50/0.20) = 42.9x; 39.1x with 50 text and 10 output tokens; at 28 px/token 1,334 vs 1,105 (10.4x) and 1,036 vs 765 (9.2x)",
+   "verdict": "correct",
+   "correction": "Reproduced this session by running pricing.py's functions at patch 28 and patch 14; matches 04-conflicts.md conflict 10."
+  },
+  {
+   "claim": "Frontier: 1536px 0.935/11.4 img/s/2,201; 1024px 0.925/30.2/1,017 (2.7x, -1.0 pt); 768px 0.885/47.2 (4.1x); 512px 0.735 (6.9x); 384px 0.445 (8.6x); commit 7237401, 2026-08-04",
+   "verdict": "correct",
+   "correction": "Matches evals/RESULTS.md 'Multimodal execution thesis' and ledger entry doc-vlm-frontier; commit date verified in git. Omitted caveats added: one run, eager mode, offline llm.chat batch of 200, max_tokens 32, -1.0 pt = 2 pages."
+  },
+  {
+   "claim": "GPT-4o 0.880 on the same 200 pages (detail high, 2048px cap, temperature 0, max_tokens 32); usage and $/1K never recorded",
+   "verdict": "correct",
+   "correction": "Matches evals/modal_incumbent_docvqa.py and ledger entry gpt4o-docvqa-head-to-head (BOUNDED); only the 0.880 figure is recorded anywhere in the repo."
+  },
+  {
+   "claim": "'$0.02-0.06 / 1k pages' is a hard-coded string; derivation $0.017/1K at $1.80/hr, $0.023 at $2.50/hr; 1536px $0.044-0.061",
+   "verdict": "correct",
+   "correction": "Verified: modal_incumbent_docvqa.py prints the literal '0.02-0.06'; $1.80/hr is evals/stateful_cost_model.py:20 ('A100-80GB on-demand-ish; Modal lists higher'); arithmetic reproduced (30.2 pages/s = 108,720/hr). Added RunPod $1.39-1.59 -> $0.013-0.015."
+  },
+  {
+   "claim": "app.py:127 forces stream=False; Dockerfile copies only gateway/ and dashboard/; app.py is 261 lines",
+   "verdict": "correct",
+   "correction": "Verified in dexa_platform/gateway/app.py, dexa_platform/Dockerfile, and wc -l."
+  },
+  {
+   "claim": "Qwen3-VL-8B DocVQA 96.1 (Table 4), GPT-5 high 91.5 (Table 2), GPT-5 nano 88.2; Together 32B 93.3 vs report 96.9",
+   "verdict": "correct",
+   "correction": "Matches 05-research-docai.md."
+  },
+  {
+   "claim": "Azure Read $1.50/1K ($0.60 above 1M); Google $0.60 above 5M; Custom/Form Parser $30; Textract Forms $50, Queries $15; Reducto r-1 $0.01/page (2026-09-01) and $10/1K; Unstructured $0.015/page; Extend $0.025/page; LlamaParse $1.25 per 1K credits, 1-45 credits/page; Mistral OCR 4.1 $4/1K ($2 batch), olmOCR-Bench 85.20",
+   "verdict": "correct",
+   "correction": "All match 05-research-docai.md."
+  },
+  {
+   "claim": "gpt-5.4 1,229 tokens for 1024x1024; Gemini 560 tokens/page at medium; Claude 1,296 tokens for 1000x1000 plus 1,500-3,000 text tokens/page; Gemini medium page about $0.42/1K; gpt-5.6-luna about $0.25/1K",
+   "verdict": "correct",
+   "correction": "Match 05-research-docai.md (the $/1K figures are the research file's own derivations)."
+  },
+  {
+   "claim": "Moat blocker [3,1671] vs [3,881]; FRACTIONS 0.5/0.25; verdict threshold +0.02; FULL_LONGSIDE 1280",
+   "verdict": "correct",
+   "correction": "Verified in evals/modal_vlm_moat.py and evals/RESULTS.md 'Moat test'."
+  },
+  {
+   "claim": "vLLM ships only --video-pruning-rate (EVS, VidCom2); RFC #45098 for --image-pruning-rate open; SGLang EVS incompatible with Qwen2.5-VL positional embeddings",
+   "verdict": "correct",
+   "correction": "Matches 05-research-docai.md; added that the RFC's integration example is Qwen3-VL, so a merge would make the 'moat' an engine flag."
+  },
+  {
+   "claim": "Morph Standby tier bills 50% when fleet capacity is under ~25%; DeepSeek off-peak is half price; MI355X rental $2.29-2.95/GPU-hour",
+   "verdict": "correct",
+   "correction": "Match 05-research-morph.md, 05-research-caching.md, 05-research-wafer.md."
+  },
+  {
+   "claim": "vLLM prefix-cache hits 12x at 4k and 25-34x at 16k TTFT; CUA 86% patches unchanged, realized reuse ~2-2.3x",
+   "verdict": "correct",
+   "correction": "Match ledger entries vllm-warmstart-prefix-cache, cua-screen-redundancy, delta-tolerance-sweep; added the ledger's 'table stakes' label for the prefix-cache number (04-conflicts.md conflict 3). No superseded numbers were cited by the draft."
+  }
+ ],
+ "attacks": [
+  {
+   "attack": "The proof benchmark does not isolate a product advantage. The 2.7x is a resize any client applies before upload or any self-hoster sets with --mm-processor-kwargs max_pixels (evals/RESULTS.md's own caveat). Against vanilla vLLM or SGLang at the same max_pixels the pages/GPU-hour advantage is 1.0x by construction, so the draft's 'advantage vs vanilla-vLLM default' gate would pass trivially while proving nothing about the engine.",
+   "severity": "serious",
+   "what_would_settle_it": "Run vanilla vLLM and SGLang with the same Qwen weights and the same max_pixels on the same A100 and pages; if pages/GPU-hour is within noise of the endpoint (expected), drop every engine-advantage claim and sell operating point + benchmark + billing, or pass the moat gate first. Revised brief adds this as Class 1 baseline and a founder decision."
+  },
+  {
+   "attack": "Serving cost is unmeasured and the measured throughput is the most favorable case: one offline llm.chat batch of 200 prompts, enforce_eager=True, 32-token outputs, no concurrency, no p95, no cold starts. The endpoint runs max_inputs=32 per container with scale-to-zero and a 900 s startup timeout. Realized $/page at real utilization could be several-fold above the $0.013-0.023/1K floor.",
+   "severity": "serious",
+   "what_would_settle_it": "vllm bench serve-style load at 8/32/128 concurrency in serving mode logging GPU-seconds per page, p50/p95 TTFT and cold-start share; publish $/1K at the observed utilization. Kill gate: > $0.42/1K at 50% utilization."
+  },
+  {
+   "attack": "The workload the value proposition assumes (32-token answers) is not the IDP workload the pricing pages describe (transcription and extraction, 1,500-3,000 output tokens per page per Claude's PDF docs). For long outputs the visual-token lever only shrinks prefill and attention context; per-token decode work at small batch is unchanged, so the 2.7x can collapse toward 1x. No measurement exists.",
+   "severity": "serious",
+   "what_would_settle_it": "Rerun modal_vlm_frontier.py with a transcription prompt and max_tokens 1,500 at 768/1024/1536; kill if 1024 vs 1536 pages/GPU-hour < 1.3x, proceed at >= 2.0x."
+  },
+  {
+   "attack": "Sample size and scorer. 200 pages, one run: the -1.0 pt operating-point loss is 2 pages and the 4.5-pt GPT-4o gap is 9 pages; the scorer counts 'gold substring in prediction' as correct; ANLS (the metric every vendor table uses) was never computed; the GPT-4o run output beyond one number is unrecorded.",
+   "severity": "serious",
+   "what_would_settle_it": "ANLS with bootstrap CIs on N >= 1,000 DocVQA validation pages for both models; kill if Qwen minus GPT-4o < +1.0 pt ANLS."
+  },
+  {
+   "attack": "GPT-4o is a 2024 comparator. Vendor tables already put open 8B above GPT-5 on DocVQA (96.1 vs 91.5), and the cheap tiers that matter today are unmeasured: gpt-5.6-luna (~$0.25/1K page), Gemini 3.5 Flash-Lite ($0.30/M), and DeepSeek V4-flash-vision (<= 384 tokens/image, ~$0.17/1K peak, ~$0.08 off-peak), which sits below the draft's hosted-Qwen anchor. If any of them matches within 1 pt at a comparable price, the price-led pitch has no room.",
+   "severity": "serious",
+   "what_would_settle_it": "Week-2 run: those tiers on the same pages with usage-based $/1K; kill if any is within 1 pt ANLS at <= 2x the measured price."
+  },
+  {
+   "attack": "The moat is blocked and, even if unblocked, mis-specified. modal_vlm_moat.py (a) runs on the HF path with transformers 4.49.0, not vLLM, so a positive result still needs a vLLM model-code port; (b) measures accuracy only, while the pruned path still runs the ViT at 1280px, so its throughput at matched LLM tokens is below resize's; (c) defaults to n=80; and (d) vLLM RFC #45098 proposes --image-pruning-rate with Qwen3-VL as the example, so a merge turns the 'execution-owned' lever into an OSS flag.",
+   "severity": "serious",
+   "what_would_settle_it": "Reimplement get_rope_index for the pruned set, run at n >= 200 with img/s per method; proceed only if best prune minus resize >= +0.02 AND prune img/s >= 0.8x resize; track the RFC."
+  },
+  {
+   "attack": "The deployed config is not the measured operating point. max_pixels 1,048,576 smart-resizes a full-resolution page to ~896x1148 = 1,312 tokens (arithmetic from pricing.py at 28 px/token), between the 1024 (1,017) and 1536 (2,201) rows, unmeasured; only a client pre-resize to 1024 long side reproduces 0.925 / 30.2 img/s.",
+   "severity": "minor",
+   "what_would_settle_it": "Add 1148px to BUDGETS and measure, or enforce a 1024 long-side resize in the preprocessor (added to the plan)."
+  },
+  {
+   "attack": "Version and API dependence. vLLM 0.24.0 is pinned; Qwen3-VL-8B support in that version is unverified in the repo; the moat path depends on transformers 4.49.0 internals. Unlike the stateful-session direction, this one does not depend on the experimental KVConnector API, which limits the exposure.",
+   "severity": "minor",
+   "what_would_settle_it": "A one-hour smoke run of Qwen3-VL-8B on vLLM 0.24.0 before Week 1 commits to it."
+  },
+  {
+   "attack": "The 6-week plan slips at Week 2 and Weeks 4-5. Week 2 needs accounts and adapters for nine vendors, and cloud OCR products mostly do not answer questions (Document AI has no QA endpoint; Textract Queries and Azure query fields do), so the draft's drop-in adapters become pipelines. Weeks 4-5 add a durable batch queue, PDF rasterizer, per-page meter, SSE and a Dockerfile fix on a control plane with no OAuth callback and no payments (03-build-inventory.md), so 'design partners onboarded in Week 5' has no billing path.",
+   "severity": "serious",
+   "what_would_settle_it": "Not a measurement: the revised plan moves the public proof to Week 3, makes the moat spike optional, and states that payments/OAuth/SLA are outside six weeks (8-10 weeks estimate to a sellable endpoint)."
+  },
+  {
+   "attack": "Workload assumptions are unsupported by the research files: no customer interviews, no page mix, no resolution distribution, no concurrency pattern; multi-page documents exceed the one-image / 8192-token config; the 'backlog-concentrated' shape is inferred from batch discounts.",
+   "severity": "minor",
+   "what_would_settle_it": "Five design partners share a workload sample (page mix, resolution, output type, concurrency, idle pattern) before pricing is set."
+  },
+  {
+   "attack": "Per-page pricing is not unique. Gemini bills a PDF page at a fixed 560 tokens at medium (effectively per page), and Mistral OCR, Reducto, LlamaParse, Extend, Unstructured and the cloud OCR APIs already bill per page; the draft's competitive table said frontier labs lack per-page pricing.",
+   "severity": "minor",
+   "what_would_settle_it": "None; stated neutrally in sections 8 and 9."
+  }
+ ],
+ "missing_founder_decisions": [
+  "Whether the proof must include an engine advantage at all (the draft assumed 'advantage vs vanilla vLLM' was the decisive gate; against a same-config baseline it is 1.0x) or whether operating point + benchmark + billing suffices.",
+  "Per-page billing: section 8 of the draft decided 'Bill per page' while section 11 listed it as open; per page vs per token vs per-GPU-hour dedicated is now explicitly the founder's.",
+  "Hosted OpenAI-compatible endpoint as the MVP shape: the draft's plan assumed hosted while listing hosted vs BYOC vs harness-only as a decision.",
+  "DocVQA ANLS as the proof metric: it is saturated (vendor tables put open 8B above GPT-5); olmOCR-Bench/OmniDocBench transcription or a design partner's extraction F1 are alternatives.",
+  "The accuracy bar: parity with GPT-4o (2024, the only measured comparator) vs with current cheap tiers (gpt-5.6-luna, Gemini 3.5 Flash-Lite, DeepSeek V4-flash-vision).",
+  "Moat sprint timing: the repo recorded 'gate the moat sprint on market validation'; the draft scheduled it in Week 6 regardless; before/after/never is the founder's.",
+  "GPU class and cloud: all measurements are A100-80GB on Modal at $2.50/hr; RunPod A100 $1.39-1.59, H100 $2.69-3.95, MI300X $2.59-2.99, MI355X $2.29-2.95 move the modeled floor by about 2x.",
+  "Whether DeepSeek V4-flash-vision at ~$0.08-0.17/1K images (accuracy unmeasured) is an adjacency that matters.",
+  "Product shape: QA/extraction (measured) vs full-page transcription (unmeasured economics) vs both; and which transcription model if so (olmOCR-2, dots.mocr, DeepSeek-OCR).",
+  "Concurrency target and SLA (Reducto sells 200/350/500+ concurrent pages; the endpoint is max_inputs=32 per container with scale-to-zero).",
+  "Data policy: zero-data-retention (Morph and Wafer offer it) vs retaining customer pages to build the benchmark corpus.",
+  "Whether to publish the compute floor and the batch/standby tier discount (the draft assumed a Morph/DeepSeek-style 50% tier)."
+ ],
+ "strongest_version": "The strongest honest form is a benchmark-led document-VLM service: publish, from one open harness, ANLS and measured dollars per thousand pages for an open 7-8B VLM at a fixed 1024px operating point against the frontier cheap tiers, DeepSeek's 384-token vision model, and the native OCR question-answering endpoints, on the same pages the same day, and let buyers rerun it on their own PDFs. What is already in hand is real but narrow: one in-engine measurement showing 0.925 relaxed-match accuracy at 30.2 pages/s on an A100 (2.7x the 1536px point for a 1.0-pt loss) and a 200-page head-to-head above GPT-4o. The service sells the operating point, per-page metering and the benchmark, stated openly as a configuration-and-billing product with no engine advantage over a same-config vLLM; if the design partners convert on that, the time-boxed in-model pruning sprint (blocked today by Qwen2.5-VL's mRoPE grid) is the one path to an execution-owned lever, and its gate is pre-registered with both an accuracy and a throughput bar. Everything that would make this a cost story rather than an accuracy story (serving-mode $/page at real utilization, transcription-length outputs, the cheap tiers on the same pages) is unmeasured and is the first three weeks of work.",
+ "changes_made": [
+  "Fact-checked every number against the ledgers, conflicts file, research files and repo sources (pricing.py, modal_vlm_frontier.py, modal_vlm_moat.py, modal_incumbent_docvqa.py, serve/modal_doc_vlm_serve.py, app.py, Dockerfile, test_pricing.py, git log); reproduced the 42.9x / 10.4x / 9.2x token arithmetic and the $/1K derivations in Python.",
+  "Re-anchored the compute floor from the draft's Tensormesh H200 rate to A100-80GB market rates ($1.39 RunPod to $2.50 Modal) and labeled the repo's $1.80/hr as an assumption.",
+  "Corrected the endpoint claim: max_pixels 1,048,576 lands a full-res page at ~1,312 tokens (unmeasured point), not the measured 1024px point; added a 1148px measurement and a 1024 long-side resize to the plan.",
+  "Relabeled 'visual tokens' as average prompt tokens including question and template.",
+  "Replaced the 'advantage vs vanilla-vLLM default' baseline with two baseline classes (same-config vLLM/SGLang expected 1.0x; incumbents for the product claim) and rewrote the corresponding kill gate.",
+  "Added omitted caveats to Proven: one run, eager mode, offline batch of 200, max_tokens 32, -1.0 pt = 2 pages, GPT-4o gap = 9 pages, 2024 comparator, unrecorded run output.",
+  "Added DeepSeek V4-flash-vision (384 tokens/image, ~$0.17/1K peak, ~$0.08 off-peak, derived) to workload, pricing anchors, competitive table, kill gates and founder decisions.",
+  "Added the moat's missing conditions: HF path not vLLM, accuracy-only script, ViT still at full res, n=80 default, RFC #45098 uses Qwen3-VL; added a throughput bar to the moat gate and an RFC-merge risk row.",
+  "Added transcription-length output risk with a kill gate; added serving-mode cost, concurrency and cold-start caveats.",
+  "Corrected the plan: nine vendor adapters not five; Google Document AI needs an OCR+LLM pipeline (no QA endpoint); Textract Queries and Azure query fields as native QA baselines; test_pricing.py must be rewritten with the formula fix; public proof moved to Week 3; moat spike made optional; payments/OAuth/SLA declared out of scope.",
+  "Rewrote section 8 as pricing options rather than a decision and noted Gemini's fixed 560-token PDF page; corrected the '29 tests' attribution.",
+  "Added founder decisions the draft had made implicitly: engine advantage required or not, proof metric and accuracy bar, concurrency/SLA, data policy, transcription model choice, batch tier; kept all market-size and 'already exists' judgments in section 11.",
+  "Trimmed the brief to stay near the 3,500-word cap while keeping all twelve template headings."
+ ]
+}

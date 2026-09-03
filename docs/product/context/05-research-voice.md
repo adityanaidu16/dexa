@@ -1,0 +1,170 @@
+# Research: Voice AI infrastructure landscape as of September 2026: LLM sourcing, latency targets, per-minute pricing, concurrency pricing, sessions-per-GPU, and LLM cost share of a voice minute
+
+## Summary
+
+Across the vendors examined, three LLM-sourcing patterns appear on primary pages. Pass-through orchestrators (Vapi, Pipecat Cloud, LiveKit's non-Gemma routes, Retell, ElevenLabs, Deepgram) route to OpenAI/Anthropic/Google and price the LLM either 'at cost'/direct-to-provider (Vapi, Pipecat, Inworld), per-minute by model (Retell: $0.003–$0.16/min), or per token (LiveKit Inference). A second group self-hosts open-weight models: LiveKit (Gemma 4 31B on SGLang, $0.40/$1.20 per 1M tokens, 192ms TTFT), Inworld (Gemma 4 26B), ElevenLabs (Qwen3.6-35B-A3B, Qwen3.5-397B-A17B), Deepgram (Nemotron-3-nano-30B, gpt-oss-20b via Groq), and Bland (proprietary 'custom-made' models, bundled at $0.11–$0.14/min). A third group ships speech-native models: Ultravox (GLM 4.6 backbone, $0.05/min), OpenAI gpt-realtime-2.1 ($32/$64 per 1M audio tokens, ~$0.077/min for continuous output), Gemini Live ($3/$12 per 1M audio tokens, ~$0.018/min output), Hume EVI ($0.04–$0.07/min), and open-weight Moshi/Sesame CSM. Every orchestrator fetched supports bring-your-own LLM via OpenAI-compatible SSE or WebSocket endpoints except Bland.
+
+Advertised turn latencies: Bland 400ms, Vapi <500ms, Retell ~600ms; third-party measurements put P50 at 500–900ms and industry median at 1.4–1.7s. Twilio's budget allots 375ms (target) to 750ms (max) for LLM TTFT within an ~1.1s mouth-to-ear turn.
+
+Concurrency is priced explicitly: Vapi $10/line/month beyond 10; Retell $8/concurrency/month beyond 20; ElevenLabs by plan (4–40) with 2x burst pricing; Deepgram 45/60/100+ connections; LiveKit 5/20/600 agent sessions and 5/20/50 inference concurrency; Ultravox 5-call hard cap on PAYG.
+
+Published volumes: Vapi 1–5M calls/day and >1B total; ElevenLabs 10M+ conversations/week; Bland 639M calls to date; Retell >50M calls/month (secondary). LLM cost-share statements diverge: Deepgram calls the LLM 'usually the largest line', smallest.ai's example puts it at ~30% ($0.020 of $0.066), and Inworld's self-hosted-Gemma model puts it under 5% with TTS at 70–73%. Only Kyutai (STT: 64 streams/L40S, 400/H100) and Rime (TTS: 100+/machine) publish per-GPU concurrency; no vendor found advertises sessions-per-GPU or conversation-aware serving for the LLM stage.
+
+## Facts
+
+- (high, as of 2026-09-03) Vapi Build plan: $0.05/min Vapi hosting; STT/LLM/TTS model providers billed 'At cost ($0 if you bring your own API key)'; call concurrency '10 included + $10 / line / mo'; SMS/chat $0.005/msg; HIPAA add-on $2K/month; Zero Data Retention $1K/month. Scale plan is fixed platform fee + committed volume with custom concurrency.  
+  Source: https://vapi.ai/pricing
+- (high, as of 2026-09-03) Vapi homepage advertises '<500ms average latency', '1 Billion calls supported', '2.5M+ agents launched', '750K+ developers'; LLM integrations listed are OpenAI, Anthropic, Google Gemini, Groq, Perplexity; STT Deepgram/Cartesia/AssemblyAI/Gladia; TTS ElevenLabs/PlayHT. No claim of hosting its own models.  
+  Source: https://vapi.ai/
+- (high, as of 2026-09-03) Vapi custom-LLM integration: Vapi POSTs conversation context to a user-supplied OpenAI-compatible SSE endpoint ('/openai-sse/chat/completions'); auth via API key header or OAuth2 client credentials; the guide's example uses gpt-4.1-mini. No latency guidance given.  
+  Source: https://docs.vapi.ai/customization/custom-llm/using-your-server
+- (medium, as of 2026-05-12) TechCrunch (May 12, 2026): Vapi raised a $50M Series B at a $500M valuation (total $72M; Peak XV lead, M12, Kleiner Perkins, Bessemer); processes 'between 1 million and 5 million calls a day'; over 1 billion calls handled; 'eight figures' ARR; ~100 employees; over 1M developers; named customers include Amazon Ring, New York Life, Intuit.  
+  Source: https://techcrunch.com/2026/05/12/vapi-hits-500m-valuation-as-amazon-ring-chose-its-ai-platform-over-40-rivals/
+- (high, as of 2026-09-03) Retell pricing page: voice infrastructure $0.055/min; TTS $0.015/min (Retell/Minimax/Fish/Cartesia/OpenAI) or $0.040/min (ElevenLabs); telephony $0.015/min via Retell Twilio, $0 with SIP trunking; first 20 concurrency free then $8.00/concurrency/month; knowledge base $8/mo after first 10; Retell phone numbers $2/mo; branded call +$0.10/outbound call; AI QA $0.10/min after 100 free minutes; $10 free credits; Enterprise has no concurrency cap.  
+  Source: https://www.retellai.com/pricing
+- (high, as of 2026-09-03) Retell prices the LLM portion per minute by model (standard tier): GPT 5.5 $0.16/min; GPT 5.4 $0.080/min; Gemini 3.5 Flash $0.081/min; Claude 5 Sonnet $0.08/min; Claude 4.6 Sonnet $0.08/min; GPT 5.2 $0.056/min; GPT 4.1 $0.045/min; GPT 5.1 $0.04/min; GPT 5 nano $0.003/min. Derived: LLM is between ~4% and ~65% of a Retell minute ($0.003–$0.16 vs $0.055 voice infra + $0.015 TTS + $0.015 telephony).  
+  Source: https://www.retellai.com/pricing
+- (high, as of 2026-09-03) Retell homepage claims '~600ms latency' and 'proprietary voice AI orchestration'; it does not name specific LLM providers or state that it hosts its own LLM.  
+  Source: https://www.retellai.com/
+- (high, as of 2026-09-03) Retell custom LLM: Retell opens a WebSocket to the customer's server at call start, streams live transcripts, and expects streamed responses; with auto_reconnect Retell expects ping-pong every 2 seconds and reconnects up to 2 times after 5 seconds without one. The doc does not state whether Retell charges an LLM fee when a custom LLM is used.  
+  Source: https://docs.retellai.com/api-references/llm-websocket
+- (medium, as of 2026-09-03) Enterprise DNA stats page attributes to a GlobeNewswire release (verified April 4, 2026) that Retell AI has $50M ARR and powers 'more than 50 million AI phone calls per month'; the same page attributes to PR Newswire (verified June 18, 2026) that Bland handles 'more than 3.5 million calls per week' and 'over 175 million AI phone calls in the past year', and to CNBC that ElevenLabs has $500M ARR and an $11B valuation.  
+  Source: https://enterprisedna.co/resources/stats/voice-ai/
+- (high, as of 2026-09-03) Bland pricing: Start $0.14/min (no platform fee, 10 concurrent calls, 100 calls/day cap); Build $0.12/min + $299/mo (50 concurrent, 2,000/day); Scale $0.11/min + $499/mo (100 concurrent, 5,000/day); Enterprise custom with unlimited daily calls. All plans bundle LLM, real-time transcription, and premium voices with 'no token charges'. Transfer time billed $0.05/$0.04/$0.03 per min. Enterprise offers on-prem/VPC and a 'dedicated orchestration server'.  
+  Source: https://www.bland.ai/pricing
+- (high, as of 2026-09-03) Bland homepage claims 400ms latency (vs '1,240ms' stated industry average), '639,165,787 calls resolved to date', 'every model custom-made for phone calls, your data never goes through third parties', 'running entirely on your own infrastructure', and self-hosted/on-prem deployments for sensitive workloads with US/EU/APAC data residency.  
+  Source: https://www.bland.ai/
+- (medium, as of 2026-04-17) CloudTalk's Bland pricing guide (updated April 17, 2026) lists Bland at '$0.09 per minute, billed per second' with $299–$499 monthly tiers; search-result summaries state Bland charged everyone $0.09/min before December 2025 and moved to plan-dependent $0.11–$0.14/min afterward.  
+  Source: https://www.cloudtalk.io/blog/bland-ai-pricing/
+- (low, as of 2026-05-14) Techsy comparison (May 14, 2026) reports measured P50 turn latency: Retell ~600–620ms (P95 1.4–1.8s), Vapi tuned ~500–700ms (P95 1.2–1.9s), Bland ~700–900ms (P95 1.6–2.4s); time-to-first-audio Retell ~400ms, Vapi ~350ms, Bland ~500ms; states Bland has no bring-your-own-model option and that switching from GPT-4o-mini to Claude Opus 4.7 adds ~200ms regardless of platform.  
+  Source: https://techsy.io/en/blog/retell-ai-vs-vapi-vs-bland
+- (high, as of 2026-09-03) LiveKit Cloud pricing: Build free (1,000 agent-session minutes, 5 concurrent agent sessions, 5 inference concurrency, $2.50 inference credits); Ship $50/mo (5,000 min, 20 sessions, 20 inference concurrency, $5 credits); Scale $500/mo (50,000 min, 600 sessions, 50 inference concurrency, $50 credits); overage $0.01 per agent-session minute; inbound telephony $0.01/min after included minutes.  
+  Source: https://livekit.com/pricing
+- (high, as of 2026-09-03) LiveKit Inference LLM prices per 1M tokens (input/cached/output): Gemma 4 31B (LiveKit-hosted) $0.40/$0.20/$1.20; GPT-4o mini $0.15/$0.075/$0.60; GPT-4o $2.50/$1.25/$10; GPT-5 $1.25/$0.125/$10; GPT-5.5 $10/$1/$45; Gemini 3.7 Flash $0.75/$0.075/$3.75; Gemini 3.1 Flash Lite $0.25/$0.025/$1.50; DeepSeek-V4 Pro (via Baseten) $1.74/$0.15/$3.48. STT: Deepgram Flux $0.0065/min, Nova-3 $0.0048–$0.0058/min, Cartesia Ink 2 $0.0090/min. TTS per 1M chars: Aura-2 $30, Cartesia Sonic 3 $50, Inworld TTS 1.5 Max $35, Deepgram Flux TTS $0.  
+  Source: https://livekit.com/pricing/inference
+- (high, as of 2026-07-02) LiveKit blog (July 2, 2026): Gemma 4 31B (full-precision) served on LiveKit's own GPUs behind SGLang with speculative decoding achieves 192ms TTFT (~100ms warm) and 354ms time-to-first-sentence on production-shaped prompts; LiveKit states it reserves 'more headroom than a throughput-maximized deployment would' to minimize queueing, accepting higher per-request cost.  
+  Source: https://livekit.com/blog/latency-optimized-inference-gemma-4-on-livekit
+- (high, as of 2026-09-03) LiveKit docs: 'Gemma 4 31B is the recommended default LLM. It's a latency-optimized, open-weight model served on LiveKit's infrastructure'; all other Inference LLMs (OpenAI/Azure, Google Gemini, DeepSeek-V4 Pro and Kimi K2.6 via Baseten, Grok via xAI) are routed to external providers; 20+ BYO plugins including Anthropic, Groq, Mistral, Ollama, Bedrock.  
+  Source: https://docs.livekit.io/agents/models/llm/
+- (high, as of 2026-09-03) LiveKit Inference product page advertises 'over 50 different voice AI models', billing 'LLM by tokens, STT by duration, and TTS by characters', and claims to 'reduce end-to-end latency with global co-location of agents and models, dynamic routing, and provisioned LLM capacity'.  
+  Source: https://livekit.com/products/inference
+- (high, as of 2026-09-03) livekit/agents GitHub: ~14,000 stars, Apache-2.0, ~3,928 commits on main. pipecat-ai/pipecat GitHub: ~15,100 stars, BSD-2-Clause, listing 28 LLM providers, 21 STT providers, 32 TTS providers.  
+  Source: https://github.com/pipecat-ai/pipecat
+- (high, as of 2026-09-03) Pipecat Cloud (Daily) pricing: agent-1x $0.01/min (0.5 vCPU/1GB), agent-2x $0.02/min, agent-3x $0.03/min; reserved instances $0.0005/$0.001/$0.0015 per min; Daily WebRTC 1:1 voice free; PSTN $0.018/min; SIP $0.003–$0.02/min; SIP refer $0.20/transfer; 'unlimited' concurrency; third-party LLM/STT/TTS billed directly by the provider (80+ integrations); enterprise billing available for bundled inference.  
+  Source: https://www.daily.co/pricing/pipecat-cloud/
+- (low, as of 2026-09-03) Search-result summary: Pipecat Cloud became generally available January 2026 and offers graduated volume discounts down to $0.0015/min at 50M+ minutes/month.  
+  Source: https://www.daily.co/pricing/pipecat-cloud/
+- (high, as of 2026-09-03) Deepgram Voice Agent API pricing (rates shown 'through September 12, 2026'): Standard PAYG $0.056/min, Growth $0.051/min; Custom BYO-LLM PAYG $0.050/min, Growth $0.041/min (same for BYO LLM+TTS); Advanced tier PAYG $0.122/min, Growth $0.110/min; Flux TTS free in Voice Agent through 9/12/2026 then $0.045/1k chars; Aura-2 $0.030/1k chars; Flux STT $0.0065/min; Nova-3 $0.0048 (mono)/$0.0058 (multi) per min. Product page and GA post headline the bundle at '$4.50/hour' (=$0.075/min) with 'built-in rate reductions for BYOM'.  
+  Source: https://deepgram.com/pricing
+- (high, as of 2026-09-03) Deepgram Voice Agent supported LLMs: OpenAI (gpt-4o-mini Standard tier through gpt-5.6-terra Advanced), Anthropic (claude haiku-4-5 Standard through sonnet-5 Advanced), Google (gemini-3.5-flash Standard, gemini-3-pro-preview Advanced), NVIDIA nemotron-3-nano-30B-A3B, Groq openai/gpt-oss-20b, AWS Bedrock. Deepgram manages endpoints for OpenAI/Anthropic/Google/NVIDIA; Groq and Bedrock require a customer endpoint/credentials; custom OpenAI-compatible gateways supported; providers can be listed as an ordered failover array.  
+  Source: https://developers.deepgram.com/docs/voice-agent-llm-models
+- (high, as of 2026-09-03) Deepgram concurrency limits: Voice Agent API PAYG 'up to 45 concurrent connections', Growth 60 (North America; 45 EU/AU), Enterprise 'starting at 100'; streaming STT PAYG 150, Growth 225 (NA), Enterprise 300+.  
+  Source: https://developers.deepgram.com/reference/api-rate-limits
+- (high, as of 2026-09-03) Deepgram Voice Agent GA post: Aura-2 TTS sub-200ms time-to-first-byte; orchestration 'handled natively within the runtime'; claims 24% cheaper than ElevenLabs and 75% cheaper than OpenAI Realtime API; no end-to-end ms figure given.  
+  Source: https://deepgram.com/learn/voice-agent-api-generally-available
+- (high, as of 2026-09-03) Deepgram 'platform tax' article (2026) characterizes Vapi as 'published orchestration rate; components pass through', Retell as 'voice infrastructure rate; LLM and telephony separate', Bland as 'bundled agent rate with LLM, STT, TTS included', and states 'You'll pay the LLM separately on both pass-through models, and it's usually the largest line' (no percentage given).  
+  Source: https://deepgram.com/learn/voice-agent-platform-tax-true-cost
+- (high, as of 2026-09-03) Cartesia pricing: Free $0 (20K credits, 2 TTS concurrent, 8 STT concurrent, 8 concurrent calls), Pro $5/mo (100K credits, 3/12/12), Startup $49/mo (1.25M credits, 5/20/20), Scale $299/mo (8M credits, 15/60/60); Voice agents billed $0.06 per minute of call duration plus $0.014/min telephony with a Cartesia number; 1 credit per TTS character.  
+  Source: https://cartesia.ai/pricing
+- (high, as of 2026-09-03) Cartesia docs: Sonic 3.5 TTS 'streams the first byte of audio in about 90ms' ('sub-90ms latency'); Ink 2 is a streaming STT model with native turn detection. Cartesia Line is a managed auto-scaling runtime that uses Ink and Sonic and lets developers 'connect any LLM' via custom code; Line docs name no hosted LLM.  
+  Source: https://docs.cartesia.ai/line/introduction
+- (low, as of 2026-09-03) Search-result summaries: Cartesia Sonic 3 claims 90ms time-to-first-audio (40ms on Turbo); third-party measured ~166–190ms real-world; Sonic 3.5 GA May 2026; Sonic 3.6 (August 2026) supports 44 languages/61 locales.  
+  Source: https://invideo.io/blog/cartesia-sonic-ai-voice/
+- (high, as of 2026-09-03) ElevenAgents pricing: $0.080 per additional call minute on all plans; burst pricing $0.160/min when exceeding workspace concurrency (up to 3x); text messages $0.003; included minutes/concurrency: Free 15/4, Starter 75/6, Creator 275/10, Pro 1,238/20, Scale 3,738/30, Business 12,375/40; 'The LLM model and any telephony are billed separately on top, based on usage'; Enterprise custom with elevated concurrency.  
+  Source: https://elevenlabs.io/pricing/agents
+- (high, as of 2026-09-03) ElevenLabs agents LLM docs list ElevenLabs-hosted models Qwen3.6-35B-A3B and Qwen3.5-397B-A17B alongside Google Gemini (2.5 Flash through 3.7 Flash, 3.1 Pro Preview), OpenAI (GPT-4o/4o Mini, 4.1 family, GPT-5 through 5.6 Sol/Terra/Luna), and Anthropic (Claude Haiku 4.5, Sonnet 4.5/4.6/5, Opus 4.7/4.8); no per-model prices shown, users are directed to provider pricing; custom LLM endpoint supported.  
+  Source: https://elevenlabs.io/docs/agents-platform/customization/llm
+- (high, as of 2026-09-03) ElevenLabs custom LLM must expose an OpenAI-compatible Chat Completions (/v1/chat/completions) or Responses (/v1/responses) endpoint returning SSE; docs recommend 'buffer words' (a partial response ending in '... ') to cover slow LLMs. Docs do not state who pays LLM cost when a custom endpoint is used.  
+  Source: https://elevenlabs.io/docs/agents-platform/customization/llm/custom-llm
+- (high, as of 2026-09-03) ElevenLabs cost-optimization doc: silent periods in agent calls 'are billed at 5% of the usual per minute rate'.  
+  Source: https://elevenlabs.io/docs/agents-platform/customization/llm/optimizing-costs
+- (high, as of 2026-09-03) ElevenLabs agents page claims '10M+ conversations per week', an LLM-agnostic design ('bring your own model' or 'call a frontier model via API') plus 'hosted, domain-tunable models', 15 free minutes, and channels including telephony, web, WhatsApp, SMS; enterprise logos include Twilio, Cisco, Nvidia, Salesforce, Deutsche Telekom.  
+  Source: https://elevenlabs.io/agents
+- (low, as of 2026-09-03) Search-result summary of secondary guides: ElevenLabs agent minute tiers quoted as Standard $0.08/min, Turbo $0.10/min, Premium (gpt-4o + Flash v2.5) $0.12/min — this tiering does not appear on the current pricing page, which shows a flat $0.08 with LLM separate.  
+  Source: https://www.cloudtalk.io/blog/elevenlabs-pricing/
+- (high, as of 2026-09-03) Ultravox Realtime pricing: $0.05/min after 30 free minutes; Pay-as-you-go hard cap 'up to 5 concurrent calls'; Pro $100/month with no hard concurrency limit; Enterprise custom; SIP 0.5¢/min; Threads API $2.00/1M uncached input, $15.00/1M output, cached input free.  
+  Source: https://www.ultravox.ai/pricing
+- (high, as of 2025-12-04) Ultravox v0.7 (Dec 4, 2025): speech-native model whose primary backbone is GLM 4.6 (355B params, 160 experts/layer); v0.6 used Llama 3.3 70B; Gemma3 variants continue, Qwen3 deprecated; Big Bench Audio 91.8% (97% with thinking); open weights at fixie-ai/ultravox-v0_7-glm-4_6; ~20% inference speedup on 'dedicated infrastructure'; $0.05/min includes ElevenLabs and Cartesia voices. No TTFT/ms latency figures published.  
+  Source: https://www.ultravox.ai/blog/introducing-ultravox-v0-7-the-world-s-smartest-speech-understanding-model
+- (high, as of 2026-09-03) fixie-ai/ultravox GitHub: MIT license; architecture is an audio encoder plus multimodal projector into an open-weight LLM (backbones Llama 3.3 70B default, Mistral, Gemma; 8B variant on HF); training v0.4 took 2–3 hours on 8xH100 for 14K steps; no TTFT or tokens/sec published.  
+  Source: https://github.com/fixie-ai/ultravox
+- (high, as of 2026-09-03) OpenAI Realtime pricing per 1M tokens: gpt-realtime-2.1 and gpt-realtime-2 audio $32 input / $0.40 cached / $64 output, text $4 / $0.40 / $24; gpt-realtime-2.1-mini audio $10 / $0.30 / $20, text $0.60 / $0.06 / $2.40; gpt-realtime-1.5 text output $16.  
+  Source: https://developers.openai.com/api/docs/pricing
+- (high, as of 2026-09-03) OpenAI Realtime cost guide: user audio is 1 token per 100ms (600 tokens/min), assistant audio 1 token per 50ms (1,200 tokens/min); prompt caching is supported; OpenAI advises measuring token usage in the Realtime Playground rather than publishing per-minute estimates. Derived: continuous assistant speech on gpt-realtime-2.1 = 1,200 × $64/1M = ~$0.077/min; continuous user speech uncached = ~$0.019/min.  
+  Source: https://developers.openai.com/api/docs/guides/realtime-costs
+- (high, as of 2026-09-03) OpenAI Realtime guide: transports are WebRTC (browser/mobile), WebSocket (server media pipelines), and SIP (telephony); models gpt-realtime-2.1 (voice agents), gpt-realtime-translate, gpt-live-transcribe with 'controllable latency'; no session-duration or concurrency limits stated on the page.  
+  Source: https://developers.openai.com/api/docs/guides/realtime
+- (medium, as of 2026-08-17) HackerNoon analysis (July 13, 2026, updated Aug 17) of ~4,000 measured Realtime sessions: gpt-realtime-2.1 ~$0.06–$0.11/min with caching, up to $0.46/min uncached; mini ~$0.02–$0.05/min with caching, up to $0.18/min uncached; 'output audio is the floor' at ~$0.077/min on the flagship.  
+  Source: https://hackernoon.com/openai-realtime-api-pricing-in-2026-real-world-data-from-4000-measured-sessions
+- (high, as of 2026-09-03) Gemini API pricing (Live/native audio): gemini-2.5-flash-native-audio-preview-12-2025 text input $0.50, audio input $3.00, audio output $12.00 per 1M tokens; gemini-3.1-flash-live-preview text input $0.75, audio input $3.00 (or $0.005/min), audio output $12.00 (or $0.018/min); gemini-3.5-live-translate-preview input $3.50 ($0.0053/min audio), output $21.00 ($0.0315/min audio). Derived: Gemini Live audio-out ~$0.018/min vs OpenAI gpt-realtime-2.1 ~$0.077/min.  
+  Source: https://ai.google.dev/gemini-api/docs/pricing
+- (high, as of 2026-09-03) Gemini Live API docs: WebSocket (WSS) protocol; audio input raw 16-bit PCM 16kHz, output 24kHz; 70 languages; the overview and rate-limits pages fetched do not state Live API concurrent-session limits or latency figures.  
+  Source: https://ai.google.dev/gemini-api/docs/live
+- (high, as of 2026-09-03) Sesame CSM (GitHub, released March 13, 2025): speech generation model with a Llama-3.2-1B backbone and a smaller audio decoder producing Mimi RVQ codes; takes text plus audio context; Apache-2.0; requires CUDA GPU. Sesame's website (2026) offers a personal-agent mobile preview and eyewear 'Coming 2027' and lists no developer API or pricing.  
+  Source: https://github.com/SesameAILabs/csm
+- (high, as of 2026-09-03) Kyutai Moshi (GitHub): 7B-parameter Temporal Transformer plus a Depth Transformer; Mimi codec at 12.5 Hz / 1.1 kbps; theoretical latency 160ms (80ms frame + 80ms acoustic delay), 'as low as 200ms on an L4 GPU'; PyTorch needs ~24GB GPU memory; code MIT/Apache-2.0, weights CC-BY 4.0; no concurrency claims.  
+  Source: https://github.com/kyutai-labs/moshi
+- (high, as of 2026-09-03) Kyutai Unmute (GitHub, MIT): cascaded STT → text LLM (default Gemma 3 1B) → TTS over websockets; minimum 1 GPU with 16GB VRAM, 3+ GPUs recommended (one per service); GPU memory LLM 6.1GB, STT 2.5GB, TTS 5.3GB; TTS latency ~750ms on a single L40S falling to ~450ms with services on separate GPUs; no users-per-GPU figure.  
+  Source: https://github.com/kyutai-labs/unmute
+- (high, as of 2026-09-03) Kyutai delayed-streams-modeling (GitHub): STT models kyutai/stt-1b-en_fr (~1B, 0.5s delay) and kyutai/stt-2.6b-en (~2.6B, 2.5s delay); Rust server 'on a L40S GPU, we can serve 64 simultaneous connections at a real-time factor of 3x' and 'a H100 can process 400 streams in real-time'; weights CC-BY 4.0. This is the only explicit vendor-published streams-per-GPU figure found (for STT, not LLM).  
+  Source: https://github.com/kyutai-labs/delayed-streams-modeling
+- (high, as of 2026-09-03) kyutai.org lists Moshi, Unmute, Pocket TTS (100M-param multilingual TTS running on CPU faster than real-time), Hibiki-Zero (real-time speech-to-speech translation), Helium 1 (2B LLM), and MIRA; no commercial API or pricing is published.  
+  Source: https://kyutai.org/
+- (high, as of 2025-12-19) Rime pricing (Dec 19, 2025): Arcana $40/1M characters (Starter) or $30 (Growth); Mist $30/$20 per 1M chars; $200 in free credits; Starter 5 concurrent generations, Growth 20, Enterprise 'up to unlimited'; Enterprise supports cloud, VPC, or on-prem deployment at negotiated per-character rates. Rime converts these to roughly $0.02–$0.04/min.  
+  Source: https://www.rime.ai/resources/introducing-new-pricing
+- (high, as of 2026-02-04) Rime Arcana v3 (Feb 4, 2026): 120ms on-prem model latency, ~200ms cloud TTFB; 'single machine supports 100+ concurrent generations' with ORCA headers for autoscaling; bilingual EN/ES fast variant and 10-language variant. Search-result summary: cloud Arcana requests switch to the Coda model on Aug 15, 2026; Mist v2 sub-150ms TTFB on-prem, ~225ms on cloud dedicated endpoints.  
+  Source: https://www.rime.ai/resources/arcana-v3
+- (high, as of 2026-09-03) Hume EVI pricing: $0.07/min (Starter 40 min, Creator 200 min), $0.06/min (Pro 1,200 min), $0.05/min (Scale 5,000 min), $0.04/min (Business 12,500 min); concurrent connections 1/5/5/10/20/30, Enterprise custom. EVI uses Hume's own 'speech-language model' with optional supplemental LLMs from Anthropic, OpenAI, Google, Fireworks; EVI 3 is English-only and standalone, EVI 4-mini is multilingual and requires a supplemental LLM.  
+  Source: https://www.hume.ai/pricing
+- (high, as of 2026-07-08) Inworld worked cost model (July 8, 2026) for its Growth-tier stack: STT $0.001667/min, LLM $0.000198/min (Inworld-served Gemma 4 26B), TTS $0.005/min, total raw $0.00686/min; 'TTS dominates every cascaded stack in this model: 70 to 73 percent of raw component cost'; LLM under 5%; comparison stacks: Deepgram+Groq ~$0.007/min, ElevenLabs+OpenAI ~$0.029/min, gpt-realtime-2.1 ~$0.091/min; telephony adds $0.014/min; managed platforms add $0.05–$0.163/min.  
+  Source: https://inworld.ai/resources/voice-agent-cost-per-minute-2026
+- (high, as of 2026-09-03) Inworld pricing page: LLMs billed 'at cost' (no per-token rates listed for Inworld-served Gemma); STT $0.15/hr on-demand down to $0.10/hr; TTS-2 $25/1M chars on-demand down to $12.50 (Growth) and 'as low as $5' enterprise; concurrent API requests 5 (On-Demand) to 500 (Growth).  
+  Source: https://inworld.ai/pricing
+- (medium, as of 2026-05-31) Inworld 'fastest LLM inference API' post (May 2026): Fireworks 350ms TTFT (case study, adaptive speculative decoding); Cerebras ~2,000 tok/s on Llama Scout; SambaNova 600+ tok/s on gpt-oss-120b; Inworld first-party Gemma 4 31B on B200 with vLLM+FlashInfer at ~1.7s p50 TTFT and 27,000 aggregate tok/s (throughput-oriented config); states 'There is no single fastest LLM inference API for every workload in 2026'.  
+  Source: https://inworld.ai/resources/fastest-llm-inference-api
+- (high, as of 2026-08-26) smallest.ai cost breakdown (Aug 26, 2026) example at 50,000 min/month: STT $0.016/min, LLM $0.020/min, TTS $0.012/min, telephony $0.010/min, orchestration $0.008/min, total $0.066/min (derived LLM share ~30%); states pay-as-you-go voice agents range '$0.05 and $0.99 per minute' and LLM inference is 'often the most unpredictable expense'.  
+  Source: https://smallest.ai/blog/what-are-the-true-costs-associated-with-operating-a-voice-agent-at-scale
+- (high, as of 2025-11-17) Twilio latency guide (Nov 17, 2025) budget targets/upper limits: STT 350/500ms; LLM time-to-first-token 375/750ms; TTS TTFB 100/250ms; platform turn gap 885/1,100ms; mouth-to-ear turn gap 1,115/1,400ms; recommends GPT-4.1 over GPT-4o and 'lightweight conversational models optimized for latency'.  
+  Source: https://www.twilio.com/en-us/blog/developers/best-practices/guide-core-latency-ai-voice-agents
+- (high, as of 2026-01-12) Hamming latency guide (Jan 12, 2026): typical vs optimized stage ranges — STT 200–400ms (100–200), turn detection 200–800ms (200–400), LLM inference 300–1000ms (200–400), TTS TTFB 150–500ms (100–250), network 100–300ms; end-to-end typical 1,000–3,200ms, optimized target 670–1,450ms; '<800ms' classed fast, 1.4–1.7s 'industry median'; fast-tier LLMs cited GPT-4o-mini ~400ms, Gemini 2.5 Flash ~400ms, Claude 3.5 Haiku 360ms.  
+  Source: https://hamming.ai/resources/voice-ai-latency-whats-fast-whats-slow-how-to-fix-it
+- (low, as of 2026-09-03) Forasoft LiveKit guide (2026): all-in per-minute stacks Budget $0.053, Balanced $0.083 (Deepgram Nova-3 + GPT-4o-mini + Cartesia), Premium $0.180; recommends GPT-4o-mini as primary LLM (150–250ms first-token) with Claude 3.5 Haiku / Gemini 2.5 Flash alternatives; OpenAI Realtime noted at ~88% tool-call reliability vs 95% for GPT-4o-mini; sub-500ms end-to-end 'achievable', 1.4–1.7s industry median.  
+  Source: https://www.forasoft.com/learn/livekit-for-ai-agents-guide
+- (medium, as of 2026-03-11) Spheron GPU sizing post (Mar 11, 2026) estimates concurrent voice sessions per GPU with LLM+TTS co-located: RTX 5090 with 8B INT4 ~6; H100 PCIe with 8B INT4 ~14; H100 PCIe with 11B FP16 ~8; 2x H100 with Llama 3.3 70B FP16 ~10; assumes 500–2,000 tokens of accumulated context; production 'typically run at 50–70% of theoretical max'.  
+  Source: https://www.spheron.network/blog/voice-ai-gpu-infrastructure/
+- (low, as of 2026-04-28) Spheron speech-to-speech post (Apr 28, 2026) VRAM-based estimates: Moshi (16–20GB FP16) 3–4 sessions on H100 80GB, 7–8 on H200; Sesame CSM-1B (6–8GB) 9–11 on H100; Moshi TTFA p50 ~200ms single session, p95 350–500ms at 3–4 sessions; cascaded pipeline p95 'typically lands between 400–800ms' at production load; notes systematic concurrency benchmarks 'are not yet widely published'.  
+  Source: https://www.spheron.network/blog/speech-to-speech-gpu-cloud-moshi-sesame-csm-hertz-dev/
+- (low, as of 2026-07-28) AutoInterview AI scaling post (Jul 14, 2026) capacity matrix: self-hosted Llama 3.1 8B ~30 concurrent requests per GPU instance (GPU type unspecified); Whisper-large-v3 ~50 concurrent streams and Cartesia Sonic-2 ~100 streams on an A10G 24GB; cloud GPT-4.1-mini ~200 concurrent requests.  
+  Source: https://www.autointerviewai.com/blog/deploy-scale-voice-ai-agents-cloud-production-2026
+- (low, as of 2026-09-03) Search-result summary (gpu-mart guide): Llama-3-70B with GQA at 32K context in FP16 needs ~10.7GB KV cache per session, cited as the main limiter on concurrent sessions per GPU.  
+  Source: https://www.gpu-mart.com/guides/ai-agent-gpu-guide
+- (high, as of 2026-09-03) Production/default LLM sizes observed across vendors: LiveKit default Gemma 4 31B (self-hosted); Inworld serves Gemma 4 26B; ElevenLabs hosts Qwen3.6-35B-A3B and Qwen3.5-397B-A17B; Deepgram offers NVIDIA nemotron-3-nano-30B-A3B and gpt-oss-20b (via Groq) alongside frontier APIs; Ultravox runs on GLM 4.6 (355B MoE) after Llama 3.3 70B; Kyutai Unmute defaults to Gemma 3 1B; Moshi is 7B; Sesame CSM is 1B; Vapi docs example uses gpt-4.1-mini; guides recommend GPT-4o-mini/GPT-4.1/Gemini Flash/Claude Haiku tiers.  
+  Source: https://docs.livekit.io/agents/models/llm/
+- (high, as of 2026-09-03) Baseten homepage advertises real-time audio streaming for 'AI phone calls, voice agents, translation', 'lowest time to first byte' TTS, a ClickUp case of 'sub-300ms transcription', and Whisper Large V3 in its model library; no sessions-per-GPU or voice-LLM-specific figures. Cerebras pricing page cites 'up to 30x faster inference than GPU systems' and a $10 Developer tier but no per-token rates; Groq pricing page fetched showed no per-token rates.  
+  Source: https://www.baseten.co/
+- (low, as of 2026-04-23) o1innovate comparison (Apr 23, 2026) from an operator running '50,000+ calls per week across 20+ client tenants' reports typical warm-path turn latency Bland ~700–1200ms, Retell ~400–700ms, Vapi ~500–900ms (tunable).  
+  Source: https://o1innovate.com/resources/bland-vs-retell-vs-vapi
+- (medium, as of 2026-05-19) Cekura Retell pricing analysis (May 19, 2026) reports Retell total real-world cost of $0.13–$0.31/min and LLM line item ranging $0.003–$0.160/min by model; does not state an explicit LLM percentage share.  
+  Source: https://www.cekura.ai/blogs/retell-ai-pricing-per-minute
+- (low, as of 2026-09-03) Search-result summaries of secondary pricing guides put typical all-in voice-agent minutes at: Vapi $0.10–$0.40/min, Retell $0.13–$0.31/min, ElevenLabs $0.085–$0.19/min, LiveKit $0.0435–$0.3135/min, and industry-wide $0.05–$0.30/min.  
+  Source: https://www.cekura.ai/blogs/vapi-ai-pricing
+
+## Unknowns
+
+- No vendor page fetched advertises 'sessions per GPU' or 'conversation-aware'/'session-aware' LLM serving for voice; the only explicit vendor streams-per-GPU numbers found are Kyutai STT (64 on L40S, 400 on H100) and Rime TTS (100+ concurrent generations per machine). LiveKit's 'provisioned LLM capacity' and over-provisioned headroom statement is the closest LLM-side claim. Web search budget was exhausted before a dedicated search on this term could run.
+- Whether Retell charges its per-minute LLM fee when a customer uses the custom-LLM WebSocket (docs are silent).
+- ElevenLabs per-model LLM per-minute prices (the /llm-cost and /llm/models doc pages returned 404; the LLM doc defers to provider pricing) and who bears LLM cost with a custom LLM endpoint.
+- OpenAI Realtime API maximum session duration and concurrency/rate limits (not on the fetched guide or costs pages).
+- Gemini Live API concurrent-session limits and session duration (not on the fetched live or rate-limit pages).
+- Ultravox Realtime published TTFT/turn-latency figures (site shows a 'Speed vs Intelligence' chart without ms values).
+- What LLMs Bland's 'custom-made for phone calls' models are (self-trained vs fine-tuned open weights), their sizes, and Bland's add-on price per extra concurrent call.
+- Which LLM(s) Retell runs by default and whether any are self-hosted; Retell's per-model prices imply pass-through to frontier APIs but the site does not say.
+- Cartesia Line: whether any LLM is hosted by Cartesia and Line's concurrency/latency figures beyond the $0.06/min agent rate.
+- Primary press releases behind Retell's '50M calls/month, $50M ARR' (GlobeNewswire) and Bland's '3.5M calls/week, 175M calls/year' (PR Newswire) were not fetched; figures come from a secondary stats page.
+- Deepgram Voice Agent Standard/Advanced rates after the September 12, 2026 promotional period.
+- Per-token pricing and TTFT for Groq and Cerebras on small models (pricing pages fetched did not expose per-model rates).
+- Any published survey of which LLM sizes dominate production voice-agent traffic; only vendor defaults and guide recommendations were found.
+- Sesame's commercial/developer API status and any 2026 model releases beyond CSM-1B (site lists only consumer preview and 2027 eyewear).
+- Kyutai commercial API pricing or hosted offering (none published).
+- Pipecat Cloud volume-discount schedule (secondary mention only) and Pipecat/LiveKit agents latest release versions.
+- Context for Inworld's 1.7s p50 TTFT figure on Gemma 4 31B (appears to be a throughput-maximized configuration, not a latency-optimized one).

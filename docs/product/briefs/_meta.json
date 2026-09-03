@@ -1,83 +1,83 @@
 {
  "B": {
+  "chars": 23689,
+  "founder_decisions": 9,
   "kind": "draft",
   "name": "Conversation-native inference for voice agents",
-  "one_line": "Sessions-per-GPU at p95 TTFT <= 300 ms as the product metric, delivered by session-semantic KV residency (predictive pinning + contiguous pinned-CPU restore) as a vLLM connector plus session gateway, sold hosted and BYOC to voice platforms and their customers; measured 1.5x on one seed/L40S/7B, which sits in the repo's own pre-registered kill band until 2x replicates.",
   "numeric_claims": 64,
-  "unproven": 13,
-  "founder_decisions": 9,
-  "chars": 23689
- },
- "D": {
-  "kind": "draft",
-  "name": "Document-VLM inference provider",
-  "one_line": "An OpenAI-compatible endpoint serving an open VLM (Qwen2.5-VL-7B measured; Qwen3-VL-8B vendor-reported) at a measured document accuracy/cost operating point, billed per page and sold on a same-pages rerunnable benchmark; the 0.925-vs-0.880 DocVQA seed is real but relaxed-match on 200 pages, the \"~40x cheaper\" is a list-price model whose Qwen token count contradicts the repo's own measurement (corrected modeled ratio ~9-10x), and the in-model pruning moat sprint has no result.",
-  "numeric_claims": 53,
-  "unproven": 7,
-  "founder_decisions": 8,
-  "chars": 24082
+  "one_line": "Sessions-per-GPU at p95 TTFT <= 300 ms as the product metric, delivered by session-semantic KV residency (predictive pinning + contiguous pinned-CPU restore) as a vLLM connector plus session gateway, sold hosted and BYOC to voice platforms and their customers; measured 1.5x on one seed/L40S/7B, which sits in the repo's own pre-registered kill band until 2x replicates.",
+  "unproven": 13
  },
  "C": {
+  "chars": 24713,
+  "founder_decisions": 8,
   "kind": "draft",
   "name": "Session-aware serving engine: one residency scheduler for every idle regime (hosted + BYOC)",
-  "one_line": "A residency scheduler inside vLLM/SGLang (stock KV-connector hooks) plus a session router and control plane that decides per session, from predicted return time, context size and per-tier break-evens, whether KV stays in HBM, moves to RAM/NVMe, or is dropped; sold as a hosted session-addressed endpoint and as BYOC software/optimization engagements for voice and agent platforms and inference providers.",
   "numeric_claims": 48,
-  "unproven": 9,
+  "one_line": "A residency scheduler inside vLLM/SGLang (stock KV-connector hooks) plus a session router and control plane that decides per session, from predicted return time, context size and per-tier break-evens, whether KV stays in HBM, moves to RAM/NVMe, or is dropped; sold as a hosted session-addressed endpoint and as BYOC software/optimization engagements for voice and agent platforms and inference providers.",
+  "unproven": 9
+ },
+ "D": {
+  "chars": 24082,
   "founder_decisions": 8,
-  "chars": 24713
+  "kind": "draft",
+  "name": "Document-VLM inference provider",
+  "numeric_claims": 53,
+  "one_line": "An OpenAI-compatible endpoint serving an open VLM (Qwen2.5-VL-7B measured; Qwen3-VL-8B vendor-reported) at a measured document accuracy/cost operating point, billed per page and sold on a same-pages rerunnable benchmark; the 0.925-vs-0.880 DocVQA seed is real but relaxed-match on 200 pages, the \"~40x cheaper\" is a list-price model whose Qwen token count contradicts the repo's own measurement (corrected modeled ratio ~9-10x), and the in-model pruning moat sprint has no result.",
+  "unproven": 7
  },
  "E": {
+  "chars": 24197,
+  "founder_decisions": 9,
   "kind": "draft",
   "name": "Verifier-guided search inference for code (pass@16 quality at pass@4 cost)",
-  "one_line": "A Morph-style specialized provider for coding agents: send a prompt plus tests, an in-engine verify-abort-refill scheduler returns the first passing sample; measured 2.63x fewer decode tokens and 2.12x faster at identical pass@16 on HumanEval with an 8B model, with the repo's own 'buyer-replicable' verdict confronted via pre-registered gates.",
   "numeric_claims": 49,
-  "unproven": 8,
-  "founder_decisions": 9,
-  "chars": 24197
+  "one_line": "A Morph-style specialized provider for coding agents: send a prompt plus tests, an in-engine verify-abort-refill scheduler returns the first passing sample; measured 2.63x fewer decode tokens and 2.12x faster at identical pass@16 on HumanEval with an 8B model, with the repo's own 'buyer-replicable' verdict confronted via pre-registered gates.",
+  "unproven": 8
  },
  "F": {
+  "chars": 24432,
+  "founder_decisions": 10,
   "kind": "draft",
   "name": "Portable, persistent KV state layer for self-hosters (open-core infrastructure software)",
-  "one_line": "An Apache-2.0 vLLM/SGLang connector plus state store that makes session KV a durable, tenant-keyed, audited object that survives pod death and resumes on any replica with bit-identical output (proven at TP=1), with a commercial fleet control plane as the paid layer; speed parity vs re-prefill is a gate, not the headline.",
   "numeric_claims": 62,
-  "unproven": 9,
-  "founder_decisions": 10,
-  "chars": 24432
+  "one_line": "An Apache-2.0 vLLM/SGLang connector plus state store that makes session KV a durable, tenant-keyed, audited object that survives pod death and resumes on any replica with bit-identical output (proven at TP=1), with a commercial fleet control plane as the paid layer; speed parity vs re-prefill is a gate, not the headline.",
+  "unproven": 9
  },
  "H": {
+  "chars": 26006,
+  "founder_decisions": 8,
   "kind": "draft",
   "name": "Computer-use agent inference provider",
-  "one_line": "An OpenAI-compatible, hosted-or-BYOC endpoint for screenshot-heavy computer-use agents: an open VLM at a screenshot-sized visual-token budget (322 tokens per 1280x800 frame vs 1,105 on GPT-4o), exact-frame dedup, session-affinity prefix warmth and per-request savings telemetry, with the ~40x headline shown to be modeled, the 7.3x redundancy prize bounded at ~2.3x, no OSWorld/WebArena validation yet, and a backend that is stock vLLM flags.",
   "numeric_claims": 49,
-  "unproven": 8,
-  "founder_decisions": 8,
-  "chars": 26006
- },
- "J": {
-  "kind": "draft",
-  "name": "Preemptible-GPU inference made safe by portable session state",
-  "one_line": "Run long-lived agent sessions on spot GPUs by keeping every session's KV state portable off-instance, so a preemption becomes a bit-identical restore on another instance instead of a lost session; value is continuity and fleet capacity at 64k-128k+ context, not TTFT, and the deciding number (restore bandwidth from a tier that survives the instance) is unmeasured.",
-  "numeric_claims": 67,
-  "unproven": 7,
-  "founder_decisions": 7,
-  "chars": 23478
+  "one_line": "An OpenAI-compatible, hosted-or-BYOC endpoint for screenshot-heavy computer-use agents: an open VLM at a screenshot-sized visual-token budget (322 tokens per 1280x800 frame vs 1,105 on GPT-4o), exact-frame dedup, session-affinity prefix warmth and per-request savings telemetry, with the ~40x headline shown to be modeled, the 7.3x redundancy prize bounded at ~2.3x, no OSWorld/WebArena validation yet, and a backend that is stock vLLM flags.",
+  "unproven": 8
  },
  "I": {
+  "chars": 24665,
+  "founder_decisions": 9,
   "kind": "draft",
   "name": "Fast Parse: the Morph playbook on document-to-structure",
-  "one_line": "One specialized 2B-8B document-to-structure model (page image in; markdown + schema JSON out) served on a purpose-built vLLM path with visual-token budgeting, OCR-draft copy-speculation and constrained JSON decoding, priced per page \u2014 the Morph playbook applied to the one task where the repos hold a measured model-side result (Qwen2.5-VL-7B 0.925 vs GPT-4o 0.880 on DocVQA at 2.7x throughput).",
   "numeric_claims": 58,
-  "unproven": 9,
-  "founder_decisions": 9,
-  "chars": 24665
+  "one_line": "One specialized 2B-8B document-to-structure model (page image in; markdown + schema JSON out) served on a purpose-built vLLM path with visual-token budgeting, OCR-draft copy-speculation and constrained JSON decoding, priced per page \u2014 the Morph playbook applied to the one task where the repos hold a measured model-side result (Qwen2.5-VL-7B 0.925 vs GPT-4o 0.880 on DocVQA at 2.7x throughput).",
+  "unproven": 9
+ },
+ "J": {
+  "chars": 23478,
+  "founder_decisions": 7,
+  "kind": "draft",
+  "name": "Preemptible-GPU inference made safe by portable session state",
+  "numeric_claims": 67,
+  "one_line": "Run long-lived agent sessions on spot GPUs by keeping every session's KV state portable off-instance, so a preemption becomes a bit-identical restore on another instance instead of a lost session; value is continuity and fleet capacity at 64k-128k+ context, not TTFT, and the deciding number (restore bandwidth from a tier that survives the instance) is unmeasured.",
+  "unproven": 7
  },
  "K": {
+  "chars": 23748,
+  "founder_decisions": 10,
   "kind": "draft",
   "name": "SessionBench + Resident-Slot SLA (benchmark-first, Wafer-motion session serving)",
-  "one_line": "A benchmark-first company that publishes the sessions-per-GPU standard (SessionBench), ships the residency runtime that wins it, and sells warm session-slots with a stated retention window per slot-hour into voice and agent platforms that already price by concurrency \u2014 the Wafer engagements-plus-dedicated-endpoints motion applied to session-shaped serving, engine-neutral and upstream of candidates A/B/C.",
   "numeric_claims": 73,
-  "unproven": 10,
-  "founder_decisions": 10,
-  "chars": 23748
+  "one_line": "A benchmark-first company that publishes the sessions-per-GPU standard (SessionBench), ships the residency runtime that wins it, and sells warm session-slots with a stated retention window per slot-hour into voice and agent platforms that already price by concurrency \u2014 the Wafer engagements-plus-dedicated-endpoints motion applied to session-shaped serving, engine-neutral and upstream of candidates A/B/C.",
+  "unproven": 10
  }
 }

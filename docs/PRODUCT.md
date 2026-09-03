@@ -29,8 +29,7 @@
 | `docs/product/context/03-build-inventory.md` | every component in both repos, its real state, tests run |
 | `docs/product/context/04-conflicts.md` | 14 contradictions with reconciliations, and a superseded-claims list |
 | `docs/product/context/05-research-*.md` | external facts with URLs: Morph, Wafer, providers, caching, KV ecosystem, voice, agents, document AI, GPU pricing |
-| `docs/product/briefs/*.md` | the eleven candidate briefs, each fact-checked and revised |
-| `docs/product/synthesis/*.md` | comparison matrix, decision list, build sequences, completeness critique |
+| `docs/product/briefs/*.md` | the eleven candidate briefs, each fact-checked against the ledgers, attacked by a skeptic pass, and revised; `_meta.json` carries each brief's evidence grade and weeks-to-proof |
 
 ---
 

@@ -1,1 +1,3 @@
 runs/*.log
+runs/*.jsonl
+runs/summary.json

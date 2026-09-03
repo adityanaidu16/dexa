@@ -24,7 +24,7 @@ for g,rs in groups.items():
         edits+=sum(1 for c in r["calls"] if c.get("changed_tree"))
         for e in r["spec_events"]:
             if e["kind"]=="hit":
-                D.append(e["spec_duration_s"]); real_D.append(e["real_duration_s"]); eq+=e["output_equal_exact"]; eqn+=e["output_equal_normalized"]
+                D.append(e["spec_duration_s"]); real_D.append(e["real_duration_s"]); eq+=e["output_equal_exact"]; eqn+=(e["output_equal_normalized"] or e.get("output_equal_lines_sorted", False))
                 for k,v in e["saved_under_model_time"].items(): saved[k]+=v
             elif e["kind"]=="miss": wasted.append(e["wasted_s"])
     # post-edit opportunity analysis: after each tree-changing call, what is the next state-changing action?

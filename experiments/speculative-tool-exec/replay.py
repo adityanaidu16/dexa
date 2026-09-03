@@ -47,6 +47,9 @@ class Container:
     def tree_fingerprint(self):
         rc, o, _ = self.exec("git status --porcelain=v1 2>/dev/null | md5sum; git diff 2>/dev/null | md5sum", timeout=60)
         return o.strip()
+    def tree_status(self):
+        rc, o, _ = self.exec("git status --porcelain=v1 2>/dev/null | head -200", timeout=60)
+        return set(l for l in o.splitlines() if l.strip())
     def spec_start(self, cmd):
         wrapped = f"rm -f /tmp/spec.rc /tmp/spec.out; setsid bash -c {shlex.quote(cmd + '; echo $? > /tmp/spec.rc')} > /tmp/spec.out 2>&1 < /dev/null & echo $! > /tmp/spec.pid"
         rc, o, _ = self.exec(wrapped, timeout=30)
@@ -99,7 +102,7 @@ def replay_session(sess, inst, image, cname, model_times=(1.5, 6.6, 14.2, 26.2),
         rc, o = c.apply_patch(inst["patch"])
         rec["bug_patch_applied"] = (rc == 0); rec["notes"].append(o[:300])
         calls = parse_calls(sess["trajectory"])[:max_calls]
-        fp = c.tree_fingerprint()
+        fp = c.tree_fingerprint(); status = c.tree_status()
         last_test = None; pending = None   # pending: {cmd, t0}
         for i, call in enumerate(calls):
             name = call["name"]; a = call["args"]; cmd = (a.get("command") or "").strip() if name != "str_replace_editor" else None
@@ -118,7 +121,7 @@ def replay_session(sess, inst, image, cname, model_times=(1.5, 6.6, 14.2, 26.2),
                     same = norm(spec_out) == norm(outp)
                     same_sorted = sorted(norm(spec_out).splitlines()) == sorted(norm(outp).splitlines())   # stdout/stderr interleaving differs between capture paths
                     ev = {"i": i, "kind": "hit", "cmd": cmd, "match": "exact" if cmd.strip() == pending["cmd"].strip() else "canonical", "spec_duration_s": D, "real_duration_s": dt, "output_equal_normalized": same,
-                          "output_equal_exact": spec_out == outp, "output_equal_lines_sorted": same_sorted, "spec_rc": spec_rc, "real_rc": rc, "saved_under_model_time": {str(m): min(D, m) for m in model_times}}
+                          "output_equal_exact": spec_out == outp, "output_equal_lines_sorted": same_sorted, "spec_rc": spec_rc, "real_rc": rc, "edit_kind": pending.get("edit_kind"), "saved_under_model_time": {str(m): min(D, m) for m in model_times}}
                     if not same:
                         import difflib
                         ev["diff_sample"] = "\n".join(list(difflib.unified_diff(norm(spec_out).splitlines(), norm(outp).splitlines(), "spec", "real", lineterm="", n=0))[:40])[:3000]
@@ -129,7 +132,7 @@ def replay_session(sess, inst, image, cname, model_times=(1.5, 6.6, 14.2, 26.2),
                     continue
                 else:
                     c.spec_kill()
-                    rec["spec_events"].append({"i": i, "kind": "miss", "cmd": pending["cmd"], "next": entry["cmd"], "wasted_s": time.time() - pending["t0"]})
+                    rec["spec_events"].append({"i": i, "kind": "miss", "cmd": pending["cmd"], "next": entry["cmd"], "wasted_s": time.time() - pending["t0"], "edit_kind": pending.get("edit_kind")})
                     pending = None
             # --- execute the real call
             if name == "str_replace_editor":
@@ -144,10 +147,14 @@ def replay_session(sess, inst, image, cname, model_times=(1.5, 6.6, 14.2, 26.2),
                 nfp = c.tree_fingerprint()
                 changed = nfp != fp; fp = nfp
                 entry["changed_tree"] = changed
+                if changed:
+                    nstatus = c.tree_status(); added = nstatus - status; status = nstatus
+                    kinds = set(("created" if l.startswith("??") or l.startswith("A ") else "modified") for l in added) or {"modified"}
+                    entry["edit_kind"] = "created" if kinds == {"created"} else ("modified" if kinds == {"modified"} else "mixed")
                 if changed and last_test and not (cmd and same_cmd(cmd, last_test)) and rc in (0, None) or (changed and last_test and name == "str_replace_editor" and rc == 0):
                     # launch speculation
-                    t0 = c.spec_start(last_test); pending = {"cmd": last_test, "t0": t0}
-                    rec["spec_events"].append({"i": i, "kind": "launch", "cmd": last_test})
+                    t0 = c.spec_start(last_test); pending = {"cmd": last_test, "t0": t0, "edit_kind": entry.get("edit_kind")}
+                    rec["spec_events"].append({"i": i, "kind": "launch", "cmd": last_test, "edit_kind": entry.get("edit_kind")})
         if pending:
             c.spec_kill(); rec["spec_events"].append({"i": len(calls), "kind": "miss", "cmd": pending["cmd"], "next": "<end>", "wasted_s": time.time() - pending["t0"]})
     finally:

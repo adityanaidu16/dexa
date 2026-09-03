@@ -3,7 +3,6 @@
 S=/tmp/claude-0/-home-user-dexa/86b25b67-2276-559a-a54a-f598498ce4d8/scratchpad/traces
 cd /home/user/dexa/experiments/speculative-tool-exec
 IMAGES=(
- jyangballin/swesmith.x86_64.luozhouyang_1776_python-string-similarity.115acaac
  jyangballin/swesmith.x86_64.bottlepy_1776_bottle.a8dfef30
  jyangballin/swesmith.x86_64.pycqa_1776_flake8.cf1542ce
  jyangballin/swesmith.x86_64.project-monai_1776_monai.a09c1f08

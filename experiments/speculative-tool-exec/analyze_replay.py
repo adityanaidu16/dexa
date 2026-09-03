@@ -40,8 +40,14 @@ for g,rs in groups.items():
                 elif (nxt.get("testish") or nxt.get("spec")=="hit") and last_test and same_cmd(nxt["cmd"], last_test): opp["edit_then_same_test"]+=1
                 elif nxt.get("testish") or nxt.get("spec")=="hit": opp["edit_then_other_test"]+=1
                 else: opp["edit_then_other"]+=1
+    # policy variants from the same records: launch after any edit (measured) vs only after modifications of existing files
+    bykind=defaultdict(Counter)
+    for r in rs:
+        for e in r["spec_events"]:
+            if e["kind"] in ("hit","miss"): bykind[e.get("edit_kind") or "unknown"][e["kind"]]+=1
+    policy={k: {"launches": v["hit"]+v["miss"], "hits": v["hit"], "hit_rate": v["hit"]/(v["hit"]+v["miss"]) if (v["hit"]+v["miss"]) else None} for k,v in bykind.items()}
     n=len(rs)
-    out["by_framework"][g]={"post_edit_next_action": dict(opp), "post_edit_same_test_share": (opp["edit_then_same_test"]/sum(opp.values())) if sum(opp.values()) else None,"sessions":n,"calls":s["calls"],"tree_changing_calls":edits,"launches":s["launches"],"hits":s["hits"],"misses":s["misses"],
+    out["by_framework"][g]={"post_edit_next_action": dict(opp), "hit_rate_by_launching_edit_kind": policy, "post_edit_same_test_share": (opp["edit_then_same_test"]/sum(opp.values())) if sum(opp.values()) else None,"sessions":n,"calls":s["calls"],"tree_changing_calls":edits,"launches":s["launches"],"hits":s["hits"],"misses":s["misses"],
         "hit_rate_per_launch": (s["hits"]/s["launches"]) if s["launches"] else None,
         "launches_per_edit": (s["launches"]/edits) if edits else None,
         "sessions_with_at_least_one_hit": sessions_with_hit/n if n else None,

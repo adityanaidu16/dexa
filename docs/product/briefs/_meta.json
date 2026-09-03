@@ -237,6 +237,77 @@
   "unproven": 9,
   "weeks_to_proof": "~10 weeks to the first credible public proof at TP=1 (a Preemption Survival Score run on vllm bench serve + Mooncake traces vs vanilla, OffloadingConnector+S3 and LMCache 0.5.x layerwise, Llama-3.1-8B on A100 and H100, with KV-byte identity and greedy-divergence reported), assuming two senior engineers full-time, ~150-200 GPU-hours, no vLLM fork, and that the vLLM 0.28 port of the two pinned connectors (0.24.0 and 0.9.2) plus chunked-prefill/decode-block save and layer-pipelined async restore each take about a week. The draft's 6 weeks assumed TP>1 in one week against its own 10-day/60-multi-GPU-hour estimate; a TP=2/4 point adds 3-4 weeks and an MLA/hybrid model adds an unestimated amount."
  },
+ "G": {
+  "attacks": [
+   [
+    "serious",
+    "The architecture's 'stock vLLM, nothing replaced' claim rests on rebasing query positions to T, which the KVConnector V1 API cannot express: the compiler trains"
+   ],
+   [
+    "serious",
+    "The experiment budget and the self-study scale the brief demands are incompatible by one to two orders of magnitude. run_frontier compiles one cartridge per exa"
+   ],
+   [
+    "serious",
+    "The quality bar is defined against numbers from a different harness and metric: H2O 0.82 / SnapKV 0.86 are recall_frac (affine log-prob rescaling that can excee"
+   ],
+   [
+    "serious",
+    "A well-configured baseline erases most of the memory claim's practical value at single stream: full-KV for a 16k Llama-8B corpus is ~2 GB bf16 (1 GB fp8, proven"
+   ],
+   [
+    "serious",
+    "The per-query cost advantage is unsupported at single stream (n=1 decode flat at ~22 ms from 4k to 128k, vllm-decode-pathology) and unmeasured under batch; vLLM"
+   ],
+   [
+    "serious",
+    "The RAG baseline is TF-IDF over 128/256-token chunks (BowRetriever, numpy). A buyer's incumbent is BM25 or a dense retriever plus reranker on single-hop extract"
+   ],
+   [
+    "serious",
+    "'Beyond the window' has zero evidence and a method gap: the compiler's teacher is HFBackend full-corpus prefill (non-paged; OOMed at 128k for Qwen2.5-7B in stat"
+   ],
+   [
+    "serious",
+    "The 6-week plan slips because week 1 assumes a harness that has never run on a GPU or a real model: frontier.py and corpus.py ran only on tiny-random Llama on C"
+   ],
+   [
+    "minor",
+    "The workload section cites session-prefix telemetry (TraceLab 126k median prefix, 96% verbatim reuse) that describes growing per-session histories, which a per-"
+   ],
+   [
+    "minor",
+    "Tenant isolation: serving a cartridge as t placeholder tokens means vLLM's prefix cache keys the blocks by those token ids; two tenants with the same placeholde"
+   ],
+   [
+    "minor",
+    "Per-exact-weights keying (kv-interchange-weights: base<->instruct diverges within 2-5 tokens) means every model update invalidates every cartridge; fleet recomp"
+   ],
+   [
+    "minor",
+    "The vLLM KVConnector V1 API is labelled experimental upstream (merged Apr 2025 'APIS ARE SUBJECT TO CHANGE'); the repo's connector is pinned to 0.24.0 and curre"
+   ]
+  ],
+  "evidence_grade": "D",
+  "evidence_grade_reason": "The core claim (a trained cartridge matches full-context QA at 16-50x compression) has never been measured on a real model; the only attempt (360M, CPU) was negative and is recorded OPEN in the ledger. What is proven is peripheral and small-scale: bit-identical cross-instance KV resume on OPT-125m/Qwen3-0.6B, 10/10 connector hook signatures on vLLM 0.24.0, fp8 KV parity on one 256-token passage, and compiler plumbing on tiny-random Llama at steps=2. Break-even and compile cost are modeled on a CostModel whose decode term is contradicted by the repo's own vLLM measurement; the memory, beyond-window, and in-engine claims have no measurement at all, and the repo's position layout is not expressible through the vLLM connector API.",
+  "final": "G.md",
+  "missing_founder_decisions": [
+   "Benchmark shape: LongBench one-document-per-example (standard, one compile per example, expensive) versus few corpora x many questions (product-shaped, cheaper, less standard) -- the draft chose the former implicitly; the revision chose the latter.",
+   "Position layout: keep the repo's linspace/T layout and patch vLLM's model runner (a version-pinned fork) versus retrain at contiguous positions and accept any quality delta -- the draft asserted 'stock vLLM' without surfacing this.",
+   "Loader substrate: the in-repo DexaConnector (TP=1, proven lifecycle) versus a backend plugin for vLLM's native OffloadingConnector versus an LMCache/HiCache tier.",
+   "GPU budget authorization: the draft implied ~$150; the honest range is $1k-5k before day-1 timing, potentially more if HF forward+backward is 3-5x slower than the proxy.",
+   "First model and compute: Llama-3.1-8B on Modal A100 was chosen for continuity with repo evidence, not by the founder; H100 and newer open models are untested.",
+   "RAG baseline strength: TF-IDF only (repo default) versus BM25 + dense retriever (the buyer's incumbent).",
+   "Fallback destination if G1 kills: fold artifact/harness/loader into KV-tiering candidates (draft's choice) versus shelve versus fund STILL as a different compile method.",
+   "Whether to build the vLLM loader (weeks 4-6) before or after in-engine memory/latency measurements against LMCache-CPU full-KV, given that the memory claim's practical value may be small at single stream.",
+   "Whether the first public proof is HF-level (frontier plot) or in-engine (parity + residency), which changes weeks-to-proof from ~3 to ~8."
+  ],
+  "name": "Cartridges: the context compiler",
+  "one_line": "Compile a static corpus offline into a small trained KV artifact that loads into vLLM as a prefix; the systems half is built, the quality half is unproven and the one small-scale attempt was negative.",
+  "revised_by_run": "wf_b2c0023f-038",
+  "strongest_version": "A cartridge is the only artifact in this repo that turns a corpus into a file a customer can own, version, and move between replicas and clouds, immune to any provider's TTL, and the only mechanism on the table whose memory footprint is decoupled from corpus length. The systems half -- a tested artifact format, a working KL-distillation loop, exact RoPE re-phasing, proven bit-identical cross-instance KV loading, and a connector that conforms to vLLM's V1 lifecycle -- already exists, so the entire bet reduces to one three-week, pre-registered, ~$1-5k experiment: does corpus-conditioned, sampled self-study on an 8B model reach full-context minus 2 F1 at 16-50x compression under the same generated-answer metric as every baseline. If it does, the roadmap is a load-only connector on stock vLLM (after retraining at contiguous positions), a weights-hash-keyed registry, and an in-engine residency measurement against the strongest tuned baseline (fp8 full-KV in LMCache's CPU tier), with the beyond-window claim and STILL amortized compilation as second-order upside. If it does not, the answer arrives in three weeks with a public negative result, and the artifact, harness, and loader fold into the KV-tiering candidates rather than being wasted.",
+  "weeks_to_proof": "~3 weeks to the G1 quality answer at HF level (either sign), 7-9 weeks to a credible public proof (HF frontier plot with all baselines under one metric + in-engine parity + measured compile cost + memory-vs-LMCache-CPU comparison), conditional on G0 and G1 passing. Assumptions: one engineer; Modal A100s run in parallel; GPU budget $1k-5k (derived from the repo's CostModel proxy of ~54 min per compile at n_selfstudy=256/steps=200, re-based after a day-1 timing that could be 3-5x worse given HFBackend's measured 2-2.4k tok/s prefill); benchmark restructured to <=15 corpora x many questions so compiles number in the hundreds, not thousands; contiguous-position retraining does not degrade quality; the first real-model run of frontier.py lands within ~10 days of debugging."
+ },
  "H": {
   "chars": 26006,
   "founder_decisions": 8,

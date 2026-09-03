@@ -622,12 +622,93 @@
   "weeks_to_proof": "8-10 weeks to a credible public kill-and-resume benchmark at TP=1 on Llama-3.1-8B (three seeds, 8k-128k ladder, baselines vanilla vLLM prefix caching / LMCache 0.5.x S3+NVMe / vLLM OffloadingConnector, per-point tier GB/s). Assumptions: 1-2 engineers full-time; ~$3-6k GPU spend at Modal/spot rates (~150-250 GPU-hours incl. reruns); an S3/remote-NVMe backend for the dexa SessionStore or LMCache's backends lands in week 1 and the tier gate (>=0.5 GB/s per request at 128k) passes; chunked-prefill save (vllm_connector.py:608) plus the port of the voice connector's block-keyed contiguous-transfer path and a rebase from vLLM 0.24.0/0.9.2 to 0.28.0 take 2-3 weeks; generalizing the voice harness (text prompts, aiohttp abort, server-metric scraping, provenance, multi-seed) takes 2 weeks; runs and write-up 2 weeks. The draft's 6-week figure assumed the tier backend, harness generalization and API rebase were free and included a design-partner pilot with partners that do not exist in the research files. Add 4-6 weeks if the proof must include the buyer's TP>1/MLA model class; the hosted spot fleet, registry, preemption handler and streaming gateway are beyond the benchmark and not costed here. The week-1 gate can end the effort at week 1."
  },
  "K": {
+  "attacks": [
+   [
+    "serious",
+    "The runtime's measured advantage is an SLO-threshold artifact. At 300 ms, arm D passes N=300 (291.9 ms full-load) and the plain VoiceKVConnector fails (336.8 ms"
+   ],
+   [
+    "serious",
+    "The draft's own pre-registered pass criterion ('full-load p95 <= 300 ms in >= 6 of 7 five-minute buckets') is failed by the only existing measurement: arm D N=3"
+   ],
+   [
+    "serious",
+    "Engine-version confound plus OSS catch-up. Every baseline was vLLM 0.9.2 + LMCache 0.3.2 in two untuned configs (Aug 2026 runs on a year-old engine). vLLM 0.28'"
+   ],
+   [
+    "serious",
+    "A bigger-HBM GPU or FP8 KV erases the wall. 04-conflicts.md \u00a75 arithmetic: an 80 GB GPU with the same 7B weights leaves ~60 GB of KV pool, which fits the ~42 GB"
+   ],
+   [
+    "serious",
+    "The connector cannot serve the customers' models. VoiceKVConnector is TP=1 only, fp16/bf16 only (dtype_size hardcoded 2), non-MLA paged layout, prompt-KV only, "
+   ],
+   [
+    "serious",
+    "Correctness and internal thrash are unarchived. evals/modal_kv_correctness.py exists but its output was never committed and FINDINGS \u00a74 implies text divergence "
+   ],
+   [
+    "serious",
+    "Arm D's predictor knows the answer. The idle hint is max_tokens x 308 ms TTS - generation at 45 tok/s + the trace's own median gap (400 ms), median utterance (2"
+   ],
+   [
+    "serious",
+    "The retention SLA's honoring mechanism at scale is the arm that fails. Pinning holds HBM under a 10 GB budget (~70 sessions); every retained session beyond the "
+   ],
+   [
+    "serious",
+    "The agent leg has no in-engine evidence and the physics is contradicted. All production-engine restore evidence stops at 16k (vLLM crashed >=32k in the dexa har"
+   ],
+   [
+    "serious",
+    "The product interface is a bet on unstable APIs. vLLM's KVConnector V1 docstring still says 'experimental and subject to change'; the retain protocol depends on"
+   ],
+   [
+    "minor",
+    "The 6-week plan slips on three known items: the ~120 GPU-h budget undercounts Week 2 (5 arms x 2 GPUs x 3 seeds x ~4 N points at ~55 min each is ~120 runs on it"
+   ],
+   [
+    "minor",
+    "Hosted-endpoint comparisons produce a different quantity. Running Fireworks, Wafer, LiveKit Inference or Tensormesh through the same client yields a knee-at-RPM"
+   ],
+   [
+    "minor",
+    "Reproducibility is weaker than 'pre-registered gates' suggests: every Modal manifest records git_sha 'unknown' and no connector field (arm B-LMCache vs B-VoiceK"
+   ],
+   [
+    "minor",
+    "H100 physics in the brief is derived, not measured: PCIe Gen5 128 GB/s is the H100 spec sheet, H100 prefill tok/s for these models is unmeasured, and the '~60 G"
+   ]
+  ],
   "chars": 23748,
+  "evidence_grade": "C",
+  "evidence_grade_reason": "The benchmark leg is real (287,015 archived in-engine turns, recomputed) but every headline is single-seed, synthetic-trace, one 46 GB GPU, a 7B fp16 model, and vLLM 0.9.2 with unarchived server metrics. The runtime leg's core claim (1.5x knee move) is measured once with an 8.1 ms full-load margin, fails the brief's own 6-of-7-bucket criterion (recomputed from events.jsonl: 311.8/306.5/303.9 ms), fails at N=400, and its policy delta over the plain connector is 44.6 ms at one SLO (1.0x ratio at 350-400 ms). The restore-vs-re-prefill physics behind the RAM tier is contradicted across the dexa repo under concurrency (04-conflicts.md \u00a71), and the slot-SLA layer, every 2026 OSS baseline, the H100 point, real traffic, and customer-class models are unmeasured. That is 'measured but bounded/contradicted' = C; a same-version, 3-seed, two-GPU run with archived correctness would lift it to B.",
+  "final": "K.md",
   "founder_decisions": 10,
   "kind": "draft",
-  "name": "SessionBench + Resident-Slot SLA (benchmark-first, Wafer-motion session serving)",
+  "missing_founder_decisions": [
+   "The SLO itself: the draft adopted the PRD's 300 ms p95 TTFT as the benchmark's defining threshold; Twilio budgets 375 ms target / 750 ms max for LLM TTFT and LiveKit reports 192 ms. The threshold determines whether the pinning policy has any measured edge (at 350-400 ms, D and B-voice tie).",
+   "The pass criterion and aggregation window: the draft chose '>= 6 of 7 five-minute buckets <= 300 ms' (which existing data fails) and the full-load window (minutes 5-40) rather than whole-run; each choice moves arm D between pass and fail.",
+   "The target ratio (1.4x) chosen below the voice PRD's own 2x proceed line and inside the README's '<2x kill' band.",
+   "Selling upstream to platforms/providers rather than downstream to end builders (the thesis assumes it; \u00a711 lists it but the customer section is written as if decided).",
+   "GTM as Wafer-motion engagements + dedicated endpoints rather than software/BYOC (Tensormesh Operator model) or OSS harness + paid certification.",
+   "Not forking vLLM/SGLang (carrying the PRD's constraint forward), which forecloses the scheduler-native prefetch the repo calls the strongest untested form of the thesis.",
+   "Engine neutrality and publicly scoring OSS stacks (OffloadingConnector, LMCache, HiCache, KVBM) beside K's runtime -- a choice that may hand competitors the result.",
+   "The v0 rig: Qwen2.5-7B fp16 on L40S/H100, not the 26-35B / A3B MoE / MLA models platforms actually run.",
+   "The pricing unit: slot-hour by tier, rather than per-line/month (Vapi, Retell), cached-token retention with TTL (DeepInfra, Gemini), or % of estimated savings (Tensormesh).",
+   "Requiring both a 46 GB and an 80 GB GPU in the proof (two-GPU criterion) rather than one class.",
+   "Trace source: synthetic + partner transcripts, rather than public traces (Mooncake traces per docs/BENCHMARK_PLAN.md, TraceLab) for the first publication.",
+   "Bundling three products (benchmark, runtime, SLA/billing) into one company rather than sequencing or choosing one.",
+   "Tenant isolation of KV (single-tenant vs shared slots; tenant-namespaced keys) and guarantee-with-credits vs best-effort-with-metrics.",
+   "Whether hosted endpoints (Fireworks, Wafer, LiveKit Inference, Tensormesh) appear on the leaderboard at all, given they yield knee-at-RPM not sessions/GPU.",
+   "Whether SessionBench checks output quality/correctness (the harness measures serving behavior only; restore correctness is unarchived)."
+  ],
+  "name": "SessionBench + Resident-Slot SLA (benchmark-first, Wafer-motion)",
   "numeric_claims": 73,
-  "one_line": "A benchmark-first company that publishes the sessions-per-GPU standard (SessionBench), ships the residency runtime that wins it, and sells warm session-slots with a stated retention window per slot-hour into voice and agent platforms that already price by concurrency \u2014 the Wafer engagements-plus-dedicated-endpoints motion applied to session-shaped serving, engine-neutral and upstream of candidates A/B/C.",
-  "unproven": 10
+  "one_line": "Publish an open sessions-per-GPU-at-SLO benchmark, ship the pinned-RAM residency connector + idle-hint pinning protocol that moved the voice knee 1.5x (one seed, L40S), and sell warm session-slots per slot-hour to voice/agent platforms via Wafer-style engagements and dedicated endpoints.",
+  "revised_by_run": "wf_2398f999-206",
+  "strongest_version": "K's defensible core is a harness that already produced 287,015 archived in-engine multi-turn turns and caught the depth-triggered collapse that a 10-minute load test would miss; no engine, provider or voice platform in the research files publishes sessions-per-GPU at a p95-TTFT SLO, and the platforms that would buy it already sell concurrency per line. The strongest honest form leads with that benchmark as a Wafer-style engagement ('we measured your cliff on your traces and your GPU'), publishes an SLO curve rather than a single 300 ms number, and treats the residency runtime as the current best-known configuration that moved one measured knee 1.5x -- a result to be replicated at 3 seeds on the same engine version as OffloadingConnector and LMCache 0.5.4 before it is sold. The slot-hour SLA becomes a product only after the honor-rate and H100 gates pass; until then it is a pricing sheet priced off list L40S rates ($0.0026-0.0075 per slot-hour at N*=300) that customers can compare against Managed Agents' $0.08/session-hour and DeepInfra's TTL retention multipliers. If the 2026 OSS stacks hold N=300 out of the box, K still owns the standard, the certification and the retention policy; if an H100 dissolves the L40S wall, K still owns the measurement that proved it. The company is worth starting on the benchmark and the engagement motion; the runtime and the SLA are hypotheses with pre-registered kill gates and roughly 8-10 weeks to a credible public proof.",
+  "unproven": 10,
+  "weeks_to_proof": "8-10 weeks to a credible public benchmark on synthetic traces (3 seeds, L40S + H100, all arms on the same vLLM 0.28 incl. OffloadingConnector / LMCache 0.5.4 / HiCache, archived server metrics and restore-correctness, SLO curve), assuming 2 engineers, Modal access, ~250 GPU-h (~$600-900 at Modal L40S $1.95/hr, H100 $3.95/hr), and the vLLM 0.9.2->0.28 connector port landing in <=2 weeks (the API is 'experimental'; dexa needed live probes for 0.24). 12-16 weeks for the same benchmark on partner transcripts, since the converter is partner-gated. The draft's 6 weeks assumed ~120 GPU-h (undercounted ~2x), a one-week port bundled with free-at-turn-end and async loads, and a design partner with converted traces by Week 5."
  }
 }

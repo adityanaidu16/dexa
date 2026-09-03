@@ -1,0 +1,118 @@
+{
+ "sessions": 8,
+ "by_framework": {
+  "swe-agent": {
+   "post_edit_next_action": {
+    "edit_then_other_test": 5,
+    "edit_then_edit": 2,
+    "edit_then_other": 2,
+    "edit_then_end": 1
+   },
+   "post_edit_same_test_share": 0.0,
+   "sessions": 3,
+   "calls": 32,
+   "tree_changing_calls": 10,
+   "launches": 8,
+   "hits": 2,
+   "misses": 6,
+   "hit_rate_per_launch": 0.25,
+   "launches_per_edit": 0.8,
+   "sessions_with_at_least_one_hit": 0.3333333333333333,
+   "hit_duration_s": {
+    "n": 2,
+    "p50": 0.9115149974822998,
+    "p90": 0.9115149974822998,
+    "max": 0.9115149974822998,
+    "mean": 0.9072511196136475
+   },
+   "hit_output_equal_exact": 0.5,
+   "hit_output_equal_normalized": 0.5,
+   "wasted_s_per_miss_mean": 0.40314046541849774,
+   "tool_time_per_session_mean_s": 3.314333359400431,
+   "testish_time_per_session_mean_s": 1.2177292505900066,
+   "saved_per_session_under_model_time_s": {
+    "1.5": 0.6048340797424316,
+    "6.6": 0.6048340797424316,
+    "14.2": 0.6048340797424316,
+    "26.2": 0.6048340797424316
+   },
+   "saved_share_of_tool_time_under_model_time": {
+    "1.5": 0.18249041787753276,
+    "6.6": 0.18249041787753276,
+    "14.2": 0.18249041787753276,
+    "26.2": 0.18249041787753276
+   }
+  },
+  "mini-swe-agent": {
+   "post_edit_next_action": {
+    "edit_then_other_test": 16
+   },
+   "post_edit_same_test_share": 0.0,
+   "sessions": 5,
+   "calls": 57,
+   "tree_changing_calls": 16,
+   "launches": 11,
+   "hits": 0,
+   "misses": 11,
+   "hit_rate_per_launch": 0.0,
+   "launches_per_edit": 0.6875,
+   "sessions_with_at_least_one_hit": 0.0,
+   "hit_duration_s": {
+    "n": 0,
+    "p50": null,
+    "p90": null,
+    "max": null,
+    "mean": null
+   },
+   "hit_output_equal_exact": null,
+   "hit_output_equal_normalized": null,
+   "wasted_s_per_miss_mean": 0.3987576528029008,
+   "tool_time_per_session_mean_s": 2.4029383659362793,
+   "testish_time_per_session_mean_s": 0.8929966449737549,
+   "saved_per_session_under_model_time_s": {},
+   "saved_share_of_tool_time_under_model_time": {}
+  },
+  "all": {
+   "post_edit_next_action": {
+    "edit_then_other_test": 21,
+    "edit_then_edit": 2,
+    "edit_then_other": 2,
+    "edit_then_end": 1
+   },
+   "post_edit_same_test_share": 0.0,
+   "sessions": 8,
+   "calls": 89,
+   "tree_changing_calls": 26,
+   "launches": 19,
+   "hits": 2,
+   "misses": 17,
+   "hit_rate_per_launch": 0.10526315789473684,
+   "launches_per_edit": 0.7307692307692307,
+   "sessions_with_at_least_one_hit": 0.125,
+   "hit_duration_s": {
+    "n": 2,
+    "p50": 0.9115149974822998,
+    "p90": 0.9115149974822998,
+    "max": 0.9115149974822998,
+    "mean": 0.9072511196136475
+   },
+   "hit_output_equal_exact": 0.5,
+   "hit_output_equal_normalized": 0.5,
+   "wasted_s_per_miss_mean": 0.40030452784369974,
+   "tool_time_per_session_mean_s": 2.7447114884853363,
+   "testish_time_per_session_mean_s": 1.0147713720798492,
+   "saved_per_session_under_model_time_s": {
+    "1.5": 0.22681277990341187,
+    "6.6": 0.22681277990341187,
+    "14.2": 0.22681277990341187,
+    "26.2": 0.22681277990341187
+   },
+   "saved_share_of_tool_time_under_model_time": {
+    "1.5": 0.0826362919581679,
+    "6.6": 0.0826362919581679,
+    "14.2": 0.0826362919581679,
+    "26.2": 0.0826362919581679
+   }
+  }
+ }
+}

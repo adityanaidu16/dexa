@@ -33,9 +33,12 @@ class Container:
         subprocess.run(["docker", "cp", os.path.join(HERE, "edit_via_str_replace"), f"{name}:{workdir}/edit_via_str_replace"], check=True, capture_output=True)
         subprocess.run(["docker", "exec", "-w", workdir, name, "bash", "-lc", "chmod +x edit_via_str_replace; echo edit_via_str_replace >> .git/info/exclude"], capture_output=True)
     def exec(self, cmd, timeout=900, stdin=None):
+        """Run a command in the container; the time limit is enforced INSIDE the container so a runaway process
+        (a reproduce script that starts a cluster and never exits) is killed rather than orphaned."""
         t0 = time.time()
         try:
-            p = subprocess.run(["docker", "exec", "-i", "-w", self.wd, self.name, "bash", "-lc", cmd], capture_output=True, text=True, timeout=timeout, input=stdin)
+            wrapped = f"timeout -k 5 {int(timeout)} bash -lc {shlex.quote(cmd)}"
+            p = subprocess.run(["docker", "exec", "-i", "-w", self.wd, self.name, "bash", "-lc", wrapped], capture_output=True, text=True, timeout=timeout + 15, input=stdin)
             rc, outp = p.returncode, (p.stdout + p.stderr)
         except subprocess.TimeoutExpired as e:
             rc, outp = 124, ((e.stdout or b"").decode(errors="replace") if isinstance(e.stdout, bytes) else (e.stdout or "")) + "\n[timeout]"
@@ -51,7 +54,7 @@ class Container:
         rc, o, _ = self.exec("git status --porcelain=v1 2>/dev/null | head -200", timeout=60)
         return set(l for l in o.splitlines() if l.strip())
     def spec_start(self, cmd):
-        wrapped = f"rm -f /tmp/spec.rc /tmp/spec.out; setsid bash -c {shlex.quote(cmd + '; echo $? > /tmp/spec.rc')} > /tmp/spec.out 2>&1 < /dev/null & echo $! > /tmp/spec.pid"
+        wrapped = f"rm -f /tmp/spec.rc /tmp/spec.out; setsid bash -c {shlex.quote('timeout -k 5 300 bash -c ' + shlex.quote(cmd) + '; echo $? > /tmp/spec.rc')} > /tmp/spec.out 2>&1 < /dev/null & echo $! > /tmp/spec.pid"
         rc, o, _ = self.exec(wrapped, timeout=30)
         return time.time()
     def spec_poll_done(self):
@@ -94,7 +97,7 @@ def is_readonly(name, args):
     cmd = (args.get("command") or "").strip()
     return bool(READONLY_BASH.match(cmd)) and not UNSAFE.search(cmd)
 
-def replay_session(sess, inst, image, cname, model_times=(1.5, 6.6, 14.2, 26.2), max_calls=80, per_cmd_timeout=600):
+def replay_session(sess, inst, image, cname, model_times=(1.5, 6.6, 14.2, 26.2), max_calls=80, per_cmd_timeout=300):
     c = Container(image, cname)
     rec = {"session_id": sess["trajectory_id"], "instance_id": inst["instance_id"], "image": image, "framework": sess.get("framework"), "model": sess.get("model"),
            "calls": [], "spec_events": [], "notes": []}

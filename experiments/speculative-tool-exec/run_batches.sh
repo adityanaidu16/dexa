@@ -3,8 +3,6 @@
 S=/tmp/claude-0/-home-user-dexa/86b25b67-2276-559a-a54a-f598498ce4d8/scratchpad/traces
 cd /home/user/dexa/experiments/speculative-tool-exec
 IMAGES=(
- jyangballin/swesmith.x86_64.conan-io_1776_conan.86f29e13
- jyangballin/swesmith.x86_64.pandas-dev_1776_pandas.95280573
  jyangballin/swesmith.x86_64.dask_1776_dask.5f61e423
  jyangballin/swesmith.x86_64.sqlfluff_1776_sqlfluff.50a1c4b6
  jyangballin/swesmith.x86_64.adrienverge_1776_yamllint.8513d9b9

@@ -24,23 +24,23 @@ For every hit the command is also run for real afterwards and the two outputs co
 
 ## Results
 
-Replayed so far: **213 sessions, 2,937 tool calls** across 6 repository images.
+Replayed so far: **242 sessions, 3,275 tool calls** across 7 repository images.
 
 ### 1. How predictable is the command after an edit?
 
 | trajectories | sessions | tool calls | launches, any edit | hit rate, any edit | launches after modifying a file | hit rate | created-file predictions | hit rate, run the new file | speculative output equals real | hit run duration p50 / p90 (s) |
 |---|---|---|---|---|---|---|---|---|---|---|
-| swe-agent | 107 | 1488 | 286 | 31% | 113 | 75% | 165 | 80% | 99% | 1.56 / 1.60 |
+| swe-agent | 136 | 1826 | 352 | 34% | 155 | 74% | 214 | 67% | 98% | 1.57 / 1.67 |
 | mini-swe-agent | 106 | 1449 | 275 | 32% | 70 | 76% | 200 | 68% | 98% | 0.19 / 0.22 |
-| all | 213 | 2937 | 561 | 32% | 183 | 75% | 365 | 73% | 98% | 0.20 / 1.59 |
+| all | 242 | 3275 | 627 | 33% | 225 | 75% | 414 | 68% | 98% | 0.21 / 1.62 |
 
-Two rules cover the post-edit step. **Rule A**, after a call that *modifies* an existing file, launch the most recent test-like command: hit rate 75% over 183 launches. **Rule B**, after a call that *creates* a file, launch that file: hit rate 73% over 365 predictions. Launching the old test after a file creation never hits (185 launches, 1%), which is why a single "rerun the last test" rule measures only 32% across all edits. The `unknown` edit kinds are records from before the edit-kind field was added.
+Two rules cover the post-edit step. **Rule A**, after a call that *modifies* an existing file, launch the most recent test-like command: hit rate 75% over 225 launches. **Rule B**, after a call that *creates* a file, launch that file: hit rate 68% over 414 predictions. Launching the old test after a file creation never hits (207 launches, 1%), which is why a single "rerun the last test" rule measures only 33% across all edits. The `unknown` edit kinds are records from before the edit-kind field was added.
 
 When a speculative run hits, its output matched the output of a real run on the same tree in 98% of cases after normalizing timings and stdout/stderr interleaving; every remaining mismatch inspected was ordering of interleaved streams.
 
 ### 2. How long are the runs being overlapped?
 
-In these SWE-smith repositories the speculated runs are short (hit-run duration p50 0.20 s, p90 1.59 s), so the absolute saving inside the benchmark is small. The duration that matters is the production one. From the TraceLab release of real Claude Code and Codex sessions:
+In these SWE-smith repositories the speculated runs are short (hit-run duration p50 0.21 s, p90 1.62 s), so the absolute saving inside the benchmark is small. The duration that matters is the production one. From the TraceLab release of real Claude Code and Codex sessions:
 
 | production tool | calls | p50 (s) | p90 (s) | p99 (s) | share over 5 s | time in calls over 5 s |
 |---|---|---|---|---|---|---|

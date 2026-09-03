@@ -24,17 +24,17 @@ For every hit the command is also run for real afterwards and the two outputs co
 
 ## Results
 
-Replayed so far: **114 sessions, 1,586 tool calls** across 4 repository images.
+Replayed so far: **135 sessions, 1,864 tool calls** across 5 repository images.
 
 ### 1. How predictable is the command after an edit?
 
 | trajectories | sessions | tool calls | launches, any edit | hit rate, any edit | launches after modifying a file | hit rate | created-file predictions | hit rate, run the new file | speculative output equals real | hit run duration p50 / p90 (s) |
 |---|---|---|---|---|---|---|---|---|---|---|
-| swe-agent | 12 | 195 | 42 | 29% | 12 | 75% | 5 | 100% | 100% | 0.20 / 0.89 |
+| swe-agent | 33 | 473 | 95 | 32% | 42 | 62% | 37 | 78% | 100% | 0.20 / 0.89 |
 | mini-swe-agent | 102 | 1391 | 263 | 33% | 65 | 77% | 189 | 67% | 98% | 0.19 / 0.21 |
-| all | 114 | 1586 | 305 | 32% | 77 | 77% | 194 | 68% | 98% | 0.19 / 0.22 |
+| all | 135 | 1864 | 358 | 32% | 107 | 71% | 226 | 69% | 98% | 0.19 / 0.22 |
 
-Two rules cover the post-edit step. **Rule A**, after a call that *modifies* an existing file, launch the most recent test-like command: hit rate 77% over 77 launches. **Rule B**, after a call that *creates* a file, launch that file: hit rate 68% over 194 predictions. Launching the old test after a file creation never hits (102 launches, 0%), which is why a single "rerun the last test" rule measures only 32% across all edits. The `unknown` edit kinds are records from before the edit-kind field was added.
+Two rules cover the post-edit step. **Rule A**, after a call that *modifies* an existing file, launch the most recent test-like command: hit rate 71% over 107 launches. **Rule B**, after a call that *creates* a file, launch that file: hit rate 69% over 226 predictions. Launching the old test after a file creation never hits (117 launches, 1%), which is why a single "rerun the last test" rule measures only 32% across all edits. The `unknown` edit kinds are records from before the edit-kind field was added.
 
 When a speculative run hits, its output matched the output of a real run on the same tree in 98% of cases after normalizing timings and stdout/stderr interleaving; every remaining mismatch inspected was ordering of interleaved streams.
 

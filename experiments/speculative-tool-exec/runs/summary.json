@@ -1,132 +1,211 @@
 {
- "sessions": 40,
+ "sessions": 79,
  "by_framework": {
   "mini-swe-agent": {
    "post_edit_next_action": {
-    "edit_then_same_test": 37,
-    "edit_then_other_test": 90,
-    "edit_then_edit": 10,
-    "edit_then_end": 1
+    "edit_then_same_test": 70,
+    "edit_then_other_test": 188,
+    "edit_then_edit": 23,
+    "edit_then_other": 3,
+    "edit_then_end": 4
    },
-   "post_edit_same_test_share": 0.26811594202898553,
-   "sessions": 34,
-   "calls": 465,
-   "tree_changing_calls": 138,
-   "launches": 105,
-   "hits": 37,
-   "misses": 68,
-   "hit_rate_per_launch": 0.3523809523809524,
-   "launches_per_edit": 0.7608695652173914,
-   "sessions_with_at_least_one_hit": 1.0,
+   "hit_rate_by_launching_edit_kind": {
+    "modified": {
+     "launches": 38,
+     "hits": 34,
+     "hit_rate": 0.8947368421052632
+    },
+    "created": {
+     "launches": 69,
+     "hits": 0,
+     "hit_rate": 0.0
+    },
+    "unknown": {
+     "launches": 106,
+     "hits": 36,
+     "hit_rate": 0.33962264150943394
+    }
+   },
+   "policy_B_run_created_file": {
+    "created_edits_with_prediction": 104,
+    "hits": 102,
+    "misses": 2,
+    "hit_rate": 0.9807692307692307,
+    "no_prediction": 5,
+    "hit_D_p50": 0.27156710624694824,
+    "hit_D_p90": 0.30417346954345703
+   },
+   "post_edit_same_test_share": 0.24305555555555555,
+   "sessions": 70,
+   "calls": 959,
+   "tree_changing_calls": 288,
+   "launches": 213,
+   "hits": 70,
+   "misses": 143,
+   "hit_rate_per_launch": 0.3286384976525822,
+   "launches_per_edit": 0.7395833333333334,
+   "sessions_with_at_least_one_hit": 0.9571428571428572,
    "hit_duration_s": {
-    "n": 37,
-    "p50": 0.1925806999206543,
-    "p90": 0.20148849487304688,
+    "n": 70,
+    "p50": 0.1933302879333496,
+    "p90": 0.2064988613128662,
     "max": 0.2277541160583496,
-    "mean": 0.1935334334502349
+    "mean": 0.194034515108381
    },
-   "hit_output_equal_exact": 1.0,
+   "hit_output_equal_exact": 0.9714285714285714,
    "hit_output_equal_normalized": 1.0,
-   "wasted_s_per_miss_mean": 0.4010586142539978,
-   "tool_time_per_session_mean_s": 2.969909703030306,
-   "testish_time_per_session_mean_s": 0.9780984976712395,
+   "wasted_s_per_miss_mean": 0.4011193138736111,
+   "tool_time_per_session_mean_s": 3.0943860598972868,
+   "testish_time_per_session_mean_s": 0.9640791893005372,
    "saved_per_session_under_model_time_s": {
-    "1.5": 0.21060991287231445,
-    "6.6": 0.21060991287231445,
-    "14.2": 0.21060991287231445,
-    "26.2": 0.21060991287231445
+    "1.5": 0.194034515108381,
+    "6.6": 0.194034515108381,
+    "14.2": 0.194034515108381,
+    "26.2": 0.194034515108381
    },
    "saved_share_of_tool_time_under_model_time": {
-    "1.5": 0.07091458459407758,
-    "6.6": 0.07091458459407758,
-    "14.2": 0.07091458459407758,
-    "26.2": 0.07091458459407758
+    "1.5": 0.06270533519493093,
+    "6.6": 0.06270533519493093,
+    "14.2": 0.06270533519493093,
+    "26.2": 0.06270533519493093
    }
   },
   "swe-agent": {
    "post_edit_next_action": {
-    "edit_then_other_test": 10,
+    "edit_then_other_test": 17,
+    "edit_then_same_test": 9,
+    "edit_then_end": 8,
     "edit_then_edit": 4,
-    "edit_then_other": 1,
-    "edit_then_end": 5,
-    "edit_then_same_test": 5
+    "edit_then_other": 1
    },
-   "post_edit_same_test_share": 0.2,
-   "sessions": 6,
-   "calls": 72,
-   "tree_changing_calls": 25,
-   "launches": 18,
-   "hits": 5,
-   "misses": 13,
-   "hit_rate_per_launch": 0.2777777777777778,
-   "launches_per_edit": 0.72,
-   "sessions_with_at_least_one_hit": 0.6666666666666666,
+   "hit_rate_by_launching_edit_kind": {
+    "modified": {
+     "launches": 4,
+     "hits": 4,
+     "hit_rate": 1.0
+    },
+    "created": {
+     "launches": 4,
+     "hits": 0,
+     "hit_rate": 0.0
+    },
+    "unknown": {
+     "launches": 21,
+     "hits": 5,
+     "hit_rate": 0.23809523809523808
+    }
+   },
+   "policy_B_run_created_file": {
+    "created_edits_with_prediction": 0,
+    "hits": 0,
+    "misses": 0,
+    "hit_rate": null,
+    "no_prediction": 7,
+    "hit_D_p50": null,
+    "hit_D_p90": null
+   },
+   "post_edit_same_test_share": 0.23076923076923078,
+   "sessions": 9,
+   "calls": 126,
+   "tree_changing_calls": 39,
+   "launches": 29,
+   "hits": 9,
+   "misses": 20,
+   "hit_rate_per_launch": 0.3103448275862069,
+   "launches_per_edit": 0.7435897435897436,
+   "sessions_with_at_least_one_hit": 0.7777777777777778,
    "hit_duration_s": {
-    "n": 5,
-    "p50": 0.21523809432983398,
+    "n": 9,
+    "p50": 0.20117640495300293,
     "p90": 0.8874211311340332,
     "max": 0.8874211311340332,
-    "mean": 0.4736243724822998
+    "mean": 0.3519245783487956
    },
-   "hit_output_equal_exact": 0.8,
-   "hit_output_equal_normalized": 0.8,
-   "wasted_s_per_miss_mean": 0.41702760182894194,
-   "tool_time_per_session_mean_s": 3.0472758611043296,
-   "testish_time_per_session_mean_s": 0.8576030731201172,
+   "hit_output_equal_exact": 0.8888888888888888,
+   "hit_output_equal_normalized": 0.8888888888888888,
+   "wasted_s_per_miss_mean": 0.4115904808044434,
+   "tool_time_per_session_mean_s": 3.376955509185791,
+   "testish_time_per_session_mean_s": 0.8184419208102756,
    "saved_per_session_under_model_time_s": {
-    "1.5": 0.3946869770685832,
-    "6.6": 0.3946869770685832,
-    "14.2": 0.3946869770685832,
-    "26.2": 0.3946869770685832
+    "1.5": 0.3519245783487956,
+    "6.6": 0.3519245783487956,
+    "14.2": 0.3519245783487956,
+    "26.2": 0.3519245783487956
    },
    "saved_share_of_tool_time_under_model_time": {
-    "1.5": 0.1295212494892238,
-    "6.6": 0.1295212494892238,
-    "14.2": 0.1295212494892238,
-    "26.2": 0.1295212494892238
+    "1.5": 0.1042135667442202,
+    "6.6": 0.1042135667442202,
+    "14.2": 0.1042135667442202,
+    "26.2": 0.1042135667442202
    }
   },
   "all": {
    "post_edit_next_action": {
-    "edit_then_same_test": 42,
-    "edit_then_other_test": 100,
-    "edit_then_edit": 14,
-    "edit_then_other": 1,
-    "edit_then_end": 6
+    "edit_then_same_test": 79,
+    "edit_then_other_test": 205,
+    "edit_then_edit": 27,
+    "edit_then_other": 4,
+    "edit_then_end": 12
    },
-   "post_edit_same_test_share": 0.25766871165644173,
-   "sessions": 40,
-   "calls": 537,
-   "tree_changing_calls": 163,
-   "launches": 123,
-   "hits": 42,
-   "misses": 81,
-   "hit_rate_per_launch": 0.34146341463414637,
-   "launches_per_edit": 0.754601226993865,
-   "sessions_with_at_least_one_hit": 0.95,
+   "hit_rate_by_launching_edit_kind": {
+    "modified": {
+     "launches": 42,
+     "hits": 38,
+     "hit_rate": 0.9047619047619048
+    },
+    "created": {
+     "launches": 73,
+     "hits": 0,
+     "hit_rate": 0.0
+    },
+    "unknown": {
+     "launches": 127,
+     "hits": 41,
+     "hit_rate": 0.3228346456692913
+    }
+   },
+   "policy_B_run_created_file": {
+    "created_edits_with_prediction": 104,
+    "hits": 102,
+    "misses": 2,
+    "hit_rate": 0.9807692307692307,
+    "no_prediction": 12,
+    "hit_D_p50": 0.27156710624694824,
+    "hit_D_p90": 0.30417346954345703
+   },
+   "post_edit_same_test_share": 0.2415902140672783,
+   "sessions": 79,
+   "calls": 1085,
+   "tree_changing_calls": 327,
+   "launches": 242,
+   "hits": 79,
+   "misses": 163,
+   "hit_rate_per_launch": 0.32644628099173556,
+   "launches_per_edit": 0.7400611620795107,
+   "sessions_with_at_least_one_hit": 0.9367088607594937,
    "hit_duration_s": {
-    "n": 42,
-    "p50": 0.19422245025634766,
-    "p90": 0.21523809432983398,
+    "n": 79,
+    "p50": 0.19424939155578613,
+    "p90": 0.20781397819519043,
     "max": 0.8874211311340332,
-    "mean": 0.22687759285881406
+    "mean": 0.21202199066741556
    },
-   "hit_output_equal_exact": 0.9761904761904762,
-   "hit_output_equal_normalized": 0.9761904761904762,
-   "wasted_s_per_miss_mean": 0.40362153818577895,
-   "tool_time_per_session_mean_s": 2.981514626741409,
-   "testish_time_per_session_mean_s": 0.9600241839885711,
+   "hit_output_equal_exact": 0.9620253164556962,
+   "hit_output_equal_normalized": 0.9873417721518988,
+   "wasted_s_per_miss_mean": 0.40240411963199546,
+   "tool_time_per_session_mean_s": 3.126577516145344,
+   "testish_time_per_session_mean_s": 0.9474876017510137,
    "saved_per_session_under_model_time_s": {
-    "1.5": 0.23822147250175477,
-    "6.6": 0.23822147250175477,
-    "14.2": 0.23822147250175477,
-    "26.2": 0.23822147250175477
+    "1.5": 0.21202199066741556,
+    "6.6": 0.21202199066741556,
+    "14.2": 0.21202199066741556,
+    "26.2": 0.21202199066741556
    },
    "saved_share_of_tool_time_under_model_time": {
-    "1.5": 0.07989948141294698,
-    "6.6": 0.07989948141294698,
-    "14.2": 0.07989948141294698,
-    "26.2": 0.07989948141294698
+    "1.5": 0.06781280475937491,
+    "6.6": 0.06781280475937491,
+    "14.2": 0.06781280475937491,
+    "26.2": 0.06781280475937491
    }
   }
  }

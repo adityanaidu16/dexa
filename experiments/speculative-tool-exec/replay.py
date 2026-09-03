@@ -106,7 +106,7 @@ def replay_session(sess, inst, image, cname, model_times=(1.5, 6.6, 14.2, 26.2),
         last_test = None; pending = None   # pending: {cmd, t0}
         for i, call in enumerate(calls):
             name = call["name"]; a = call["args"]; cmd = (a.get("command") or "").strip() if name != "str_replace_editor" else None
-            entry = {"i": i, "name": name, "cmd": (cmd or a.get("command")), "readonly": is_readonly(name, a)}
+            entry = {"i": i, "name": name, "cmd": (cmd or a.get("command")), "readonly": is_readonly(name, a), "path": a.get("path") if name == "str_replace_editor" else None}
             # --- speculation resolution before executing this call
             if pending and not entry["readonly"]:
                 if name != "str_replace_editor" and same_cmd(cmd, pending["cmd"]):

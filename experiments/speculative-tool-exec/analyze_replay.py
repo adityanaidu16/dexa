@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Aggregate replay records into the experiment's headline numbers."""
 import json, glob, sys, statistics as st
-from replay import same_cmd
+from replay import same_cmd, canon as canon_cmd
 from collections import Counter, defaultdict
 recs=[]
 for f in sorted(glob.glob("runs/*.jsonl")):
@@ -46,8 +46,29 @@ for g,rs in groups.items():
         for e in r["spec_events"]:
             if e["kind"] in ("hit","miss"): bykind[e.get("edit_kind") or "unknown"][e["kind"]]+=1
     policy={k: {"launches": v["hit"]+v["miss"], "hits": v["hit"], "hit_rate": v["hit"]/(v["hit"]+v["miss"]) if (v["hit"]+v["miss"]) else None} for k,v in bykind.items()}
+    # Policy B (post hoc): after CREATING a file, predict that the agent runs it: `python <path>` or `pytest <path>`.
+    import re as _re
+    pb=Counter(); pb_D=[]
+    def created_path(c):
+        cmd=str(c.get("cmd") or "")
+        if c["name"]=="str_replace_editor": return c.get("path") or None
+        m=_re.search(r"cat\s*(?:<<\s*['\"]?\w+['\"]?)?\s*>\s*(\S+)", cmd) or _re.search(r">\s*(\S+\.py)\b", cmd) or _re.search(r"tee\s+(\S+)", cmd)
+        return m.group(1).strip("'\"") if m else None
+    for r in rs:
+        calls=r["calls"]
+        for i,c in enumerate(calls):
+            if c.get("edit_kind")!="created": continue
+            path=created_path(c)
+            nxt=next((x for x in calls[i+1:] if not x["readonly"]), None)
+            if not path or not nxt: pb["no_prediction"]+=1; continue
+            pb["predicted"]+=1
+            nc=str(nxt.get("cmd") or "")
+            if nxt["name"]!="str_replace_editor" and _re.search(r"^(python[0-9.]*|pytest)\s+(-m\s+pytest\s+)?" + _re.escape(path.split("/")[-1]) + r"\b", canon_cmd(nc)):
+                pb["hit"]+=1; pb_D.append(nxt.get("duration_s",0))
+            else: pb["miss"]+=1
     n=len(rs)
-    out["by_framework"][g]={"post_edit_next_action": dict(opp), "hit_rate_by_launching_edit_kind": policy, "post_edit_same_test_share": (opp["edit_then_same_test"]/sum(opp.values())) if sum(opp.values()) else None,"sessions":n,"calls":s["calls"],"tree_changing_calls":edits,"launches":s["launches"],"hits":s["hits"],"misses":s["misses"],
+    out["by_framework"][g]={"post_edit_next_action": dict(opp), "hit_rate_by_launching_edit_kind": policy,
+        "policy_B_run_created_file": {"created_edits_with_prediction": pb["predicted"], "hits": pb["hit"], "misses": pb["miss"], "hit_rate": (pb["hit"]/pb["predicted"]) if pb["predicted"] else None, "no_prediction": pb["no_prediction"], "hit_D_p50": pct(pb_D,.5), "hit_D_p90": pct(pb_D,.9)}, "post_edit_same_test_share": (opp["edit_then_same_test"]/sum(opp.values())) if sum(opp.values()) else None,"sessions":n,"calls":s["calls"],"tree_changing_calls":edits,"launches":s["launches"],"hits":s["hits"],"misses":s["misses"],
         "hit_rate_per_launch": (s["hits"]/s["launches"]) if s["launches"] else None,
         "launches_per_edit": (s["launches"]/edits) if edits else None,
         "sessions_with_at_least_one_hit": sessions_with_hit/n if n else None,

@@ -196,13 +196,81 @@
   "unproven": 9
  },
  "J": {
+  "attacks": [
+   [
+    "fatal",
+    "The only off-instance tier ever measured (Modal Volume, ~0.6-0.9 GB/s) loses to vLLM re-prefill at 8k (0.37x) and under 16-24-way concurrency (P99 1.6-2.2x wors"
+   ],
+   [
+    "fatal",
+    "The customer's obvious alternative, a stateless session-affinity router that resends the message log to instance B, delivers 'continuity' and 'fleet capacity' w"
+   ],
+   [
+    "serious",
+    "The 115-195K-token contexts the brief targets come from Claude Code/Codex traces on frontier models. The only open-weight agent context guidance in the research"
+   ],
+   [
+    "serious",
+    "Both connectors assume TP=1 and a non-MLA [2, blocks, block_size, heads, head_dim] layout (zero TP references in vllm_connector.py; dtype_size hardcoded 2 and n"
+   ],
+   [
+    "serious",
+    "The connector cannot save the sessions the product targets: build_connector_meta only scans scheduled_new_reqs, so multi-step (chunked) prefills are never persi"
+   ],
+   [
+    "serious",
+    "All under-load evidence for off-GPU restore is negative or marginal: dexa disk-tier P99 1.6-2.2x worse even with async loads; LMCache 0.3.2 collapsed at N=300 ("
+   ],
+   [
+    "serious",
+    "The 'bit-identical continuation' selling point is proven only for same-backend single-step prefill with prefix caching off on small models. The voice repo's cor"
+   ],
+   [
+    "serious",
+    "The 6-week plan assumes free items: an S3/remote-NVMe backend for SessionStore does not exist (it is a local directory); the voice harness needs text prompts, t"
+   ],
+   [
+    "serious",
+    "The 60-80% spot discount is against hyperscaler list prices the buyer may not be paying: hyperscaler H100 Spot ($2.37-$2.59) is roughly at neocloud on-demand (m"
+   ],
+   [
+    "minor",
+    "Unconditional write-through of every prefilled block has a throughput cost the ledger already shows in one form: with whole-prompt keying the connector ran at 9"
+   ],
+   [
+    "minor",
+    "With 0 s notice (GCP default) a preemption during the first-turn 16.8 GB write (~17 s at 1 GB/s) loses the whole session state and falls back to baseline (1); m"
+   ],
+   [
+    "minor",
+    "The voice-repo result cited for the transfer mechanism (contiguous connector held N=300 where LMCache 0.3.2 collapsed) is 2.5k-token synthetic sessions on a 46 "
+   ]
+  ],
   "chars": 23478,
+  "evidence_grade": "C",
+  "evidence_grade_reason": "The direction splits into sub-claims with different standings. Portability/losslessness is proven in-engine at TP=1 on OPT-125m and Qwen3-0.6B (A10G) and at HF level on Llama-3.1-8B/A100 (identical_output at 8k-64k). The restore-beats-re-prefill claim is contradicted inside the dexa repo: pinned-RAM LMCache restore wins 10-17x single-request at 4k-16k, while the only off-instance tier measured (Modal Volume, ~0.6-0.9 GB/s) loses 0.37x at 8k and 1.6-2.2x on P99 under 16-24-way concurrency, with the ~64k+ crossover never run because chunked-prefill save is missing. Everything that makes J distinct from the existing stateful-session direction (fast durable tier, resume storm behaviour, session registry, preemption handler, fleet manager, spot economics, customer context distribution) is unmeasured or unbuilt. All in-repo numbers are single-seed, TP=1, non-MLA, in-engine capped at 16k, and the concurrent evidence comes from 2.5k-token synthetic voice sessions on a 46 GB L40S with LMCache 0.3.2. Net: measured but bounded/contradicted, leaning D on the product-specific components.",
+  "final": "J.md",
   "founder_decisions": 7,
   "kind": "draft",
+  "missing_founder_decisions": [
+   "Whether continuity-only (session-affinity router + transcript replay + deterministic continuation) is a product if the durable-tier gate fails, versus waiting for fp8/compaction to lower the gate, versus stopping.",
+   "vLLM vs SGLang as the engine to build on: the repos validated only vLLM; SGLang HiCache has L3 backends and open session-hint (pin/demote/TTL) RFCs; the dexa SGLang gate found SGLang ahead on branched decode. The draft picked vLLM silently.",
+   "Build a custom KV connector (the draft's architecture) vs build on LMCache 0.5.x (S3/GDS/NIXL backends exist today; 22 GB/s single-request measured) vs vLLM's native OffloadingConnector (object tier in developer preview). The dexa hosted product itself uses LMCache; the voice evidence favours a custom contiguous path only for LMCache 0.3.2.",
+   "Which model/TP class the public proof must cover: 7-8B at TP=1 (the only validated regime) vs 30B-A3B vs the buyer's GLM/Kimi-class MLA models at TP=8; the draft chose TP=1 for the proof and left the buyer's class to a later gate.",
+   "The reference price for the spot delta and therefore the cloud and GPU class: hyperscaler list (57-81% off H100/B200), neocloud on-demand (roughly zero delta), or hosted dedicated endpoints ($3.99-$8.00/H100-hr). The draft asserted 'interruptible H100 capacity' on one cloud in section 7 while leaving class open in section 11.",
+   "Whether to target the frontier-trace context regime (115-195K) or the open-weight guidance regime (32k) as the first segment, since the connector measurably loses in the latter.",
+   "Pricing shape: the draft asserted a two-meter model (session-hour + preemptible per-token) in section 8 while listing meter shape as open in section 11; 'per session-hour' vs 'per token' vs '30% of savings' remains the founder's call.",
+   "Whether a design-partner pilot should gate the benchmark or follow it; the draft scheduled two design partners in week 6 without evidence any exist.",
+   "Resume granularity: step-boundary-only resume (no decode-token KV saved, partial output re-prefilled) is an engineering default that affects the preemption UX during 45-minute turns; whether mid-step resume is required for the product is undecided.",
+   "Hosted vs BYOC vs OSS connector remains open; hosted is the only option that captures the spot margin, and the draft's MVP silently assumed hosted."
+  ],
   "name": "Preemptible-GPU inference made safe by portable session state",
   "numeric_claims": 67,
-  "one_line": "Run long-lived agent sessions on spot GPUs by keeping every session's KV state portable off-instance, so a preemption becomes a bit-identical restore on another instance instead of a lost session; value is continuity and fleet capacity at 64k-128k+ context, not TTFT, and the deciding number (restore bandwidth from a tier that survives the instance) is unmeasured.",
-  "unproven": 7
+  "one_line": "Run long-lived agent sessions on spot GPUs by making per-session KV portable to a durable tier and restorable on any instance; value is conditional on an unmeasured fast-durable-tier bandwidth at the customer's real context size, with only identical continuation proven below that crossover.",
+  "revised_by_run": "wf_2398f999-206",
+  "strongest_version": "The honest strong form of J is a kill-and-resume proof, not a spot pitch: a session-addressed inference endpoint on interruptible GPUs where every session's KV is continuously written through to a tier that survives the instance, and a SIGKILL on instance A is followed by the session's next step on instance B with published resume p95, GPU-seconds, identity, and resume-storm GB/s, benchmarked against the buyer's own fallback (vanilla vLLM re-prefilling the transcript) and against LMCache/OffloadingConnector object tiers. The repos already give it what no competitor's docs describe together: in-engine cross-instance bit-identical restore at TP=1, a working V1 connector skeleton with async load and an adaptive load-vs-recompute policy, a contiguous pinned-slab transfer pattern that held N=300 where LMCache 0.3.2 collapsed, and a session API/control-plane skeleton. Its economics are expressible only because portable KV turns a preemption into bytes divided by bandwidth, which lets a preemptible per-token tier carry a restore SLO instead of Morph-style admission gating. The entire direction rests on one number nobody has measured, per-request restore bandwidth from a fast durable tier into vLLM paged KV at 64k-128k, and one distribution nobody has collected, the real context sizes of self-hosted open-weight agent steps; a one-week tier gate and two design-partner histograms decide whether J is a product or a determinism feature on a session-affinity router.",
+  "unproven": 7,
+  "weeks_to_proof": "8-10 weeks to a credible public kill-and-resume benchmark at TP=1 on Llama-3.1-8B (three seeds, 8k-128k ladder, baselines vanilla vLLM prefix caching / LMCache 0.5.x S3+NVMe / vLLM OffloadingConnector, per-point tier GB/s). Assumptions: 1-2 engineers full-time; ~$3-6k GPU spend at Modal/spot rates (~150-250 GPU-hours incl. reruns); an S3/remote-NVMe backend for the dexa SessionStore or LMCache's backends lands in week 1 and the tier gate (>=0.5 GB/s per request at 128k) passes; chunked-prefill save (vllm_connector.py:608) plus the port of the voice connector's block-keyed contiguous-transfer path and a rebase from vLLM 0.24.0/0.9.2 to 0.28.0 take 2-3 weeks; generalizing the voice harness (text prompts, aiohttp abort, server-metric scraping, provenance, multi-seed) takes 2 weeks; runs and write-up 2 weeks. The draft's 6-week figure assumed the tier backend, harness generalization and API rebase were free and included a design-partner pilot with partners that do not exist in the research files. Add 4-6 weeks if the proof must include the buyer's TP>1/MLA model class; the hosted spot fleet, registry, preemption handler and streaming gateway are beyond the benchmark and not costed here. The week-1 gate can end the effort at week 1."
  },
  "K": {
   "chars": 23748,

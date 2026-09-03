@@ -1,0 +1,566 @@
+{
+ "rounds": 665453,
+ "sessions": 8058,
+ "tool_calls_with_latency": 572959,
+ "steps_with_tools": 434912,
+ "step_generation_ms": {
+  "n": 434912,
+  "p50": 6622.999906539917,
+  "p90": 26235.89985370638,
+  "p99": 112674.48017835662,
+  "mean": 14226.59084822024
+ },
+ "step_tool_parallel_ms": {
+  "n": 434912,
+  "p50": 192.0,
+  "p90": 11712.900000000023,
+  "p99": 216034.89,
+  "mean": 22721.07020500699
+ },
+ "step_tool_serial_ms": {
+  "n": 434912,
+  "p50": 232.0,
+  "p90": 13410.900000000023,
+  "p99": 240001.0,
+  "mean": 23767.253789272312
+ },
+ "tool_share_of_step_wallclock": {
+  "per_step_median": 0.03041814220671272,
+  "per_step_mean": 0.1766603477003205,
+  "time_weighted": 0.6149528700145526,
+  "steps_where_tool_exceeds_generation": 0.14953139945552205
+ },
+ "by_provider": {
+  "claude": {
+   "steps": 261835,
+   "time_weighted_tool_share": 0.6561923274815207,
+   "mean_gen_s": 16.81400143598512,
+   "mean_tool_s": 32.09125222754788
+  },
+  "codex": {
+   "steps": 173077,
+   "time_weighted_tool_share": 0.4531587389189234,
+   "mean_gen_s": 10.312294602922385,
+   "mean_tool_s": 8.54563609260618
+  }
+ },
+ "idle_window_s": {
+  "tool": {
+   "n": 421135,
+   "p50": 0.18999981880187988,
+   "p90": 14.361999988555908,
+   "p99": 209.36755989551503,
+   "mean": 18.629043907522327
+  },
+  "user": {
+   "n": 85131,
+   "p50": 61.092000007629395,
+   "p90": 749.2439999580383,
+   "p99": 20354.69889998426,
+   "mean": 826.2495017554686
+  }
+ },
+ "idle_window_tool_triggered_share_above": {
+  "1": 0.3640922744488109,
+  "5": 0.19532453963693353,
+  "25": 0.0770655490519667,
+  "60": 0.04019376209529011,
+  "300": 0.007296947534638536
+ },
+ "idle_time_tool_triggered_in_windows_above": {
+  "1": 0.9951777155076622,
+  "5": 0.9753859005730748,
+  "25": 0.913940400932701,
+  "60": 0.8441196047660977,
+  "300": 0.6351554282954146
+ },
+ "tool_latency_by_tool": [
+  {
+   "provider": "claude",
+   "tool": "Bash",
+   "calls": 158259,
+   "p50": 0.328,
+   "p90": 20.411000000000058,
+   "p99": 300.136,
+   "share_of_calls": 0.27621348124385864,
+   "share_of_tool_time": 0.4325697762748583,
+   "frac_long": 0.20089852709798495
+  },
+  {
+   "provider": "claude",
+   "tool": "AskUserQuestion",
+   "calls": 1494,
+   "p50": 82.5435,
+   "p90": 1285.646400000002,
+   "p99": 36604.94147999993,
+   "share_of_calls": 0.0026075164191504104,
+   "share_of_tool_time": 0.2310538261402749,
+   "frac_long": 0.9725568942436412
+  },
+  {
+   "provider": "codex",
+   "tool": "write_stdin",
+   "calls": 55042,
+   "p50": 5.002,
+   "p90": 42.11860000000001,
+   "p99": 300.001,
+   "share_of_calls": 0.09606621067126968,
+   "share_of_tool_time": 0.10296578174118184,
+   "frac_long": 0.5755604810871698
+  },
+  {
+   "provider": "claude",
+   "tool": "ExitPlanMode",
+   "calls": 666,
+   "p50": 100.60849999999999,
+   "p90": 783.0235,
+   "p99": 14081.062,
+   "share_of_calls": 0.0011623868374525926,
+   "share_of_tool_time": 0.0833064642515967,
+   "frac_long": 0.9459459459459459
+  },
+  {
+   "provider": "codex",
+   "tool": "exec_command",
+   "calls": 176685,
+   "p50": 0.22,
+   "p90": 1.195,
+   "p99": 30.162,
+   "share_of_calls": 0.30837285041338036,
+   "share_of_tool_time": 0.03775536416107167,
+   "frac_long": 0.0431049608059541
+  },
+  {
+   "provider": "claude",
+   "tool": "Agent",
+   "calls": 2536,
+   "p50": 30.4535,
+   "p90": 180.02949999999998,
+   "p99": 946.5453000000039,
+   "share_of_calls": 0.004426145675345008,
+   "share_of_tool_time": 0.027844834014279368,
+   "frac_long": 0.5563880126182965
+  },
+  {
+   "provider": "claude",
+   "tool": "Edit",
+   "calls": 36522,
+   "p50": 0.075,
+   "p90": 1.988,
+   "p99": 61.975680000000075,
+   "share_of_calls": 0.06374278089706244,
+   "share_of_tool_time": 0.021694688596181556,
+   "frac_long": 0.06029242648266798
+  },
+  {
+   "provider": "claude",
+   "tool": "WebFetch",
+   "calls": 3636,
+   "p50": 6.2605,
+   "p90": 22.627499999999998,
+   "p99": 205.6318,
+   "share_of_calls": 0.006346003815281722,
+   "share_of_tool_time": 0.010634124730773301,
+   "frac_long": 0.6427392739273927
+  },
+  {
+   "provider": "claude",
+   "tool": "TaskOutput",
+   "calls": 636,
+   "p50": 117.104,
+   "p90": 420.0715,
+   "p99": 600.29345,
+   "share_of_calls": 0.001110027069999773,
+   "share_of_tool_time": 0.010209458895552182,
+   "frac_long": 0.85062893081761
+  },
+  {
+   "provider": "codex",
+   "tool": "apply_patch",
+   "calls": 20672,
+   "p50": 0.056,
+   "p90": 1.166,
+   "p99": 18.56114000000006,
+   "share_of_calls": 0.036079370426156145,
+   "share_of_tool_time": 0.009042049744970356,
+   "frac_long": 0.031056501547987617
+  },
+  {
+   "provider": "claude",
+   "tool": "Write",
+   "calls": 8597,
+   "p50": 0.068,
+   "p90": 2.1024000000000007,
+   "p99": 83.72699999999986,
+   "share_of_calls": 0.015004564026396303,
+   "share_of_tool_time": 0.008297951060008624,
+   "frac_long": 0.05746190531580784
+  },
+  {
+   "provider": "claude",
+   "tool": "WebSearch",
+   "calls": 1709,
+   "p50": 17.835,
+   "p90": 101.48580000000003,
+   "p99": 271.7336400000002,
+   "share_of_calls": 0.00298276141922895,
+   "share_of_tool_time": 0.006223643406309489,
+   "frac_long": 0.9806904622586308
+  },
+  {
+   "provider": "claude",
+   "tool": "Read",
+   "calls": 63671,
+   "p50": 0.027,
+   "p90": 0.245,
+   "p99": 3.0068000000000175,
+   "share_of_calls": 0.11112662511628232,
+   "share_of_tool_time": 0.005517696392387326,
+   "frac_long": 0.0073345793218262635
+  },
+  {
+   "provider": "codex",
+   "tool": "wait_agent",
+   "calls": 261,
+   "p50": 96.565,
+   "p90": 434.039,
+   "p99": 900.0022,
+   "share_of_calls": 0.00045552997683952955,
+   "share_of_tool_time": 0.003997036614486453,
+   "frac_long": 0.8773946360153256
+  },
+  {
+   "provider": "claude",
+   "tool": "PushNotification",
+   "calls": 34,
+   "p50": 0.005,
+   "p90": 0.0107,
+   "p99": 19194.08557000005,
+   "share_of_calls": 5.9341069779862085e-05,
+   "share_of_tool_time": 0.0027715735301629767,
+   "frac_long": 0.029411764705882353
+  },
+  {
+   "provider": "codex",
+   "tool": "shell_command",
+   "calls": 7314,
+   "p50": 0.058,
+   "p90": 0.915,
+   "p99": 20.01971999999997,
+   "share_of_calls": 0.012765311304997392,
+   "share_of_tool_time": 0.0018597661898628012,
+   "frac_long": 0.02611430133989609
+  },
+  {
+   "provider": "claude",
+   "tool": "Monitor",
+   "calls": 1112,
+   "p50": 0.066,
+   "p90": 2.571,
+   "p99": 54.02226000000005,
+   "share_of_calls": 0.0019408020469178424,
+   "share_of_tool_time": 0.0008543955866735531,
+   "frac_long": 0.04226618705035971
+  },
+  {
+   "provider": "claude",
+   "tool": "TaskUpdate",
+   "calls": 8821,
+   "p50": 0.05,
+   "p90": 0.328,
+   "p99": 13.488799999999767,
+   "share_of_calls": 0.01539551695671069,
+   "share_of_tool_time": 0.0007663843085125025,
+   "frac_long": 0.02199297131844462
+  },
+  {
+   "provider": "codex",
+   "tool": "request_user_input",
+   "calls": 47,
+   "p50": 58.206,
+   "p90": 227.8072,
+   "p99": 418.6146799999999,
+   "share_of_calls": 8.203030234275053e-05,
+   "share_of_tool_time": 0.0004405788030712242,
+   "frac_long": 0.9574468085106383
+  },
+  {
+   "provider": "claude",
+   "tool": "TaskCreate",
+   "calls": 4876,
+   "p50": 0.045,
+   "p90": 2.6605,
+   "p99": 15.52375,
+   "share_of_calls": 0.008510207536664927,
+   "share_of_tool_time": 0.0004209984043710591,
+   "frac_long": 0.05947497949138638
+  },
+  {
+   "provider": "claude",
+   "tool": "Glob",
+   "calls": 984,
+   "p50": 0.2505,
+   "p90": 1.878,
+   "p99": 8.666989999999945,
+   "share_of_calls": 0.0017174003724524792,
+   "share_of_tool_time": 0.0003629401171937848,
+   "frac_long": 0.02032520325203252
+  },
+  {
+   "provider": "claude",
+   "tool": "Grep",
+   "calls": 3353,
+   "p50": 0.13,
+   "p90": 0.367,
+   "p99": 10.365400000000024,
+   "share_of_calls": 0.005852076675643458,
+   "share_of_tool_time": 0.0003385264376033833,
+   "frac_long": 0.014912019087384432
+  },
+  {
+   "provider": "codex",
+   "tool": "exec",
+   "calls": 1731,
+   "p50": 0.802,
+   "p90": 5.64,
+   "p99": 10.0567,
+   "share_of_calls": 0.003021158582027684,
+   "share_of_tool_time": 0.00030100978769563813,
+   "frac_long": 0.12478336221837089
+  },
+  {
+   "provider": "claude",
+   "tool": "Skill",
+   "calls": 182,
+   "p50": 0.0535,
+   "p90": 21.596,
+   "p99": 178.068,
+   "share_of_calls": 0.00031764925588043824,
+   "share_of_tool_time": 0.0002197656832389889,
+   "frac_long": 0.17032967032967034
+  },
+  {
+   "provider": "claude",
+   "tool": "custom_tool_3",
+   "calls": 6,
+   "p50": 5.2005,
+   "p90": 863.108,
+   "p99": 863.1917,
+   "share_of_calls": 1.0471953490563897e-05,
+   "share_of_tool_time": 0.00016861900708335534,
+   "frac_long": 0.5
+  }
+ ],
+ "long_call_definition_s": 5.0,
+ "long_wait_predictability_from_tool_identity": {
+  "identity": "provider + tool_name + first executable (shell) ; predict long if group P(long)>=0.5",
+  "base_rate_long": 0.14722344879825608,
+  "accuracy": 0.883475082859332,
+  "precision_long": 0.6119733642301474,
+  "recall_long": 0.5698078313752919,
+  "share_of_long_wait_time_correctly_predicted": 0.5932557696489882,
+  "distinct_identities": 1003
+ },
+ "shell_by_first_executable_top": [
+  {
+   "provider": "claude",
+   "tool": "Bash",
+   "exe": "cd",
+   "calls": 52033,
+   "p50": 0.347,
+   "p90": 20.706,
+   "frac_long": 0.20925182095977551,
+   "share_of_tool_time": 0.09881975904976328
+  },
+  {
+   "provider": "claude",
+   "tool": "Bash",
+   "exe": "tail",
+   "calls": 2331,
+   "p50": 0.159,
+   "p90": 4.335,
+   "frac_long": 0.09309309309309309,
+   "share_of_tool_time": 0.07120698588488825
+  },
+  {
+   "provider": "claude",
+   "tool": "Bash",
+   "exe": "sleep",
+   "calls": 3636,
+   "p50": 35.7645,
+   "p90": 120.3275,
+   "frac_long": 0.7057205720572057,
+   "share_of_tool_time": 0.02829768940885768
+  },
+  {
+   "provider": "claude",
+   "tool": "Bash",
+   "exe": "conda",
+   "calls": 215,
+   "p50": 8.687,
+   "p90": 122.32,
+   "frac_long": 0.6465116279069767,
+   "share_of_tool_time": 0.024679363570444115
+  },
+  {
+   "provider": "claude",
+   "tool": "Bash",
+   "exe": "echo",
+   "calls": 12918,
+   "p50": 0.663,
+   "p90": 10.083200000000005,
+   "frac_long": 0.17270475305774888,
+   "share_of_tool_time": 0.02308464682320676
+  },
+  {
+   "provider": "claude",
+   "tool": "Bash",
+   "exe": "python",
+   "calls": 4128,
+   "p50": 2.121,
+   "p90": 32.54050000000001,
+   "frac_long": 0.3025678294573643,
+   "share_of_tool_time": 0.022866249086160497
+  },
+  {
+   "provider": "claude",
+   "tool": "Bash",
+   "exe": "grep",
+   "calls": 21708,
+   "p50": 0.104,
+   "p90": 1.2572999999999992,
+   "frac_long": 0.03754376266814078,
+   "share_of_tool_time": 0.019144549372732397
+  },
+  {
+   "provider": "claude",
+   "tool": "Bash",
+   "exe": "source",
+   "calls": 2491,
+   "p50": 7.496,
+   "p90": 60.47,
+   "frac_long": 0.6114010437575271,
+   "share_of_tool_time": 0.015341369695383605
+  },
+  {
+   "provider": "claude",
+   "tool": "Bash",
+   "exe": "python-script",
+   "calls": 3649,
+   "p50": 2.374,
+   "p90": 60.193,
+   "frac_long": 0.323924362839134,
+   "share_of_tool_time": 0.015231013296719333
+  },
+  {
+   "provider": "claude",
+   "tool": "Bash",
+   "exe": "docker",
+   "calls": 2935,
+   "p50": 2.779,
+   "p90": 109.73519999999971,
+   "frac_long": 0.38023850085178873,
+   "share_of_tool_time": 0.013387912735341699
+  },
+  {
+   "provider": "claude",
+   "tool": "Bash",
+   "exe": "cargo",
+   "calls": 1282,
+   "p50": 6.3645,
+   "p90": 70.59100000000005,
+   "frac_long": 0.5522620904836193,
+   "share_of_tool_time": 0.010628219343821686
+  },
+  {
+   "provider": "claude",
+   "tool": "Bash",
+   "exe": "find",
+   "calls": 6646,
+   "p50": 0.131,
+   "p90": 3.0685000000000002,
+   "frac_long": 0.07628648811315077,
+   "share_of_tool_time": 0.010360825334295293
+  },
+  {
+   "provider": "claude",
+   "tool": "Bash",
+   "exe": "ls",
+   "calls": 9499,
+   "p50": 0.117,
+   "p90": 3.046400000000005,
+   "frac_long": 0.06569112538161911,
+   "share_of_tool_time": 0.00852806930972774
+  },
+  {
+   "provider": "codex",
+   "tool": "exec_command",
+   "exe": "python-script",
+   "calls": 25359,
+   "p50": 1.109,
+   "p90": 2.285200000000001,
+   "frac_long": 0.0698765724200481,
+   "share_of_tool_time": 0.007551752567966391
+  },
+  {
+   "provider": "codex",
+   "tool": "exec_command",
+   "exe": "python",
+   "calls": 858,
+   "p50": 1.167,
+   "p90": 6.7414000000000005,
+   "frac_long": 0.15384615384615385,
+   "share_of_tool_time": 0.005488933533940102
+  },
+  {
+   "provider": "claude",
+   "tool": "Bash",
+   "exe": "seq",
+   "calls": 543,
+   "p50": 7.717,
+   "p90": 284.78760000000005,
+   "frac_long": 0.5156537753222836,
+   "share_of_tool_time": 0.004921298456693123
+  },
+  {
+   "provider": "claude",
+   "tool": "Bash",
+   "exe": "pgrep",
+   "calls": 910,
+   "p50": 0.402,
+   "p90": 27.50430000000003,
+   "frac_long": 0.2010989010989011,
+   "share_of_tool_time": 0.004602398080491669
+  },
+  {
+   "provider": "claude",
+   "tool": "Bash",
+   "exe": "custom_729",
+   "calls": 112,
+   "p50": 23.452,
+   "p90": 290.51,
+   "frac_long": 0.9017857142857143,
+   "share_of_tool_time": 0.0038111292441483174
+  },
+  {
+   "provider": "claude",
+   "tool": "Bash",
+   "exe": "cat",
+   "calls": 4079,
+   "p50": 0.128,
+   "p90": 6.263600000000002,
+   "frac_long": 0.11669526844814905,
+   "share_of_tool_time": 0.003614214550623428
+  },
+  {
+   "provider": "codex",
+   "tool": "exec_command",
+   "exe": "docker",
+   "calls": 11437,
+   "p50": 0.323,
+   "p90": 3.443199999999999,
+   "frac_long": 0.08227682084462709,
+   "share_of_tool_time": 0.0036044792045612658
+  }
+ ]
+}

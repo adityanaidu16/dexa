@@ -1,0 +1,37 @@
+{
+ "next_after_shell_ok": {
+  "shell": 0.9609232638185867,
+  "edit": 0.023284065600323953,
+  "view": 0.015590200445434299,
+  "shell-same": 0.00020247013565499088
+ },
+ "n_shell_ok": 4939,
+ "next_after_shell_failed": {
+  "shell": 0.9335384615384615,
+  "edit": 0.060307692307692305,
+  "view": 0.005538461538461538,
+  "shell-same": 0.0006153846153846154
+ },
+ "n_shell_failed": 1625,
+ "next_after_edit": {
+  "shell": 0.8909090909090909,
+  "edit": 0.10606060606060606,
+  "view": 0.0030303030303030303
+ },
+ "shell_after_edit_fraction": 0.8909090909090909,
+ "shell_after_edit_is_exact_repeat": 0.41496598639455784,
+ "repeat_command_first_word_top": {
+  "cd /testbed && python reproduce_error.py": 54,
+  "python": 32,
+  "cd /testbed && python reproduce.py": 14,
+  "cd /testbed && python reproduce_bug.py": 8,
+  "cd /testbed && python reproduce_issue.py": 6,
+  "cd /testbed && python test_edge_cases.py": 2,
+  "python3": 1,
+  "cd /testbed && python repro.py": 1,
+  "cd /testbed && python edge_cases.py": 1,
+  "cd /testbed && python test_cache_dir.py": 1,
+  "cd /testbed && python test_orderedset_re": 1,
+  "cd /testbed && python reproduce_version_": 1
+ }
+}

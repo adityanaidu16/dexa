@@ -1,0 +1,43 @@
+{
+ "next_after_shell_ok": {
+  "shell": 0.5371713508612874,
+  "view": 0.2513599274705349,
+  "edit": 0.16500453309156846,
+  "think": 0.03320489573889392,
+  "task_tracker": 0.01257932910244787,
+  "shell-same": 0.0006799637352674524
+ },
+ "n_shell_ok": 8824,
+ "next_after_shell_failed": {
+  "shell": 0.5227383863080685,
+  "edit": 0.24645476772616137,
+  "view": 0.158679706601467,
+  "think": 0.05867970660146699,
+  "task_tracker": 0.012224938875305624,
+  "shell-same": 0.0012224938875305623
+ },
+ "n_shell_failed": 4090,
+ "next_after_edit": {
+  "shell": 0.7937015061615701,
+  "edit": 0.13646736649931537,
+  "view": 0.0611592879963487,
+  "task_tracker": 0.007530807850296669,
+  "think": 0.0011410314924691922
+ },
+ "shell_after_edit_fraction": 0.7937015061615701,
+ "shell_after_edit_is_exact_repeat": 0.3041978148361127,
+ "repeat_command_first_word_top": {
+  "cd /workspace/frictionlessdata__friction": 25,
+  "cd /workspace/PennyLaneAI__pennylane__0.": 20,
+  "cd /workspace/omni-us__jsonargparse__4.3": 19,
+  "cd /workspace/tinosulzer__PyBaMM__unknow": 18,
+  "cd /workspace/canonical__charmcraft__3.1": 14,
+  "cd /workspace/aiogram__aiogram__3.0 && p": 12,
+  "cd /workspace/stfc__PSyclone__2.3 && pyt": 12,
+  "cd /workspace/beeware__briefcase__0.3 &&": 12,
+  "cd /workspace/dwavesystems__dwave-system": 11,
+  "cd /workspace/NCAS-CMS__cfdm__1.8 && pyt": 10,
+  "cd /workspace/lepture__mistune__0.8 && p": 10,
+  "cd /workspace/fgmacedo__python-statemach": 10
+ }
+}

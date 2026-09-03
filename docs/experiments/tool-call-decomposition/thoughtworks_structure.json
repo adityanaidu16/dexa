@@ -1,0 +1,51 @@
+{
+ "trajectories": 600,
+ "calls": 7733,
+ "readonly_fraction": 0.35561877667140823,
+ "result_reconstructible_fraction": 0.04099314625630415,
+ "result_exact_duplicate_fraction": 0.14418724945040734,
+ "next_action_uses_new_info_from_result": 0.09322865554465162,
+ "next_action_independent_of_result": 0.9067713444553483,
+ "next_action_exact_repeat_of_earlier": 0.10023832889387355,
+ "next_action_is_think_or_finish": 0.0,
+ "repeated_command_same_output": 0.3333333333333333,
+ "repeated_commands": 9,
+ "by_tool": {
+  "execute_bash": {
+   "calls": 7157,
+   "share": 0.9255140307771886,
+   "readonly": 0.35070560290624564,
+   "reconstructible": 0.0012575101299427134,
+   "dup_result": 0.15537236272181082,
+   "next_uses_new_info": 0.08790371724558196,
+   "next_exact_repeat": 0.090036563071298
+  },
+  "str_replace_editor:view": {
+   "calls": 240,
+   "share": 0.03103582050950472,
+   "readonly": 1.0,
+   "reconstructible": 0.2708333333333333,
+   "dup_result": 0.0125,
+   "next_uses_new_info": 0.3598326359832636,
+   "next_exact_repeat": 0.008368200836820083
+  },
+  "str_replace_editor:str_replace": {
+   "calls": 170,
+   "share": 0.02198370619423251,
+   "readonly": 0.0,
+   "reconstructible": 0.7647058823529411,
+   "dup_result": 0.0,
+   "next_uses_new_info": 0.012195121951219513,
+   "next_exact_repeat": 0.7439024390243902
+  },
+  "str_replace_editor:create": {
+   "calls": 166,
+   "share": 0.0214664425190741,
+   "readonly": 0.0,
+   "reconstructible": 0.6807228915662651,
+   "dup_result": 0.0,
+   "next_uses_new_info": 0.0,
+   "next_exact_repeat": 0.0
+  }
+ }
+}

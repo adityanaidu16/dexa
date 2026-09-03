@@ -1,0 +1,238 @@
+{
+ "id": "A",
+ "name": "Session-stateful inference provider for long-idle, long-context agents",
+ "one_line": "A hosted open-model provider whose billable unit is a durable warm agent session: KV kept resident across minute-to-hour gaps via client-hinted HBM -> RAM -> NVMe demotion over unforked vLLM, billed as residency plus delta tokens, proven by a public idle-gap-resume benchmark against the strongest OSS offload baseline.",
+ "evidence_grade": "C",
+ "evidence_grade_reason": "The restore-vs-re-prefill physics is measured in-engine but only single-request and only to 16k (vLLM 0.24 + LMCache, Qwen2.5-7B, A100: 10.0x/17.1x), is contradicted on a disk tier under 16-24-way concurrency (0.37x single, 1.6-2.2x worse p99), and the only RAM-tier concurrency data is voice: single seed, L40S, ~2.5k-token sessions, LMCache 0.3.2 on vLLM 0.9.2, BOUNDED in the ledger. The brief's actual differentiator - client-hinted, tier-spanning proactive demotion beating stock LRU/ARC offload at agent context and serving concurrency - has never been built or run in either repo (04-conflicts #3, #9) and would grade D on its own. Nothing is measured on H100/H200, at TP>1, at 32k+ in-engine on the model the numbers come from, or on real agent traces.",
+ "build_cost_weeks_to_proof": "~6-7 weeks to an A100-only IGR-1 (arms A / vLLM OffloadingConnector / LMCache 0.5.x / ours, 16k-64k, 3 seeds, burst arrivals, bitwise+logit correctness, raw logs published) with 2 engineers and ~$500-1,000 of Modal/RunPod GPU; the draft's full IGR-1 (H100 grid + H200 point, 128k, NVMe direct-IO, enforcing demotion) is ~9-12 weeks; the product surface the draft put in week 6 is weeks 7-9. A provider TTL probe (IGR-0) is publishable in week 1 for ~$100 of API spend but proves the pain, not our value. Assumptions: porting the voice connector from vLLM 0.9.2 to the pinned 0.28 KVConnectorBase_V1 takes <=2 weeks (no precedent in either repo), TP=1 only, Qwen2.5-7B or Llama-8B fp8-KV so the 32x64k resident set fits a >=200 GB host, no fork of vLLM.",
+ "factcheck": [
+  {
+   "claim": "Proven: 'Contiguous pinned-RAM restores sustain concurrency where chunked blocking loads collapse: VoiceKVConnector N=300 p95 316.8 ms stable vs LMCache 0.3.2 default 25,997.7 / layerwise 6,025.1 ms'",
+   "verdict": "misquoted",
+   "correction": "Numbers are correct but the ledger labels this BOUNDED, not PROVEN (02 vi-contiguous-vs-chunked-transfer): not a controlled comparison of transfer granularity (implementations differ in chunking, async, eviction, decode-KV), no per-transfer timings archived, full-load-window p95 is 336.8 ms and fails the 300 ms gate, single seed, vLLM 0.9.2/LMCache 0.3.2 only. Moved to Bounded."
+  },
+  {
+   "claim": "Proven: 'Session-semantic residency hints move a knee: arm D N=300 p95 272.2 ms PASS vs B 316.8; 1.5x, single seed, 8.1 ms margin'",
+   "verdict": "misquoted",
+   "correction": "Ledger status is BOUNDED (02 vi-armD-predictive-pinning). The 1.5x is arm D vs arm A (max passing N 300 vs 200); B-voice also topped out at 200. Omitted caveats: 3 of 7 full-load buckets exceeded 300 ms; the hint used the trace's own median constants (predictor knew the generating distribution); N=400 failed at 34,048 ms; mechanism is delayed HBM free, not tier demotion. Moved to Bounded."
+  },
+  {
+   "claim": "Proven: 'Lossless, portable resume: bit-identical output across two vLLM processes at TP=1; identical_output=true at 8k-64k (01 cross-instance-resume; 04 fact (b))'",
+   "verdict": "misquoted",
+   "correction": "Two separate facts conflated. The two-vLLM-process identical-output test was OPT-125m on A10G (plus Qwen3-0.6B 8k next-token correct); the identical_output=true at 8k-64k is the HFBackend persist bench on Llama-3.1-8B, not vLLM (01 raw-kv-resume-vs-reprefill-gpu-arc, 01 cross-instance-resume). Split into two bullets."
+  },
+  {
+   "claim": "IGR-1 grid 'context {16k..128k} x active sessions {1, 8, 32, 128}' with primary gate at 64k x 32 sessions",
+   "verdict": "unsupported",
+   "correction": "Resident-set arithmetic omitted: Llama-3.1-8B bf16 at 131 KB/token (docs/RESULTS.md) gives 32 x 64k = 269 GB and 128 x 128k = 2.1 TB; single-GPU host RAM in 05-research-gpu-pricing.md is 125-283 GB/GPU (RunPod) to 2,048 GB per 8-GPU node (CoreWeave). Upper cells cannot be RAM-resident; the real tier there is NVMe (least measured). Qwen2.5-7B at 57 KB/token gives 32 x 64k = 120 GB. Grid revised with per-cell RAM budget and model/precision choice."
+  },
+  {
+   "claim": "Primary metric 'p99 resume TTFT ... arm D vs arm A: >= 5x'",
+   "verdict": "unsupported",
+   "correction": "Does not isolate the claimed advantage. At 64k x 32 sessions arm A's ~60 GB usable HBM holds ~7 Llama-8B or ~16 Qwen-7B sessions, so most A resumes are cold prefills by construction; any CPU offload wins (vLLM's own OffloadingConnector blog reports 2-22x TTFT, 05-research-kvcache.md). Retained only as a sanity gate; primary gate moved to D vs best OSS offload (OffloadingConnector LRU/ARC, LMCache 0.5.x layerwise)."
+  },
+  {
+   "claim": "Tertiary metric / kill gate: '100% greedy identity' vs cold prefill; 'any divergence removes lossless'",
+   "verdict": "unsupported",
+   "correction": "The voice repo's own correctness probe states exact text match is NOT the pass criterion because greedy decoding cascades cached-vs-full-prefill kernel numerics into divergent text (evals/modal_kv_correctness.py lines 114-116; 02 lesson #9). dexa's identical_output results were HF (same kernel path) or OPT-125m. Replaced with bitwise KV-block equality plus top-1/KL agreement with a cold-prefill-vs-cold-prefill reference."
+  },
+  {
+   "claim": "Section 5: 'Replaced: the eviction policy (LRU/ARC/LFU in every OSS store) with an idle-window-aware one'",
+   "verdict": "misquoted",
+   "correction": "Time-bounded retention exists in OSS/products per the research files: Mooncake soft-pin TTL 30 min default / 24 h max; Dynamo KVBM 'exposes cache_control-style TTL retention semantics' (NVIDIA blog, 05-research-agents.md); Morph 'per-request TTL control'; SGLang RFC #27574 pin with bounded TTL (open); AIBrix also uses S3FIFO. What is absent per 05-research-kvcache.md Unknowns is idle-window-aware eviction in LMCache specifically. Reworded to client-hinted, tier-spanning demotion plus session API."
+  },
+  {
+   "claim": "Architecture: 'Tiering policy engine (enforcing) ... seed from dexa_platform/sessions/tiering.py' and connector 'seed from voice arm D' for 'enforced idle-aware demotion RAM -> NVMe -> drop'",
+   "verdict": "misquoted",
+   "correction": "No code in either repo demotes or frees KV proactively: tiering.py is an advisory break-even calculator with no enforcement path (03-build-inventory), the voice connector keeps HBM vLLM-managed and arm D only delays free (04 #9, superseded list: the 'copy + FREE at turn end' mechanism was described and never built). Marked NEW in the components table."
+  },
+  {
+   "claim": "Week 2: 'add ... block-hash keying (dexa's whole-prompt keying scored zero hits on prefix_repetition)'",
+   "verdict": "misquoted",
+   "correction": "The voice connector already keys by a blake2b chain over 16-token blocks (03-build-inventory; voice_kv_connector.py line 30, 80-86); dexa's connector is the one with whole-prompt keying. The needed fix the draft omitted: a store evicts the entry it matched, so sessions sharing a prefix (agent system prompt + ~4.5k-token toolset) evict each other every turn (03-build-inventory connector notes)."
+  },
+  {
+   "claim": "'HF prefill is ~5-7x slower than vLLM at 8k (docs/RESULTS.md: 617 ms vs 3.3-4.2 s)' applied to the Qwen2.5-7B HF stateful numbers",
+   "verdict": "misquoted",
+   "correction": "The 617 ms vs 3.3-4.2 s comparison is Llama-3.1-8B (HFBackend vs vLLM); the HF stateful numbers (296-8,567 ms) are Qwen2.5-7B. Cross-model; the direction holds but the multiplier is not the same model. Also omitted: restore time is sub-linear in bytes (25 -> 297 ms for 16x bytes), so part of the widening ratio is fixed-overhead amortization (04 superseded list)."
+  },
+  {
+   "claim": "'End-to-end demo: 12k session 5.4 s cold -> 1.5 s warm (3.7x), one run'",
+   "verdict": "correct",
+   "correction": "Ledger PROVEN but caveat omitted: stated only in dexa_platform/README.md:144 and docs/FINDINGS.md:94; no raw artifact in the repo (03-build-inventory). Caveat added."
+  },
+  {
+   "claim": "'voice arm A collapsed when ~42 GB live KV exceeded a ~26 GB pool'",
+   "verdict": "correct",
+   "correction": "Correct as a doc estimate (OVERLOAD.md); caveat added that it is arithmetic, not measured, and the committed server log shows 'GPU KV cache usage' only 33-45% during collapse, unexplained (02 discrepancy #6)."
+  },
+  {
+   "claim": "Section 2: customers are 'buying from generalized providers whose cache does not survive their gaps'",
+   "verdict": "unsupported",
+   "correction": "Documented for Anthropic 5-min default and Azure/OpenAI in_memory; for open-model providers retention is OpenAI 24h at no charge, DeepSeek 'a few hours to a few days', Groq 2h (GPT-OSS only), Cerebras 5 min guaranteed up to 1h, DeepInfra explicit 1h, Fireworks 'several minutes... up to several hours' (05-research-caching/providers). TraceLab p90 gap 20.6 min sits inside several windows. Reframed as an assumption with IGR-0 (provider TTL probe) and a kill gate."
+  },
+  {
+   "claim": "Unproven table costs '~240 GPU-hr ~ $600' / '~$950'",
+   "verdict": "correct",
+   "correction": "Arithmetic correct at Modal A100 $2.50/hr and H100 $3.95/hr; the 240 GPU-hr figure is an unmeasured estimate and is now labelled as such."
+  },
+  {
+   "claim": "Model choice 'Llama-3.1-8B-Instruct (the model of most repo evidence)'",
+   "verdict": "misquoted",
+   "correction": "All restore-vs-prefill evidence (HF, vLLM warmstart, LMCache) is Qwen2.5-7B; Llama-3.1-8B is the model of the negative connector results and the verifier evals (04 header). Llama-8B does have an in-engine 128k prefill on vLLM 0.24 (32.68 s eager, 01 context-scaling-branching), which is why it is kept for the 128k cells; Qwen2.5-7B is used for continuity."
+  },
+  {
+   "claim": "LMCache restore: 4k 301 -> 30 ms (10.0x); 16k 1,320 -> 77 ms (17.1x); 16,384 tokens in 39.8 ms at 22.0 GB/s",
+   "verdict": "correct",
+   "correction": "Matches 01 lmcache-offload-restore; caveats now stated: LMCache version unpinned, prefix caching OFF, single request, 4k and 16k only."
+  },
+  {
+   "claim": "HF physics 296/1,321/3,167/8,567 ms vs 25/115/182/297 ms; NVMe 246-1,228 ms",
+   "verdict": "correct",
+   "correction": "Matches 01 stateful-warm-session-hf."
+  },
+  {
+   "claim": "TraceLab: median prefix 126,180 / 115,584; new input 857/886; output 252/184; human gap median 1.4 min p90 20.6 min; hit 95.7% global / 84.4% user-initiated",
+   "verdict": "correct",
+   "correction": "Matches 05-research-agents.md (arXiv 2606.30560)."
+  },
+  {
+   "claim": "llm-d: 219 sessions, median 195K input / 317 output, 96% reuse >=90%, pauses median 2 s / p99 11.4 min; 48K pull 235 ms vs 1,988 ms",
+   "verdict": "correct",
+   "correction": "Matches 05-research-agents.md and 05-research-kvcache.md."
+  },
+  {
+   "claim": "Issue #46829: 17.1%, $949 Sonnet 4.6, $1,581 Opus 4.6, 119,866 calls; Codex #25604: ~$15.9 / ~20M tokens / 3.28M re-billed = 71%",
+   "verdict": "correct",
+   "correction": "Matches 05-research-agents.md and 05-research-caching.md."
+  },
+  {
+   "claim": "Cost model constants $1.80/hr, $0.006/GB-hr RAM, $0.0002/GB-hr NVMe; break-evens 64k HBM ~2 min / RAM ~11 min / NVMe ~4.9 hr; '2-6x cheaper' modeled",
+   "verdict": "correct",
+   "correction": "Verified in evals/stateful_cost_model.py lines 20-24 and dexa_platform/sessions/tiering.py lines 26-28; 01 residency-cost-model (OPEN, modeled)."
+  },
+  {
+   "claim": "docs/BENCHMARK_PLAN.md names benchmark_serving_multi_turn.py --max-active-conversations and gotcha #1 = design routing to defeat local prefix caching",
+   "verdict": "correct",
+   "correction": "Verified at docs/BENCHMARK_PLAN.md lines 34-36 and 72-77."
+  },
+  {
+   "claim": "Voice connector 574 LOC, vLLM 0.9.2, TP=1, fp16, prompt-KV only, sync loads; arm D protocol ~40 lines + 6-line client hint; every manifest git_sha 'unknown', no connector field",
+   "verdict": "correct",
+   "correction": "Verified via wc -l and 03-build-inventory."
+  },
+  {
+   "claim": "Pricing facts: Tensormesh cached input $0 and $24.5M raised; Gemini explicit cache $0.50-$4.50 per 1M tokens per hour; DeepInfra 1.25x/2x write 0.2x read 8,192 increments on two models; Managed Agents $0.08/session-hour; Modal A100 $2.50 / H100 $3.95 / H200 $4.54; RunPod H100 $2.69-3.29; SF Compute $1.90; host RAM $0.0036-0.008/GiB-hr",
+   "verdict": "correct",
+   "correction": "All match 05-research-kvcache/caching/providers/gpu-pricing."
+  },
+  {
+   "claim": "Competitive table rows for Anthropic, OpenAI, Gemini, DeepSeek (~3% hit price), Fireworks, Baseten (10% cached), Morph (per-request TTL, x-session-id, 50% standby), Mooncake soft-pin 30 min/24h, Continuum >8x JCT, Stateful Inference 2.1-4.2x",
+   "verdict": "correct",
+   "correction": "All match the research files; Dynamo TTL retention semantics and vLLM OffloadingConnector 2-22x added to the OSS row for completeness."
+  },
+  {
+   "claim": "'In-engine evidence stops at 16k (conflict #11): >=32k crashed vLLM V1 EngineCore (YaRN, three configs)'",
+   "verdict": "correct",
+   "correction": "Matches 01 vllm-warmstart-prefix-cache and 04 #11; now qualified as Qwen2.5-7B + YaRN specific, since Llama-8B prefilled 128k in-engine in the same repo."
+  }
+ ],
+ "attacks": [
+  {
+   "attack": "The primary kill gate (ours vs vanilla vLLM at 64k x 32 sessions) measures the value of any CPU offload, not of this product: A's HBM cannot hold the working set, so A re-prefills by construction and the in-tree vLLM OffloadingConnector (LRU/ARC, CPU tier sized to hold all sessions) or LMCache 0.5.x layerwise would show the same multi-x win. A well-configured OSS baseline plausibly erases the TTFT delta entirely, leaving only GB-hours.",
+   "severity": "fatal",
+   "what_would_settle_it": "IGR-1 with arms B1 (vLLM OffloadingConnector LRU and ARC, CPU tier >= total resident KV) and B2 (LMCache 0.5.4 layerwise) as the gating comparison: p99 resume TTFT after >5-min gaps and GB-hours held at equal p99, 64k x 32 sessions, 3 seeds, burst arrivals. Kill if D is within 10% of the better B on both."
+  },
+  {
+   "attack": "Resident-set arithmetic makes the draft's grid infeasible and shifts the real tier to NVMe, the least measured path: 32 x 64k Llama-8B bf16 = 269 GB, 128 x 128k = 2.1 TB, versus 125-283 GB host RAM per GPU. NVMe restore is only measured as naive torch.load at ~3 GB/s single-request (16.8 GB = 5.6 s vs ~10 s re-prefill): marginal.",
+   "severity": "serious",
+   "what_would_settle_it": "Per-cell KV bytes x sessions stated before running; NVMe direct-IO/GDS restore GB/s under 8-way concurrent loads on A100 and H100; break-even at invoice rates. Proceed if >=3 GB/s sustained and NVMe resume p99 < 0.5x cold prefill at 64k."
+  },
+  {
+   "attack": "When host RAM is plentiful, LRU never evicts, so an idle-aware policy changes nothing about TTFT; its only effect is GB-hours, whose dollar value at 7-8B is bounded by ~$0.06-0.13 per 128k-session RAM-hour, while a 128k re-prefill costs ~$0.007-0.023 of A100 time. A 30% GB-hour reduction is worth cents per session-hour; the 'policy delta' the brief calls the differentiator may be economically invisible on small models.",
+   "severity": "serious",
+   "what_would_settle_it": "IGR-1 secondary metric converted to invoice dollars per session-hour on a design-partner model, and one run on a large-KV model (MLA/MoE, e.g. GLM-5.2 class at 576 FP8 elements/token x TP copies) where residency bytes and prefill seconds are both larger. Founder decides the threshold."
+  },
+  {
+   "attack": "No concurrent RAM-tier measurement exists at agent context. The only one is 2.5k-token voice sessions sustaining ~1.5 GB/s aggregate on an L40S; 8 x 8.4 GB sessions resuming in a burst is 67 GB over a PCIe Gen4 link (~20 GB/s practical), i.e. >3 s of queued transfer before any policy matters. p99 under burst may be link-bound regardless of policy.",
+   "severity": "serious",
+   "what_would_settle_it": "IGR-1 burst cells (8 sessions resume within 10 s) logging aggregate H2D GB/s and queue time per restore, on A100 (Gen4) and H100 (Gen5). Kill if p99 at 64k x 8-burst is > 0.5x cold prefill on both GPUs."
+  },
+  {
+   "attack": "The architecture depends on vLLM's KVConnectorBase_V1, whose docstring says 'experimental and subject to change'; the seed connectors target 0.9.2 (voice) and 0.24.0 (dexa) while vLLM is at 0.28.0, the API gained new properties (prefer_cross_layer_blocks, requires_kv_delivery, SupportsHMA), and neither repo has ported a connector across versions. The delayed-free pin (request_finished returning True) is also an API behaviour, not a contract.",
+   "severity": "serious",
+   "what_would_settle_it": "benchmarks/vllm_connector_check.py tiers 0-2 passing on the pinned vLLM 0.28 by end of week 3, plus an archived run of evals/modal_kv_correctness.py; track the number of connector API changes across two vLLM minor releases during the build."
+  },
+  {
+   "attack": "'Lossless' is gated on greedy text identity, which the voice repo already found to be the wrong test (cached vs full-prefill kernel paths diverge greedy text even with correct bytes); the gate as written would kill a correct system or, worse, be quietly relaxed after the fact.",
+   "severity": "serious",
+   "what_would_settle_it": "Pre-register bitwise equality of restored KV blocks against saved bytes (torch.equal) plus top-1 agreement over 64 tokens and per-token KL against a cold prefill, with the cold-vs-cold (batch-composition) divergence measured first as the noise floor."
+  },
+  {
+   "attack": "Faster prefill and larger HBM shrink both the latency ratio and the warm break-even (warm break-even = prefill_s x usable_HBM / (kv_GB x 3600); H100 prefill ~2-3x faster, PCIe Gen5 ~2x faster H2D, H200 141 GB / B200 180 GB). Both repos call this the top threat; nothing is measured off A100/L40S.",
+   "severity": "serious",
+   "what_would_settle_it": "IGR-1 H100 grid and one H200 point with measured prefill tok/s, H2D GB/s and invoice $/hr fed into stateful_cost_model.py. Kill if H100 D-vs-A p99 ratio < 2x."
+  },
+  {
+   "attack": "The 6-week plan slips: week 1 bundles harness generalization (six listed gaps) with partner interviews; week 2 bundles an unprecedented API port with async loads, decode-KV save and keying changes; week 5 bundles H100 grid, H200, 128k, direct-IO NVMe and publication; week 6 bundles streaming, affinity, durable store, tenant isolation and metering. A realistic first public proof is 6-7 weeks (A100-only) and 9-12 for the full IGR-1.",
+   "severity": "serious",
+   "what_would_settle_it": "Re-sequenced plan (section 7) with the API port isolated in weeks 2-3 and a written slip check at end of week 3: conformance passing and A/B/D at 16k-32k measured, or the H100/128k scope is cut."
+  },
+  {
+   "attack": "The brief assumes customers' gaps exceed their providers' retention. That is documented for Anthropic (5 min default) and Azure/OpenAI in_memory, not for open-model providers (OpenAI 24h, DeepSeek hours-days, Groq 2h, Cerebras up to 1h, DeepInfra 1h explicit, Fireworks 'up to several hours'); TraceLab's p90 human gap of 20.6 min is inside several windows. It also assumes agent teams self-host or buy open models; no survey exists.",
+   "severity": "serious",
+   "what_would_settle_it": "IGR-0: send a 100K prefix to ~10 providers and re-send after 1/5/15/30/60/120 min, recording cached_tokens and TTFT, three trials; plus per-turn gap histograms with gap type from 3 design partners. Kill if providers keep 100K prefixes >=30 min AND all partners have p90 gap < 5 min."
+  },
+  {
+   "attack": "The client hint's predictive power is unmeasured on real traffic: arm D's hint was computed from the synthetic trace's own median constants, so the predictor knew the generating distribution; the 8.1 ms full-load margin sits inside unmeasured seed variance. An agent harness can label tool-call vs human-wait, but how often a 'tool' gap becomes a 45-minute turn (Anthropic p99.9) is unknown.",
+   "severity": "minor",
+   "what_would_settle_it": "Ablation in IGR-1: hint on vs hint off at equal RAM, hit rate and GB-hours; and hint accuracy (predicted vs actual return time) from design-partner harness logs. Proceed if hint-on hit rate is >=15 points higher."
+  },
+  {
+   "attack": "Every seed connector is TP=1, fp16/bf16, non-MLA, prompt-KV only; the customers named (Qwen3.6-35B-A3B, Kimi-class, GLM-5.2 MLA where TP=8 keeps eight KV copies) need TP>1 or MLA layouts, and the plan never schedules it. The proof model (7-8B dense) may not transfer.",
+   "severity": "serious",
+   "what_would_settle_it": "Measure one design-partner model's KV bytes/token and prefill tok/s; port the connector to TP=2 and rerun a 16k restore with correctness. Founder decides whether the proof must be on the partner model."
+  },
+  {
+   "attack": "The voice connector evicts the entry a request matched when it stores a longer one, so sessions sharing a prefix evict each other every turn; agent sessions share a system prompt and ~4.5k-token toolset, so IGR-1 hit rates would collapse for a reason unrelated to the thesis.",
+   "severity": "minor",
+   "what_would_settle_it": "A unit test with two sessions sharing a 4.5k-token prefix alternating turns, asserting both entries survive; fixed before IGR-1 (week 2-3)."
+  },
+  {
+   "attack": "fp8 KV evidence (arm E) is 48 greedy tokens on one passage at HF level; agent turns emit ~250-320 tokens across dozens of turns, and fp8 also halves the baseline's bytes, so the ratio effect is unknown.",
+   "severity": "minor",
+   "what_would_settle_it": "Arm E vs arm D and B-with-fp8 in IGR-1 with the KL/top-1 correctness column over 64+ tokens per turn across a 20-turn session."
+  }
+ ],
+ "missing_founder_decisions": [
+  "Which differentiator to prove first, since each has a different first experiment: (a) transfer-path robustness under burst concurrency (voice-style connector vs OSS), (b) client-hinted tier demotion measured in GB-hours/dollars, or (c) the session API and residency metering as a product on top of stock OSS offload. The draft chose (b) implicitly by making the policy the secondary gate.",
+  "Which baseline is 'the' baseline the public benchmark must beat: vLLM's in-tree OffloadingConnector (llm-d's default, LRU/ARC), LMCache 0.5.x (Tensormesh's substrate), or SGLang HiCache (where the agentic KV RFCs live). The draft chose LMCache only.",
+  "Whether the buyable unit is latency/capacity or dollars. At open-model list prices a 64k re-prefill on Llama-8B is ~$0.0013 and RAM residency is ~$0.06-0.13 per 128k-session-hour, so the dollar case only appears on large-KV models; this decides pricing shape and which model the proof runs on.",
+  "TP>1 / MLA scope: prove on 7-8B dense at TP=1 (all existing code) or on a design partner's MoE/MLA model where TP=8 keeps eight KV copies and no connector code exists.",
+  "Whether to upstream the hint protocol (SGLang RFC #27574's KvHintEnvelope, vLLM TieringManager RFC #38260, Mooncake PR #2835) so the client side is standard and the hosted policy is the product, or keep it proprietary. Tensormesh's Operator is 'coming soon'; the RFCs are open/draft.",
+  "The correctness contract sold to customers: bitwise KV equality (verifiable, cheap) vs statistical output agreement vs greedy-text identity (which the voice repo found is the wrong test). This is copy the buyer reads.",
+  "Whether IGR-0 (provider TTL probe, ~$100, week 1) is the first public artifact - it establishes the pain the brief assumes but is not our value - or whether to go straight to IGR-1.",
+  "Harness: vLLM's own benchmarks/multi_turn (independent, no build) vs generalizing the voice harness (owned, needs six listed changes). Affects week 1 and how a skeptic reads the result.",
+  "The pre-registered thresholds themselves (5x vs A, 30% GB-hours, 0.5x under burst, 15-point hint delta) are the draft author's numbers; the founder should set them before any run.",
+  "Single-replica MVP vs multi-replica with an affinity router; the router is new code with no seed and decides whether 'session' survives replica failure or scale events.",
+  "Model class for the proof: Qwen2.5-7B (continuity with all restore numbers, YaRN-capped at 16k in-engine) vs Llama-3.1-8B (native 128k prefilled in-engine, 2.3x larger KV) vs a partner model.",
+  "Compute sourcing for the benchmark and MVP: per-second rental (Modal A100 $2.50, H100 $3.95, H200 $4.54; RunPod H100 $2.69-3.29) vs commit (SF Compute $1.90 average); host RAM per GPU (125-283 GB rental vs 2,048 GB/8-GPU node) bounds resident sessions and is itself a sourcing choice."
+ ],
+ "strongest_version": "The physics is real and reproduced inside a production engine: at 16k a RAM-tier restore is 17x faster than cold prefill, and the only concurrent test of a purpose-built contiguous pinned-RAM connector held a 300-session load where the stock offload of that era collapsed. Agent workloads are ~120K-token prefixes with human gaps whose p90 is 20 minutes and a p99.9 turn over 45 minutes, and every provider's cache is a request-local LRU that cannot see session structure - the SGLang maintainers say so in their own RFC. The product makes the session the billable unit: a client-hinted, tier-spanning residency policy over unforked vLLM, verified-lossless resume, residency metering, and a public benchmark run against the strongest open-source offload baseline with raw logs. If IGR-1 shows the policy holds fewer GB-hours at equal p99, or holds p99 where stock offload degrades under burst, that is a measured operational advantage a generalized provider cannot get from a config flag. If it does not, six to seven weeks bought a benchmark, a modern connector, and a provider-TTL dataset the founder can sell, upstream, or fold into another direction.",
+ "changes_made": [
+  "Moved the voice contiguous-vs-chunked result and the arm D 1.5x result from Proven to Bounded with the ledger's caveats (single seed, full-load p95 336.8/291.9 ms, predictor knew the distribution, N=400 failure, delayed-free not demotion).",
+  "Split the conflated 'bit-identical across two vLLM processes at 8k-64k' into its two real facts (OPT-125m/Qwen3-0.6B in vLLM; Llama-8B 8k-64k in HFBackend).",
+  "Marked the enforcing tiering policy engine as NEW (nothing in either repo demotes KV; conflict #9) and corrected the 'seed from tiering.py / arm D' framing.",
+  "Replaced the primary kill gate (ours vs vanilla vLLM) with ours vs best OSS offload (vLLM OffloadingConnector LRU/ARC and LMCache 0.5.x layerwise) on p99 and GB-hours; kept D vs A >= 5x as a sanity gate only.",
+  "Added resident-set arithmetic per grid cell (269 GB at 32x64k Llama-8B bf16 vs 125-283 GB host RAM), chose Qwen2.5-7B bf16 / Llama-8B fp8-KV, dropped the 128-session column, and added burst arrivals.",
+  "Replaced greedy-text identity with bitwise KV equality plus top-1/KL vs cold prefill, citing the voice repo's lesson #9 and modal_kv_correctness.py.",
+  "Added IGR-0, a ~$100 provider TTL probe, and reframed 'providers' caches do not survive the gaps' as an assumption with a kill gate, citing the documented retention windows.",
+  "Corrected the 'no time-aware eviction in OSS' differentiation claim (Mooncake soft-pin TTL, Dynamo cache_control-style TTL, Morph per-request TTL, SGLang/Mooncake RFCs) and relocated differentiation to session API, client-hinted tier-spanning demotion, and the transfer path.",
+  "Added the shared-prefix eviction quirk in the voice connector, the KVConnectorBase_V1 version gap (0.9.2/0.24.0 vs 0.28.0), TP=1/non-MLA limits, and a TP>1 unproven row and kill gate.",
+  "Added the derived dollar comparison (128k re-prefill ~$0.007-0.023 vs RAM residency $0.06-0.13/hr) so the pricing section states plainly that on 7-8B the buyable unit is latency.",
+  "Re-sequenced the build plan: IGR-0 and conformance check in week 1, connector port isolated in weeks 2-3, product surface moved to weeks 7-9; noted where each week slips.",
+  "Labelled all restore-bandwidth figures in the diagram as derived or single-request; added the missing caveats (LMCache version unpinned, 3.7x demo has no artifact, 42 GB vs 26 GB pool is an estimate, Llama-8B vs Qwen cross-model comparison).",
+  "Added seven founder decisions (differentiator to prove first, baseline choice, latency vs dollars, TP>1 scope, upstream vs proprietary hint protocol, correctness contract, harness and thresholds) and kept all seven original ones.",
+  "Added the Llama-8B in-engine 128k prefill fact (32.68 s, eager) to bound the YaRN crash and de-risk the 128k cells."
+ ]
+}

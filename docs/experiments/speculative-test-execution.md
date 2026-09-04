@@ -24,23 +24,23 @@ For every hit the command is also run for real afterwards and the two outputs co
 
 ## Results
 
-Replayed so far: **242 sessions, 3,275 tool calls** across 7 repository images.
+Replayed so far: **474 sessions, 6,525 tool calls** across 21 repository images.
 
 ### 1. How predictable is the command after an edit?
 
 | trajectories | sessions | tool calls | launches, any edit | hit rate, any edit | launches after modifying a file | hit rate | created-file predictions | hit rate, run the new file | speculative output equals real | hit run duration p50 / p90 (s) |
 |---|---|---|---|---|---|---|---|---|---|---|
-| swe-agent | 136 | 1826 | 352 | 34% | 155 | 74% | 214 | 67% | 98% | 1.57 / 1.67 |
-| mini-swe-agent | 106 | 1449 | 275 | 32% | 70 | 76% | 200 | 68% | 98% | 0.19 / 0.22 |
-| all | 242 | 3275 | 627 | 33% | 225 | 75% | 414 | 68% | 98% | 0.21 / 1.62 |
+| swe-agent | 195 | 2696 | 531 | 34% | 238 | 73% | 316 | 75% | 98% | 0.89 / 1.63 |
+| mini-swe-agent | 279 | 3829 | 817 | 31% | 278 | 78% | 678 | 89% | 97% | 0.30 / 1.60 |
+| all | 474 | 6525 | 1348 | 32% | 516 | 76% | 994 | 85% | 97% | 0.31 / 1.63 |
 
-Two rules cover the post-edit step. **Rule A**, after a call that *modifies* an existing file, launch the most recent test-like command: hit rate 75% over 225 launches. **Rule B**, after a call that *creates* a file, launch that file: hit rate 68% over 414 predictions. Launching the old test after a file creation never hits (207 launches, 1%), which is why a single "rerun the last test" rule measures only 33% across all edits. The `unknown` edit kinds are records from before the edit-kind field was added.
+Two rules cover the post-edit step. **Rule A**, after a call that *modifies* an existing file, launch the most recent test-like command: hit rate 76% over 516 launches. **Rule B**, after a call that *creates* a file, launch that file: hit rate 85% over 994 predictions. Launching the old test after a file creation never hits (569 launches, 1%), which is why a single "rerun the last test" rule measures only 32% across all edits. The `unknown` edit kinds are records from before the edit-kind field was added.
 
-When a speculative run hits, its output matched the output of a real run on the same tree in 98% of cases after normalizing timings and stdout/stderr interleaving; every remaining mismatch inspected was ordering of interleaved streams.
+When a speculative run hits, its output matched the output of a real run on the same tree in 97% of cases after normalizing timings and stdout/stderr interleaving; every remaining mismatch inspected was ordering of interleaved streams.
 
 ### 2. How long are the runs being overlapped?
 
-In these SWE-smith repositories the speculated runs are short (hit-run duration p50 0.21 s, p90 1.62 s), so the absolute saving inside the benchmark is small. The duration that matters is the production one. From the TraceLab release of real Claude Code and Codex sessions:
+In these SWE-smith repositories the speculated runs are short (hit-run duration p50 0.31 s, p90 1.63 s), so the absolute saving inside the benchmark is small. The duration that matters is the production one. From the TraceLab release of real Claude Code and Codex sessions:
 
 | production tool | calls | p50 (s) | p90 (s) | p99 (s) | share over 5 s | time in calls over 5 s |
 |---|---|---|---|---|---|---|
@@ -58,6 +58,8 @@ A hit saves `min(D, M)`: the test's duration `D`, capped by the model time `M` o
 |---|---|---|---|---|---|
 | Claude Code pytest run | 26.4 | 1.4 | 4.9 | 8.5 | 12.1 |
 | Claude Code python run | 42.4 | 1.0 | 2.9 | 4.6 | 6.5 |
+
+Under the two rules, the replayed sessions contain on average **2.6 predictable post-edit runs per session** (392 rule-A hits plus 841 rule-B hits over 474 sessions), so the per-task saving is that count times the per-hit figure below.
 
 Per hit, a coding agent on today's model speeds saves about 5 to 8 seconds on a pytest rerun and 3 to 5 on a script rerun; at fast-inference model steps of 1.5 s the saving per hit collapses to about a second, because the overlap window is the model step. The lever pays in proportion to how slow the model is and how slow the tests are, and it is bounded by the number of post-edit reruns per task.
 

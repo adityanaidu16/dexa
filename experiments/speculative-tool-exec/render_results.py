@@ -50,6 +50,8 @@ A hit saves `min(D, M)`: the test's duration `D`, capped by the model time `M` o
 
 {table3}
 
+Under the two rules, the replayed sessions contain on average **{f((A.get('modified',{}).get('hits',0)+B['hits'])/all_['sessions'],1)} predictable post-edit runs per session** ({A.get('modified',{}).get('hits',0)} rule-A hits plus {B['hits']} rule-B hits over {all_['sessions']} sessions), so the per-task saving is that count times the per-hit figure below.
+
 Per hit, a coding agent on today's model speeds saves about {f(mdm['pytest']['expected_saving_per_hit']['6.6'],0)} to {f(mdm['pytest']['expected_saving_per_hit']['14.2'],0)} seconds on a pytest rerun and {f(mdm['python']['expected_saving_per_hit']['6.6'],0)} to {f(mdm['python']['expected_saving_per_hit']['14.2'],0)} on a script rerun; at fast-inference model steps of 1.5 s the saving per hit collapses to about a second, because the overlap window is the model step. The lever pays in proportion to how slow the model is and how slow the tests are, and it is bounded by the number of post-edit reruns per task.
 """
 doc = open("/home/user/dexa/docs/experiments/speculative-test-execution.md").read()

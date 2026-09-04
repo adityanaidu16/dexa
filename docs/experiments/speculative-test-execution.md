@@ -1,6 +1,6 @@
 # Speculative test execution after edits: a replay experiment
 
-*Status: draft, numbers being filled in as the batch driver finishes. Code and raw records: `experiments/speculative-tool-exec/`.*
+*Final. Code, raw per-session records, and the aggregation script: `experiments/speculative-tool-exec/`. Replayed 2026-09-03 to 2026-09-04.*
 
 ## Question
 
@@ -24,19 +24,19 @@ For every hit the command is also run for real afterwards and the two outputs co
 
 ## Results
 
-Replayed so far: **474 sessions, 6,525 tool calls** across 21 repository images.
+Replayed so far: **480 sessions, 6,628 tool calls** across 21 repository images.
 
 ### 1. How predictable is the command after an edit?
 
 | trajectories | sessions | tool calls | launches, any edit | hit rate, any edit | launches after modifying a file | hit rate | created-file predictions | hit rate, run the new file | speculative output equals real | hit run duration p50 / p90 (s) |
 |---|---|---|---|---|---|---|---|---|---|---|
-| swe-agent | 195 | 2696 | 531 | 34% | 238 | 73% | 316 | 75% | 98% | 0.89 / 1.63 |
+| swe-agent | 201 | 2799 | 554 | 33% | 246 | 73% | 331 | 76% | 98% | 0.64 / 1.63 |
 | mini-swe-agent | 279 | 3829 | 817 | 31% | 278 | 78% | 678 | 89% | 97% | 0.30 / 1.60 |
-| all | 474 | 6525 | 1348 | 32% | 516 | 76% | 994 | 85% | 97% | 0.31 / 1.63 |
+| all | 480 | 6628 | 1371 | 32% | 524 | 76% | 1009 | 85% | 98% | 0.31 / 1.63 |
 
-Two rules cover the post-edit step. **Rule A**, after a call that *modifies* an existing file, launch the most recent test-like command: hit rate 76% over 516 launches. **Rule B**, after a call that *creates* a file, launch that file: hit rate 85% over 994 predictions. Launching the old test after a file creation never hits (569 launches, 1%), which is why a single "rerun the last test" rule measures only 32% across all edits. The `unknown` edit kinds are records from before the edit-kind field was added.
+Two rules cover the post-edit step. **Rule A**, after a call that *modifies* an existing file, launch the most recent test-like command: hit rate 76% over 524 launches. **Rule B**, after a call that *creates* a file, launch that file: hit rate 85% over 1009 predictions. Launching the old test after a file creation never hits (578 launches, 1%), which is why a single "rerun the last test" rule measures only 32% across all edits. The `unknown` edit kinds are records from before the edit-kind field was added.
 
-When a speculative run hits, its output matched the output of a real run on the same tree in 97% of cases after normalizing timings and stdout/stderr interleaving; every remaining mismatch inspected was ordering of interleaved streams.
+When a speculative run hits, its output matched the output of a real run on the same tree in 98% of cases after normalizing timings and stdout/stderr interleaving; every remaining mismatch inspected was ordering of interleaved streams.
 
 ### 2. How long are the runs being overlapped?
 
@@ -59,9 +59,18 @@ A hit saves `min(D, M)`: the test's duration `D`, capped by the model time `M` o
 | Claude Code pytest run | 26.4 | 1.4 | 4.9 | 8.5 | 12.1 |
 | Claude Code python run | 42.4 | 1.0 | 2.9 | 4.6 | 6.5 |
 
-Under the two rules, the replayed sessions contain on average **2.6 predictable post-edit runs per session** (392 rule-A hits plus 841 rule-B hits over 474 sessions), so the per-task saving is that count times the per-hit figure below.
+Under the two rules, the replayed sessions contain on average **2.6 predictable post-edit runs per session** (398 rule-A hits plus 856 rule-B hits over 480 sessions), so the per-task saving is that count times the per-hit figure below.
 
 Per hit, a coding agent on today's model speeds saves about 5 to 8 seconds on a pytest rerun and 3 to 5 on a script rerun; at fast-inference model steps of 1.5 s the saving per hit collapses to about a second, because the overlap window is the model step. The lever pays in proportion to how slow the model is and how slow the tests are, and it is bounded by the number of post-edit reruns per task.
+
+## Conclusions
+
+1. **The post-edit action is predictable enough to pre-execute.** Two rules cover it. After a modification of an existing file, rerun the most recent test-like command: 398 of 524 launches hit (76%; 73% on the Claude 3.5/3.7 and GPT-4o sessions, 78% on the mini-SWE-agent sessions). After a file creation, run the created file: 856 of 1009 (85%). The rule the trace decomposition suggested on its own, rerun the last test after any edit, scores only 32% because after creating a new script the agent runs the new script, not the old test (0.9% over 578 launches).
+2. **A hit is safe.** In 97.5% of 442 hits the speculative output equalled a real run on the same tree; the inspected remainder differed only in stdout/stderr interleaving. Speculating on read-only tools in between costs nothing, and a miss wastes 0.5 s of container CPU on average.
+3. **The saving is set by the test, not by the harness.** Sessions contain 2.6 predictable post-edit runs on average. Inside these SWE-smith repositories the runs last 0.3 s at the median, so the benchmark itself saves seconds per task. On the production distribution the same hit is worth roughly 5 s on a pytest rerun and 3 s on a script rerun at today's median model step, rising to 12 s and 6 s at the p90 step, and falling to about a second if model steps drop to 1.5 s. Per task that is tens of seconds today against a median task of several minutes, and it shrinks as inference gets faster, which is the opposite of the tool-aware residency lever, whose value grows as inference gets faster.
+4. **What this does not show.** A live agent was not run: the replay holds the trajectory fixed and asks only whether the prediction would have been right and whether its output would have matched. The live harness in `experiments/speculative-tool-exec/live_agent.py` implements the same two rules with the Anthropic SDK against SWE-bench Verified images and reports minutes and dollars per task with speculation on and off; it needs an API key in the environment.
+
+**Product reading.** This is a harness feature, not an inference feature: two rules in the agent loop, verifiable by a buyer on their own traces in an afternoon, with a ceiling of a few percent of task time on today's tests. It belongs in an agent SDK or a sandbox product's tool layer, where the sandbox already sees every edit and every command, rather than in a serving engine. The engine-side counterpart, keeping the session's KV resident through the now-overlapped test run, is what turns the same event into a capacity gain, and that is the unmeasured half.
 
 ## Caveats
 
@@ -69,3 +78,6 @@ Per hit, a coding agent on today's model speeds saves about 5 to 8 seconds on a 
 - Test durations depend on the host: 4 vCPUs, one replay at a time, Docker overlay filesystem. Absolute seconds transfer only roughly; the ratios and hit rates transfer better.
 - The "edit" that triggers a launch includes creating a brand-new test script, which the agent then runs instead of the previous test; the analysis separates launches by whether the triggering edit created files or modified existing ones.
 - A hit's output equality is checked against a real run performed immediately after the speculative one on the same tree; flaky tests would show up as inequality.
+- Commands were capped at 300 s inside the container (one hit reached the cap); the first four images were replayed before the edit-kind field existed, so their launches appear as `unknown` and are excluded from the rule A and rule B rates.
+- SWE-smith tasks are synthetic bugs injected into real repositories; the agents' reproduce-then-fix loop is the same one seen in the production traces, but task difficulty and test-suite size are not representative of production.
+- The mini-SWE-agent corpus does not name its model.

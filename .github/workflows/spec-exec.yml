@@ -1,0 +1,153 @@
+# Runner for the phase-1 live agent experiment (experiments/speculative-tool-exec/modal/).
+# The Claude sandbox cannot reach Modal's gRPC API, so this workflow is the machine that talks to Modal.
+# Required repository secrets: MODAL_TOKEN_ID, MODAL_TOKEN_SECRET.
+name: spec-exec
+
+on:
+  workflow_dispatch:
+    inputs:
+      phase:
+        description: "smoke (3 tasks, both arms) | harness (full arms) | deploy-only | stop"
+        type: choice
+        options: [smoke, harness, deploy-only, stop]
+        default: smoke
+      start:
+        description: "first task index in tasks_verified_50.json"
+        default: "0"
+      count:
+        description: "number of tasks per arm"
+        default: "3"
+      arms:
+        description: "comma-separated arms to run: off,harness"
+        default: "off,harness"
+      concurrency:
+        description: "tasks in flight per arm against the one server"
+        default: "1"
+      max_steps:
+        description: "max model steps per task"
+        default: "40"
+      gpu:
+        description: "Modal GPU spec for the vLLM server"
+        default: "H100"
+      model:
+        description: "HF model id served by vLLM"
+        default: "Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8"
+      vllm_image:
+        description: "vLLM image tag"
+        default: "vllm/vllm-openai:v0.11.0"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: spec-exec
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    env:
+      MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+      MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+      SPEC_GPU: ${{ inputs.gpu }}
+      SPEC_MODEL: ${{ inputs.model }}
+      SPEC_VLLM_IMAGE: ${{ inputs.vllm_image }}
+      EXP_DIR: experiments/speculative-tool-exec/modal
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install client dependencies
+        run: |
+          python -m pip install -q --upgrade pip
+          python -m pip install -q "modal>=1.0" "openai>=1.50" "swebench==4.1.0"
+          modal --version
+
+      - name: Check Modal credentials
+        run: |
+          if [ -z "$MODAL_TOKEN_ID" ] || [ -z "$MODAL_TOKEN_SECRET" ]; then
+            echo "::error::MODAL_TOKEN_ID / MODAL_TOKEN_SECRET repository secrets are not set"; exit 1
+          fi
+          python -c "import modal; modal.App.lookup('spec-exec-sandboxes', create_if_missing=True); print('modal auth ok')"
+
+      - name: Stop the vLLM app
+        if: inputs.phase == 'stop'
+        run: modal app stop spec-exec-vllm || true
+
+      - name: Generate a per-run endpoint key
+        if: inputs.phase != 'stop'
+        run: |
+          KEY=$(openssl rand -hex 16)
+          echo "::add-mask::$KEY"
+          echo "SPEC_VLLM_API_KEY=$KEY" >> "$GITHUB_ENV"
+          echo "RUN_ID=$(date -u +%Y%m%dT%H%M%SZ)-${{ inputs.phase }}-${{ github.run_number }}" >> "$GITHUB_ENV"
+
+      - name: Deploy the vLLM server
+        if: inputs.phase != 'stop'
+        run: |
+          modal deploy "$EXP_DIR/app.py" 2>&1 | tee deploy.log
+          URL=$(grep -oE 'https://[A-Za-z0-9.-]+\.modal\.run' deploy.log | head -1)
+          if [ -z "$URL" ]; then
+            URL=$(python - <<'PY'
+          import modal
+          f = modal.Cls.from_name("spec-exec-vllm", "VLLM")().serve
+          print(f.get_web_url())
+          PY
+          )
+          fi
+          echo "vLLM endpoint: $URL"
+          echo "VLLM_URL=$URL" >> "$GITHUB_ENV"
+
+      - name: Run the arms
+        if: inputs.phase == 'smoke' || inputs.phase == 'harness'
+        run: |
+          OUT="$EXP_DIR/runs/$RUN_ID"
+          mkdir -p "$OUT"
+          COUNT="${{ inputs.count }}"; CONC="${{ inputs.concurrency }}"
+          if [ "${{ inputs.phase }}" = "smoke" ]; then COUNT=3; CONC=1; fi
+          echo "{\"phase\":\"${{ inputs.phase }}\",\"start\":${{ inputs.start }},\"count\":$COUNT,\"concurrency\":$CONC,\"arms\":\"${{ inputs.arms }}\",\"gpu\":\"$SPEC_GPU\",\"model\":\"$SPEC_MODEL\",\"vllm_image\":\"$SPEC_VLLM_IMAGE\",\"max_steps\":${{ inputs.max_steps }},\"run_id\":\"$RUN_ID\"}" > "$OUT/config.json"
+          for ARM in $(echo "${{ inputs.arms }}" | tr ',' ' '); do
+            echo "=== arm $ARM ==="
+            python "$EXP_DIR/live_agent_modal.py" --base-url "$VLLM_URL" --api-key "$SPEC_VLLM_API_KEY" \
+              --model "$SPEC_MODEL" --spec "$ARM" --start "${{ inputs.start }}" --count "$COUNT" \
+              --concurrency "$CONC" --max-steps "${{ inputs.max_steps }}" --out "$OUT/$ARM.jsonl" 2>&1 | tee "$OUT/$ARM.log"
+          done
+          for ARM in $(echo "${{ inputs.arms }}" | tr ',' ' '); do
+            echo "=== grading arm $ARM ==="
+            python "$EXP_DIR/live_agent_modal.py" --mode grade --model "$SPEC_MODEL" --concurrency 8 --out "$OUT/$ARM.jsonl" 2>&1 | tee "$OUT/$ARM.grade.log"
+          done
+          echo "=== summary ==="
+          python "$EXP_DIR/summarize.py" "$OUT" | tee "$OUT/summary.md"
+
+      - name: Upload results
+        if: always() && (inputs.phase == 'smoke' || inputs.phase == 'harness')
+        uses: actions/upload-artifact@v4
+        with:
+          name: spec-exec-${{ env.RUN_ID }}
+          path: experiments/speculative-tool-exec/modal/runs/${{ env.RUN_ID }}
+          if-no-files-found: ignore
+
+      - name: Commit results to the branch
+        if: always() && (inputs.phase == 'smoke' || inputs.phase == 'harness')
+        run: |
+          OUT="$EXP_DIR/runs/$RUN_ID"
+          [ -d "$OUT" ] || exit 0
+          git config user.name "spec-exec-runner"
+          git config user.email "spec-exec-runner@users.noreply.github.com"
+          git add "$OUT"
+          git commit -m "spec-exec: results for run $RUN_ID (${{ inputs.phase }})" || exit 0
+          for i in 1 2 3 4; do
+            git pull --rebase origin "${{ github.ref_name }}" && git push origin "HEAD:${{ github.ref_name }}" && exit 0
+            sleep $((i * 5))
+          done
+          echo "::warning::could not push results; they are attached as a workflow artifact"
+
+      - name: Stop the vLLM server
+        if: always() && inputs.phase != 'deploy-only' && inputs.phase != 'stop'
+        run: modal app stop spec-exec-vllm || true

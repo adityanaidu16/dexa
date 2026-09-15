@@ -129,9 +129,22 @@ class SandboxEnv:
 
 
 def predicted_after_create(path):
+    """Rule B target for a newly created Python file. Predicted with a path relative to /testbed, which is how the
+    model invokes its own scripts; the matcher below also treats /testbed/x and x as the same file."""
     if path and path.endswith(".py"):
-        return f"cd /testbed && python {path}"
+        rel = path[len("/testbed/"):] if path.startswith("/testbed/") else path
+        return f"cd /testbed && python {rel}"
     return None
+
+
+_TESTBED_PREFIX = re.compile(r"(?<![\w/])/testbed/")
+
+
+def same_cmd_here(a, b):
+    """same_cmd from the replay engine, plus: paths under /testbed compare equal to their relative form."""
+    if a is None or b is None:
+        return False
+    return same_cmd(a, b) or same_cmd(_TESTBED_PREFIX.sub("", a), _TESTBED_PREFIX.sub("", b))
 
 
 def clip(s, n=MAX_TOOL_OUT):
@@ -201,7 +214,7 @@ def run_task(inst, client, model, spec, app, max_steps=40, per_cmd_timeout=300):
                     break
                 served = None
                 if pending and not entry["readonly"]:
-                    if name == "bash" and same_cmd(cmd, pending["cmd"]):
+                    if name == "bash" and same_cmd_here(cmd, pending["cmd"]):
                         t_req = time.time()
                         while not env.spec_poll_done():
                             if time.time() - pending["t0"] > per_cmd_timeout:
@@ -232,11 +245,15 @@ def run_task(inst, client, model, spec, app, max_steps=40, per_cmd_timeout=300):
                     nfp = env.tree_fingerprint(); changed = nfp != fp; fp = nfp; entry["changed_tree"] = changed
                     if changed:
                         nstatus = env.tree_status(); added = nstatus - status; status = nstatus
-                        kinds = set(("created" if l.startswith("??") or l.startswith("A ") else "modified") for l in added) or {"modified"}
-                        entry["edit_kind"] = "created" if kinds == {"created"} else ("modified" if kinds == {"modified"} else "mixed")
+                        def kind_of(l):
+                            if l.startswith("??") or l.startswith("A "): return "created"
+                            if l.startswith(" D") or l.startswith("D "): return "deleted"
+                            return "modified"
+                        kinds = set(kind_of(l) for l in added) or {"modified"}
+                        entry["edit_kind"] = next(iter(kinds)) if len(kinds) == 1 else "mixed"
                         if spec and rc in (0, None):
                             target = None; rule = None
-                            if entry["edit_kind"] == "modified" and last_test and not (cmd and same_cmd(cmd, last_test)):
+                            if entry["edit_kind"] == "modified" and last_test and not (cmd and same_cmd_here(cmd, last_test)):
                                 target, rule = last_test, "A"
                             elif entry["edit_kind"] == "created":
                                 m = re.search(r">\s*(\S+\.py)\b", cmd or "")

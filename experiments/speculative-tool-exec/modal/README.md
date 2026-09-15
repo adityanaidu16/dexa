@@ -51,6 +51,17 @@ python summarize.py runs/local
 modal app stop spec-exec-vllm
 ```
 
+## Smoke run (run 6, 3 django tasks per arm, concurrency 1)
+
+Both arms completed and graded: the server was healthy 274 s after a cold start with cached weights, tasks took 74 to
+198 s, and the official grader resolved 2 of 3 vanilla tasks and 1 of 3 harness tasks. Model time was 55 to 82 s per
+task against 15 s of tool time, so tool time was 13 to 17 percent of the wall clock at concurrency 1. Speculation
+launched 12 times and hit once. Every Rule B miss was a matcher defect, not a wrong prediction: the predicted command
+carried an absolute path and the model ran the relative one. That is fixed (paths under /testbed compare equal to
+their relative form; deletions no longer count as modifications), so the smoke hit rate is not the number to read.
+The throughput ratio from three tasks per arm (1.24) is noise: the harness arm saved 0.2 s per task and the gap is
+model-time variance. Four of six tasks hit the 40-step cap without submitting.
+
 ## Cost
 
 One H100 on Modal is about $4 per hour; sandboxes are about $0.20 per CPU-hour. The server is up only while a

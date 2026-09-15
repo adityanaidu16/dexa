@@ -19,8 +19,8 @@ on:
         description: "number of tasks per arm"
         default: "3"
       arms:
-        description: "comma-separated arms to run: off,harness"
-        default: "off,harness"
+        description: "comma-separated arms to run in sequence (off,harness), or 'both' to interleave every task across both arms in the same worker"
+        default: "both"
       concurrency:
         description: "tasks in flight per arm against the one server"
         default: "1"
@@ -112,9 +112,26 @@ jobs:
                   m = re.search(r'"(ap-[A-Za-z0-9]+)"', blob)
                   if m: ids.append((a, m.group(1)))
           print(f"{len(ids)} spec-exec-vllm app records")
-          for a, aid in ids[:2]:
+          for n, (a, aid) in enumerate(ids[:2]):
               print("=" * 100); print(json.dumps(a)); print("=" * 100)
-              subprocess.run(["timeout", "180", "modal", "app", "logs", aid], check=False)
+              with open(f"server-{n}.log", "w") as f:
+                  subprocess.run(["timeout", "300", "modal", "app", "logs", aid], stdout=f, stderr=subprocess.STDOUT, check=False)
+              lines = open(f"server-{n}.log", errors="replace").read().splitlines()
+              print(f"{len(lines)} log lines")
+              pat = re.compile(r"Traceback|Error|error|died|EngineCore|exit|Starting vLLM API server|healthy|Stopping|Runner failed|preempt|OOM|out of memory|Killed|Application startup|vllm config", re.I)
+              hits = [(i, l) for i, l in enumerate(lines) if pat.search(l) and "GET /v1/models" not in l and "loggers.py" not in l]
+              print(f"{len(hits)} lines matching error/lifecycle patterns (first 150 shown):")
+              for i, l in hits[:150]:
+                  print(f"{i:6d}: {l[:220]}")
+              print("--- request log tail (last 40 non-metric lines) ---")
+              tail = [l for l in lines if "loggers.py" not in l][-40:]
+              for l in tail: print(l[:220])
+              # counts of HTTP statuses on chat completions
+              st = {}
+              for l in lines:
+                  m = re.search(r'"POST /v1/chat/completions HTTP/1.1" (\d+)', l)
+                  if m: st[m.group(1)] = st.get(m.group(1), 0) + 1
+              print("chat completion statuses:", st)
           PY
 
       - name: Generate a per-run endpoint key
@@ -148,21 +165,38 @@ jobs:
           mkdir -p "$OUT"
           COUNT="${{ inputs.count }}"; CONC="${{ inputs.concurrency }}"
           if [ "${{ inputs.phase }}" = "smoke" ]; then COUNT=3; CONC=1; fi
+          if [ "${{ inputs.arms }}" = "both" ]; then CONC=$(( CONC )); fi
           echo "{\"phase\":\"${{ inputs.phase }}\",\"start\":${{ inputs.start }},\"count\":$COUNT,\"concurrency\":$CONC,\"arms\":\"${{ inputs.arms }}\",\"gpu\":\"$SPEC_GPU\",\"model\":\"$SPEC_MODEL\",\"vllm_version\":\"$SPEC_VLLM_VERSION\",\"max_steps\":${{ inputs.max_steps }},\"run_id\":\"$RUN_ID\"}" > "$OUT/config.json"
           FAILED=0
-          for ARM in $(echo "${{ inputs.arms }}" | tr ',' ' '); do
-            echo "=== arm $ARM ==="
+          (modal app logs spec-exec-vllm > "$OUT/server.log" 2>&1 &) ; sleep 2
+          snapshot_metrics() { curl -sS -m 30 -H "Authorization: Bearer $SPEC_VLLM_API_KEY" "$VLLM_URL/metrics" > "$OUT/$1.metrics.txt" 2>/dev/null || true; }
+          if [ "${{ inputs.arms }}" = "both" ]; then
+            echo "=== interleaved arms ==="
             set +e
             python "$EXP_DIR/live_agent_modal.py" --base-url "$VLLM_URL" --api-key "$SPEC_VLLM_API_KEY" \
-              --model "$SPEC_MODEL" --spec "$ARM" --start "${{ inputs.start }}" --count "$COUNT" \
-              --concurrency "$CONC" --max-steps "${{ inputs.max_steps }}" --out "$OUT/$ARM.jsonl" 2>&1 | tee "$OUT/$ARM.log"
+              --model "$SPEC_MODEL" --spec both --start "${{ inputs.start }}" --count "$COUNT" \
+              --concurrency "$CONC" --max-steps "${{ inputs.max_steps }}" --out "$OUT/run" 2>&1 | tee "$OUT/both.log"
             RC=${PIPESTATUS[0]}; set -e
-            if [ "$RC" != "0" ]; then echo "::error::arm $ARM exited with $RC"; FAILED=1; break; fi
-          done
-          echo "=== server logs (last 3 minutes of streaming, or the full history if the server stopped) ==="
-          timeout 180 modal app logs spec-exec-vllm > "$OUT/server.log" 2>&1 || true
-          tail -n 200 "$OUT/server.log"
-          for ARM in $(echo "${{ inputs.arms }}" | tr ',' ' '); do
+            mv -f "$OUT/run.off.jsonl" "$OUT/off.jsonl" 2>/dev/null || true; mv -f "$OUT/run.harness.jsonl" "$OUT/harness.jsonl" 2>/dev/null || true
+            snapshot_metrics both
+            if [ "$RC" != "0" ]; then echo "::error::interleaved run exited with $RC"; FAILED=1; fi
+            ARMS="off harness"
+          else
+            ARMS=$(echo "${{ inputs.arms }}" | tr ',' ' ')
+            for ARM in $ARMS; do
+              echo "=== arm $ARM ==="
+              set +e
+              python "$EXP_DIR/live_agent_modal.py" --base-url "$VLLM_URL" --api-key "$SPEC_VLLM_API_KEY" \
+                --model "$SPEC_MODEL" --spec "$ARM" --start "${{ inputs.start }}" --count "$COUNT" \
+                --concurrency "$CONC" --max-steps "${{ inputs.max_steps }}" --out "$OUT/$ARM.jsonl" 2>&1 | tee "$OUT/$ARM.log"
+              RC=${PIPESTATUS[0]}; set -e
+              snapshot_metrics "$ARM"
+              if [ "$RC" != "0" ]; then echo "::error::arm $ARM exited with $RC"; FAILED=1; break; fi
+            done
+          fi
+          pkill -f "modal app logs" || true
+          echo "=== server log: $(wc -l < "$OUT/server.log") lines ==="
+          for ARM in $ARMS; do
             if [ ! -f "$OUT/$ARM.jsonl" ]; then echo "no results for arm $ARM, skipping grading"; continue; fi
             echo "=== grading arm $ARM ==="
             set +e
@@ -172,6 +206,7 @@ jobs:
           done
           echo "=== summary ==="
           python "$EXP_DIR/summarize.py" "$OUT" | tee "$OUT/summary.md" || FAILED=1
+          if [ -f "$OUT/off.jsonl" ] && [ -f "$OUT/harness.jsonl" ]; then python "$EXP_DIR/analyze_run.py" "$OUT" > /dev/null || true; fi
           exit $FAILED
 
       - name: Upload results

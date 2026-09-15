@@ -161,16 +161,22 @@ def shrink_history(messages, keep_last=6):
 
 
 def chat(client, model, messages):
-    for attempt in range(3):
+    last = None
+    for attempt in range(5):
         try:
-            return client.chat.completions.create(model=model, messages=messages, tools=TOOLS, tool_choice="auto", temperature=0.2, max_tokens=4096)
+            resp = client.chat.completions.create(model=model, messages=messages, tools=TOOLS, tool_choice="auto", temperature=0.2, max_tokens=4096)
+            if not hasattr(resp, "choices") or not resp.choices:
+                # the OpenAI client hands back the raw body when the gateway answers with something that is not JSON
+                last = RuntimeError(f"non-completion response: {str(resp)[:300]!r}")
+                print(f"model call returned a non-completion body (attempt {attempt + 1}): {str(resp)[:200]!r}", flush=True)
+                time.sleep(3 * (attempt + 1)); continue
+            return resp
         except Exception as e:
-            msg = str(e)
+            last = e; msg = str(e)
             if ("maximum context length" in msg or "context_length" in msg or "too long" in msg) and shrink_history(messages):
                 continue
-            if attempt == 2:
-                raise
-            time.sleep(5)
+            time.sleep(3 * (attempt + 1))
+    raise last
 
 
 def run_task(inst, client, model, spec, app, max_steps=40, per_cmd_timeout=300):
@@ -353,7 +359,8 @@ def main():
     ap.add_argument("--mode", choices=["run", "grade"], default="run")
     ap.add_argument("--base-url", default=None)
     ap.add_argument("--api-key", default=os.environ.get("SPEC_VLLM_API_KEY", "spec-exec-local"))
-    ap.add_argument("--spec", choices=["off", "harness"], default="harness")
+    ap.add_argument("--spec", choices=["off", "harness", "both"], default="harness",
+                    help="both: run every task in both arms in the same worker, alternating which arm goes first, and write <out>.off.jsonl / <out>.harness.jsonl")
     ap.add_argument("--concurrency", type=int, default=1)
     ap.add_argument("--out", required=True)
     ap.add_argument("--max-steps", type=int, default=40)
@@ -367,13 +374,16 @@ def main():
     if not args.base_url:
         ap.error("--base-url is required in run mode")
     tasks = all_tasks[args.start:args.start + args.count]
+    interleave = args.spec == "both"
+    outs = {"off": args.out + ".off.jsonl", "harness": args.out + ".harness.jsonl"} if interleave else {args.spec: args.out}
     done = set()
-    if os.path.exists(args.out):
-        for line in open(args.out):
-            try:
-                done.add(json.loads(line)["instance_id"])
-            except Exception:
-                pass
+    for path in outs.values():
+        if os.path.exists(path):
+            for line in open(path):
+                try:
+                    done.add(json.loads(line)["instance_id"])
+                except Exception:
+                    pass
     tasks = [t for t in tasks if t["instance_id"] not in done]
     client = OpenAI(base_url=args.base_url.rstrip("/") + "/v1", api_key=args.api_key, timeout=900, max_retries=2)
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
@@ -381,22 +391,31 @@ def main():
     ready_s = wait_for_server(args.base_url, args.api_key)
     print(f"server ready after {ready_s:.0f}s; arm={args.spec} tasks={len(tasks)} concurrency={args.concurrency}", flush=True)
     lock = threading.Lock(); run_t0 = time.time()
-    with ThreadPoolExecutor(max_workers=args.concurrency) as ex:
-        futs = {ex.submit(run_task, inst, client, args.model, args.spec == "harness", app, args.max_steps): inst for inst in tasks}
-        for fut in as_completed(futs):
-            inst = futs[fut]
+
+    def emit(rec, arm):
+        rec["concurrency"] = args.concurrency; rec["run_elapsed_s"] = time.time() - run_t0
+        with lock:
+            with open(outs[arm], "a") as f:
+                f.write(json.dumps(rec) + "\n")
+        print(f"{rec['instance_id']} arm={arm} wall={rec['wall_s']:.0f}s model={rec['model_s']:.0f}s tool={rec['tool_s']:.0f}s "
+              f"steps={len(rec['steps'])} hits={rec['hits']} misses={rec['misses']} saved={rec['saved_s']:.0f}s tokens={rec['tokens']} "
+              f"patch_chars={len(rec.get('model_patch', ''))} err={rec.get('error', '')[:120]}", flush=True)
+
+    def job(idx, inst):
+        arms = ["off", "harness"] if not interleave else (["off", "harness"] if idx % 2 == 0 else ["harness", "off"])
+        if not interleave:
+            arms = [args.spec]
+        for arm in arms:
             try:
-                rec = fut.result()
+                rec = run_task(inst, client, args.model, arm == "harness", app, args.max_steps)
             except Exception as e:
-                rec = {"instance_id": inst["instance_id"], "arm": args.spec, "error": repr(e)[:800], "wall_s": 0, "model_s": 0, "tool_s": 0, "steps": [], "spec_events": [], "tokens": {}, "hits": 0, "misses": 0, "saved_s": 0}
-            rec["concurrency"] = args.concurrency; rec["run_elapsed_s"] = time.time() - run_t0
-            with lock:
-                with open(args.out, "a") as f:
-                    f.write(json.dumps(rec) + "\n")
-            print(f"{rec['instance_id']} arm={args.spec} wall={rec['wall_s']:.0f}s model={rec['model_s']:.0f}s tool={rec['tool_s']:.0f}s "
-                  f"steps={len(rec['steps'])} hits={rec['hits']} misses={rec['misses']} saved={rec['saved_s']:.0f}s tokens={rec['tokens']} "
-                  f"patch_chars={len(rec.get('model_patch', ''))} err={rec.get('error', '')[:120]}", flush=True)
-    print(f"arm={args.spec} done: {len(tasks)} tasks in {time.time() - run_t0:.0f}s", flush=True)
+                rec = {"instance_id": inst["instance_id"], "arm": arm, "error": repr(e)[:800], "wall_s": 0, "model_s": 0, "tool_s": 0, "steps": [], "spec_events": [], "tokens": {}, "hits": 0, "misses": 0, "saved_s": 0}
+            rec["arm_order"] = arms.index(arm)
+            emit(rec, arm)
+
+    with ThreadPoolExecutor(max_workers=args.concurrency) as ex:
+        list(ex.map(lambda p: job(*p), list(enumerate(tasks))))
+    print(f"spec={args.spec} done: {len(tasks)} tasks in {time.time() - run_t0:.0f}s", flush=True)
 
 
 if __name__ == "__main__":

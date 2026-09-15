@@ -51,16 +51,12 @@ python summarize.py runs/local
 modal app stop spec-exec-vllm
 ```
 
-## Smoke run (run 6, 3 django tasks per arm, concurrency 1)
+## Results so far
 
-Both arms completed and graded: the server was healthy 274 s after a cold start with cached weights, tasks took 74 to
-198 s, and the official grader resolved 2 of 3 vanilla tasks and 1 of 3 harness tasks. Model time was 55 to 82 s per
-task against 15 s of tool time, so tool time was 13 to 17 percent of the wall clock at concurrency 1. Speculation
-launched 12 times and hit once. Every Rule B miss was a matcher defect, not a wrong prediction: the predicted command
-carried an absolute path and the model ran the relative one. That is fixed (paths under /testbed compare equal to
-their relative form; deletions no longer count as modifications), so the smoke hit rate is not the number to read.
-The throughput ratio from three tasks per arm (1.24) is noise: the harness arm saved 0.2 s per task and the gap is
-model-time variance. Four of six tasks hit the 40-step cap without submitting.
+- Smoke (run 6, 3 django tasks per arm, concurrency 1): pipeline verified end to end; exposed a matcher defect (absolute against relative paths) that was fixed before the full run.
+- Phase 1 (run 7, 50 tasks per arm, concurrency 8, arms in sequence): **gate result kill.** Harness/off tasks per GPU-hour 0.69 by arm span, 0.89 steady state, 0.68 on the 41 paired tasks with sandbox boot removed, 0.77 with the three slowest tasks per arm dropped. Rules hit 76 percent (rule B 97, rule A 30) and saved 2.3 s per task against a ceiling of 10.9 s and a median loop of 115 s. Resolve rate 24 against 22 on the paired tasks. Nine harness records errored at the arm switch (a gateway non-completion body, now retried), the off arm paid 41 s per task of image pulls, and 14 model calls stalled for over 120 s; the full reading, with the per-task table, is in `runs/20260915T044016Z-harness-7/analysis.md` and in `docs/experiments/speculative-test-execution.md`.
+
+Changes since run 7, for any rerun: `--spec both` runs every task in both arms inside the same worker with alternating order (removes arm-order and image-cache confounds; the workflow's default `arms=both`), the whole server log is streamed for the run, vLLM `/metrics` is snapshotted per arm (prefix-cache hits and queries, preemptions, prefill and decode time), and a non-completion body from the gateway is retried.
 
 ## Cost
 

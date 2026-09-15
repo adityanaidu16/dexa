@@ -38,7 +38,7 @@ hf_cache = modal.Volume.from_name("spec-exec-hf-cache", create_if_missing=True)
 image = (
     modal.Image.from_registry(CUDA_IMAGE, add_python="3.12")
     .entrypoint([])
-    .uv_pip_install(f"vllm=={VLLM_VERSION}", "huggingface_hub[hf_transfer]", "flashinfer-python==0.3.1")
+    .uv_pip_install(f"vllm=={VLLM_VERSION}", "huggingface_hub[hf_transfer]")
     .env({"HF_HOME": "/hf", "HF_HUB_ENABLE_HF_TRANSFER": "1"})
 )
 
@@ -57,7 +57,8 @@ image = (
 class VLLM:
     @modal.enter()
     def start(self):
-        env = os.environ
+        env = {k: os.environ.get(k, v) for k, v in CONFIG.items()}
+        print("vllm config:", {k: (v if k != "SPEC_VLLM_API_KEY" else "***") for k, v in env.items()}, flush=True)
         cmd = [
             "vllm", "serve", env["SPEC_MODEL"],
             "--host", "0.0.0.0", "--port", "8000",
@@ -70,13 +71,18 @@ class VLLM:
         ]
         self.proc = subprocess.Popen(cmd)
         deadline = time.time() + 20 * 60
+        t0 = time.time(); n = 0
         while time.time() < deadline:
             if self.proc.poll() is not None:
                 raise RuntimeError(f"vllm exited early with code {self.proc.returncode}")
             try:
                 urllib.request.urlopen("http://127.0.0.1:8000/health", timeout=2)
+                print(f"vllm healthy after {time.time() - t0:.0f}s", flush=True)
                 break
-            except Exception:
+            except Exception as e:
+                n += 1
+                if n % 12 == 0:
+                    print(f"waiting for vllm health: {time.time() - t0:.0f}s ({e!r})", flush=True)
                 time.sleep(5)
         else:
             raise RuntimeError("vLLM did not become healthy in 20 minutes")

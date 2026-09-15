@@ -8,9 +8,9 @@ on:
   workflow_dispatch:
     inputs:
       phase:
-        description: "smoke (3 tasks, both arms) | harness (full arms) | deploy-only | stop"
+        description: "smoke (3 tasks, both arms) | harness (full arms) | deploy-only | logs (print the server's Modal logs) | stop"
         type: choice
-        options: [smoke, harness, deploy-only, stop]
+        options: [smoke, harness, deploy-only, logs, stop]
         default: smoke
       start:
         description: "first task index in tasks_verified_50.json"
@@ -85,8 +85,30 @@ jobs:
         if: inputs.phase == 'stop'
         run: modal app stop spec-exec-vllm || true
 
+      - name: Print the vLLM server's Modal logs
+        if: inputs.phase == 'logs'
+        run: |
+          modal app list --json > apps.json || true
+          python - <<'PY'
+          import json, re, subprocess
+          try:
+              apps = json.load(open("apps.json"))
+          except Exception as e:
+              print("could not parse app list:", e); apps = []
+          ids = []
+          for a in apps:
+              blob = json.dumps(a)
+              if "spec-exec-vllm" in blob:
+                  m = re.search(r'"(ap-[A-Za-z0-9]+)"', blob)
+                  if m: ids.append((a, m.group(1)))
+          print(f"{len(ids)} spec-exec-vllm app records")
+          for a, aid in ids[:2]:
+              print("=" * 100); print(json.dumps(a)); print("=" * 100)
+              subprocess.run(["timeout", "180", "modal", "app", "logs", aid], check=False)
+          PY
+
       - name: Generate a per-run endpoint key
-        if: inputs.phase != 'stop'
+        if: inputs.phase != 'stop' && inputs.phase != 'logs'
         run: |
           KEY=$(openssl rand -hex 16)
           echo "::add-mask::$KEY"
@@ -94,7 +116,7 @@ jobs:
           echo "RUN_ID=$(date -u +%Y%m%dT%H%M%SZ)-${{ inputs.phase }}-${{ github.run_number }}" >> "$GITHUB_ENV"
 
       - name: Deploy the vLLM server
-        if: inputs.phase != 'stop'
+        if: inputs.phase != 'stop' && inputs.phase != 'logs'
         run: |
           modal deploy "$EXP_DIR/app.py" 2>&1 | tee deploy.log
           URL=$(grep -oE 'https://[A-Za-z0-9.-]+\.modal\.run' deploy.log | head -1)
@@ -117,18 +139,30 @@ jobs:
           COUNT="${{ inputs.count }}"; CONC="${{ inputs.concurrency }}"
           if [ "${{ inputs.phase }}" = "smoke" ]; then COUNT=3; CONC=1; fi
           echo "{\"phase\":\"${{ inputs.phase }}\",\"start\":${{ inputs.start }},\"count\":$COUNT,\"concurrency\":$CONC,\"arms\":\"${{ inputs.arms }}\",\"gpu\":\"$SPEC_GPU\",\"model\":\"$SPEC_MODEL\",\"vllm_version\":\"$SPEC_VLLM_VERSION\",\"max_steps\":${{ inputs.max_steps }},\"run_id\":\"$RUN_ID\"}" > "$OUT/config.json"
+          FAILED=0
           for ARM in $(echo "${{ inputs.arms }}" | tr ',' ' '); do
             echo "=== arm $ARM ==="
+            set +e
             python "$EXP_DIR/live_agent_modal.py" --base-url "$VLLM_URL" --api-key "$SPEC_VLLM_API_KEY" \
               --model "$SPEC_MODEL" --spec "$ARM" --start "${{ inputs.start }}" --count "$COUNT" \
               --concurrency "$CONC" --max-steps "${{ inputs.max_steps }}" --out "$OUT/$ARM.jsonl" 2>&1 | tee "$OUT/$ARM.log"
+            RC=${PIPESTATUS[0]}; set -e
+            if [ "$RC" != "0" ]; then echo "::error::arm $ARM exited with $RC"; FAILED=1; break; fi
           done
+          echo "=== server logs (last 3 minutes of streaming, or the full history if the server stopped) ==="
+          timeout 180 modal app logs spec-exec-vllm > "$OUT/server.log" 2>&1 || true
+          tail -n 200 "$OUT/server.log"
           for ARM in $(echo "${{ inputs.arms }}" | tr ',' ' '); do
+            if [ ! -f "$OUT/$ARM.jsonl" ]; then echo "no results for arm $ARM, skipping grading"; continue; fi
             echo "=== grading arm $ARM ==="
+            set +e
             python "$EXP_DIR/live_agent_modal.py" --mode grade --model "$SPEC_MODEL" --concurrency 8 --out "$OUT/$ARM.jsonl" 2>&1 | tee "$OUT/$ARM.grade.log"
+            RC=${PIPESTATUS[0]}; set -e
+            if [ "$RC" != "0" ]; then echo "::error::grading $ARM exited with $RC"; FAILED=1; fi
           done
           echo "=== summary ==="
-          python "$EXP_DIR/summarize.py" "$OUT" | tee "$OUT/summary.md"
+          python "$EXP_DIR/summarize.py" "$OUT" | tee "$OUT/summary.md" || FAILED=1
+          exit $FAILED
 
       - name: Upload results
         if: always() && (inputs.phase == 'smoke' || inputs.phase == 'harness')
@@ -154,5 +188,5 @@ jobs:
           echo "::warning::could not push results; they are attached as a workflow artifact"
 
       - name: Stop the vLLM server
-        if: always() && inputs.phase != 'deploy-only' && inputs.phase != 'stop'
+        if: always() && inputs.phase != 'deploy-only' && inputs.phase != 'stop' && inputs.phase != 'logs'
         run: modal app stop spec-exec-vllm || true

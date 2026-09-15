@@ -1,6 +1,7 @@
 # Runner for the phase-1 live agent experiment (experiments/speculative-tool-exec/modal/).
 # The Claude sandbox cannot reach Modal's gRPC API, so this workflow is the machine that talks to Modal.
-# Required repository secrets: MODAL_TOKEN_ID, MODAL_TOKEN_SECRET.
+# Required secrets: MODAL_TOKEN_ID, MODAL_TOKEN_SECRET, either as repository secrets or as secrets of the GitHub
+# environment named by the `environment` input (the job runs inside that environment so its secrets are visible).
 name: spec-exec
 
 on:
@@ -35,6 +36,9 @@ on:
       vllm_image:
         description: "vLLM image tag"
         default: "vllm/vllm-openai:v0.11.0"
+      environment:
+        description: "GitHub environment holding the Modal secrets (repository secrets also work)"
+        default: "spec-exec"
 
 permissions:
   contents: write
@@ -46,6 +50,7 @@ concurrency:
 jobs:
   run:
     runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
     timeout-minutes: 350
     env:
       MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}

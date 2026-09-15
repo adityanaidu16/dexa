@@ -1,0 +1,11 @@
+server ready after 0s; arm=harness tasks=3 concurrency=1
+/opt/hostedtoolcache/Python/3.11.16/x64/lib/python3.11/asyncio/events.py:84: DeprecationError: 2026-03-09: `Sandbox.open()` is deprecated. Use the `Sandbox.filesystem` APIs instead for improved reliability.
+  self._context.run(self._callback, *self._args)
+django__django-10097 arm=harness wall=1s model=0s tool=0s steps=0 hits=0 misses=0 saved=0s tokens={'prompt': 0, 'completion': 0} patch_chars=0 err=ConflictError('The legacy Sandbox filesystem API is no longer supported. See https://modal.com/docs/guide/migrate-sandbo
+/opt/hostedtoolcache/Python/3.11.16/x64/lib/python3.11/asyncio/events.py:84: DeprecationError: 2026-03-09: `Sandbox.open()` is deprecated. Use the `Sandbox.filesystem` APIs instead for improved reliability.
+  self._context.run(self._callback, *self._args)
+django__django-10880 arm=harness wall=1s model=0s tool=0s steps=0 hits=0 misses=0 saved=0s tokens={'prompt': 0, 'completion': 0} patch_chars=0 err=ConflictError('The legacy Sandbox filesystem API is no longer supported. See https://modal.com/docs/guide/migrate-sandbo
+/opt/hostedtoolcache/Python/3.11.16/x64/lib/python3.11/asyncio/events.py:84: DeprecationError: 2026-03-09: `Sandbox.open()` is deprecated. Use the `Sandbox.filesystem` APIs instead for improved reliability.
+  self._context.run(self._callback, *self._args)
+django__django-10914 arm=harness wall=1s model=0s tool=0s steps=0 hits=0 misses=0 saved=0s tokens={'prompt': 0, 'completion': 0} patch_chars=0 err=ConflictError('The legacy Sandbox filesystem API is no longer supported. See https://modal.com/docs/guide/migrate-sandbo
+arm=harness done: 3 tasks in 2s

@@ -1,0 +1,176 @@
+# Research: Document-AI / VLM inference as of 2026: per-page pricing (Azure DI, Google Document AI, AWS Textract, Reducto, LlamaParse, Extend, Unstructured, Mistral OCR), frontier VLM image-token pricing (OpenAI, Claude, Gemini), open VLM benchmark numbers and hosting, and visual-token pruning in serving engines (vLLM, SGLang)
+
+## Summary
+
+Cloud document APIs (primary sources fetched 2026-09-03): Azure Document Intelligence S0 meters (Azure Retail Prices API, East US) list Read at $1.50 per 1,000 pages ($0.60 above 1M), Layout/Prebuilt $10, Custom extraction $30, classifier $3, query fields $10, add-ons $6; commitment tiers go down to $0.45/1K (Read, 16M pages/month). Google Document AI lists Enterprise Document OCR $1.50/1K (first 1,000 free; $0.60 above 5M), Layout Parser $10/1K, Form Parser and Custom Extractor $30/1K ($20 above 1M), classifier/splitter $5/1K, specialized parsers $0.10 per document-count of up to 10 pages. AWS Textract lists DetectDocumentText $1.50/1K, Tables $15, Forms $50, Queries $15, AnalyzeExpense $10, AnalyzeLending $70, with over-1M tiers.
+
+Startup parsers: Reducto's pricing page lists r-1 Parse $10/1K pages, Extract $20, Deep Extract $40, Classify $7.50; the r-1 model launched 2026-09-01 at $0.01/page. LlamaParse charges $1.25 per 1,000 credits with tiers of 1/3/10/45 credits per page. Extend bills 2 credits/page Parse and 3 Extract at $0.0125 (PAYG) or $0.01 (Scale $500/mo) per credit. Unstructured is a flat $0.015/page after 10,000 free pages. Mistral OCR 4.1 is $4/1K pages ($2 batch), Document AI $5/1K; OCR 3 was $2/1K.
+
+Frontier VLM image billing: OpenAI patch-based models (gpt-5.x, gpt-4.1-mini/nano) count 32x32 patches times a multiplier (1.2x for gpt-5.2–5.6; 1024x1024 = 1,229 tokens on gpt-5.4), tile models use base+per-tile (gpt-4o/4.1: 85+170; gpt-5/5.1: 70+140). Claude counts 28x28 patches (1000x1000 = 1,296 tokens; standard tier capped at 1,568 tokens, high-res tier on Claude 4.7+ capped at 4,784); PDFs add 1,500–3,000 text tokens/page plus image tokens. Gemini charges 258 tokens per 768px tile (2.5-era rule) and, on Gemini 3, media_resolution levels of 280/560/1120/2240 tokens per image and 280/560/1120 per PDF page with native PDF text uncharged.
+
+Open VLMs: the Qwen3-VL technical report gives DocVQA 97.1 / OCRBench 920 for 235B-A22B-Instruct and 96.1 / 896 for 8B-Instruct, versus GPT-5 (high) 91.5 / 810 and Gemini 2.5 Pro 94.0 / 872 in the same table. InternVL3.5-241B-A28B reports 94.9 / 907; Llama 4 Maverick/Scout 94.4 DocVQA; Pixtral Large 93.3; Molmo2-8B 93.2; DeepSeek-VL2 93.3 / 811. olmOCR-Bench: olmOCR-2-7B 82.4, dots.mocr 83.9, Chandra 83.1, Mistral OCR 4 self-reported 85.20, Nanonets OCR-3 87.4. Hosting seen: Together (Qwen3-VL-32B $0.50/$1.50), DeepInfra (Qwen3-VL-235B $0.20/$0.88), Bedrock (Pixtral Large), Groq (Llama 4 Maverick).
+
+Serving engines: vLLM ships --video-pruning-rate with EVS and VidCom2 for video tokens only; an open RFC (#45098, 2026-06-10) proposes --image-pruning-rate. SGLang ships an EVS module gated by video_pruning_rate (video only, Nemotron-Nano-12B-v2-VL tested, incompatible with Qwen2.5-VL-style positional embeddings); no image-token pruning code was found in either engine.
+
+## Facts
+
+- (high, as of 2026-09-03) Azure Retail Prices API (East US, Consumption) lists 'Azure Document Intelligence S0 Read Pages' at $1.50 per 1K pages with a second tier at $0.60 per 1K starting at tierMinimumUnits 1000 (i.e., above 1,000K pages); 'S0 Batch Read Pages' has the same $1.50/$0.60 tiers.  
+  Source: https://prices.azure.com/api/retail/prices?$filter=contains(productName,%20'Document%20Intelligence')%20and%20armRegionName%20eq%20'eastus'
+- (high, as of 2026-09-03) Azure Retail Prices API (East US) lists S0 meters: Pre-built Pages $10/1K; Batch Layout Pages $10/1K (effective 2026-01-01); Custom Pages $30/1K; Custom Generative Pages $30/1K; pages for doc classifier $3/1K; pages for query fields $10/1K; Add-on for Pages $6/1K; Training $3/hour; Free tier $0.  
+  Source: https://prices.azure.com/api/retail/prices?$filter=contains(productName,%20'Document%20Intelligence')%20and%20armRegionName%20eq%20'eastus'
+- (high, as of 2026-09-03) Azure Retail Prices API (East US) lists commitment tiers, e.g., 'Commitment Tier Read Azure 500K' $375/month with overage $0.75/1K; 'Read Azure 16000K' $7,200/month with overage $0.45/1K; 'Custom Azure 1000K' $18,000/month with overage $18/1K; 'Pre-Built Azure 1000K' $7,500/month with overage $7.50/1K; disconnected-container tiers are priced per year (e.g., Read Disconnected 16000K $77,760/year).  
+  Source: https://prices.azure.com/api/retail/prices?$filter=contains(productName,%20'Document%20Intelligence')%20and%20armRegionName%20eq%20'eastus'
+- (high, as of 2026-09-03) Azure's public Document Intelligence pricing page renders prices as '$-' placeholders without the calculator and states the F0 free tier includes 500 pages free per month.  
+  Source: https://azure.microsoft.com/en-us/pricing/details/ai-document-intelligence/
+- (medium, as of 2026-07-25) A secondary guide states it re-verified Azure Document Intelligence rates against the Azure Retail Prices API on 2026-07-25 (East US): Read $1.50 ($0.60 above 1M/month), Layout $10, Prebuilt $10, Custom extraction $30, classifier $3, query fields $10, add-ons $6 per 1,000 pages; batch analysis carries no discount; the F0 tier returns only the first two pages of each request.  
+  Source: https://docuocr.com/blog/azure-document-intelligence-pricing
+- (high, as of 2026-09-03) Google Document AI pricing page: Enterprise Document OCR Processor is $0.00 for 0–1,000 pages/month, $1.50 per 1,000 pages for 1,000–5,000,000, and $0.60 per 1,000 pages above 5,000,000; OCR add-ons are $6.00 per 1,000 pages (Enterprise Document OCR v2 only).  
+  Source: https://cloud.google.com/document-ai/pricing
+- (high, as of 2026-09-03) Google Document AI pricing page: Custom extractor and Form Parser are $30.00 per 1,000 pages for 0–1,000,000 pages and $20.00 per 1,000 pages above 1,000,000; Layout Parser (includes initial chunking) is $10.00 per 1,000 pages; re-chunking parsed documents is $0.02 per 1,000; Custom splitter and Custom classifier are $5.00 per 1,000 (0–1M) and $3.00 above 1M; Summarizer is listed at $0.025 (unit as displayed).  
+  Source: https://cloud.google.com/document-ai/pricing
+- (high, as of 2026-09-03) Google Document AI pretrained specialized processors: Invoice parser, Expense parser, Utility parser, US driver license, US passport and Identity document proofing are $0.10 per 1 count where '1 count equals up to 10 pages in a document'; Bank statement parser $0.75, Pay slip $0.30, W2 $0.30, Lending and Procurement splitter/classifier $0.05 per classified document; custom processor hosting $0.05/hour; Provisioned service tier $0.410958904/hour.  
+  Source: https://cloud.google.com/document-ai/pricing
+- (high, as of 2026-09-03) Amazon Textract pricing (US West Oregon): DetectDocumentText $1.50 per 1,000 pages (first 1M) and $0.60 (over 1M); AnalyzeDocument Forms $50/1K ($40 over 1M); Tables $15/1K ($10 over 1M); Queries $15/1K; Signatures $3.50/1K ($1.40 over 1M); Layout free when used with Tables; AnalyzeExpense $10/1K ($8 over 1M); AnalyzeID $25/1K first 100K ($10 over); AnalyzeLending $70/1K ($55 over 1M).  
+  Source: https://aws.amazon.com/textract/pricing/
+- (high, as of 2026-09-03) Amazon Textract free tier (3 months for new customers): 1,000 pages/month DetectDocumentText; 100 pages/month for Forms/Tables/Layout, AnalyzeExpense, AnalyzeID; 2,000 pages/month AnalyzeLending.  
+  Source: https://aws.amazon.com/textract/pricing/
+- (high, as of 2026-09-03) Reducto pricing page (Standard, pay-as-you-go, per 1,000 pages): r-1 Parse $10; Extract $20; Deep Extract $40; Split $20; Deep Split $40; Classify $7.50; Edit $60 (or $15 for pre-filled pages); Standard includes $150 free usage / 15,000 free credits; Growth and Enterprise are custom with per-endpoint volume discounts; throughput guarantees 200/350/500+ concurrent pages; migration credits up to $5,000.  
+  Source: https://reducto.ai/pricing
+- (high, as of 2026-09-01) Reducto announced r-1 on 2026-09-01: a new parsing model priced at 1 cent per page 'all in', claiming a 20% reduction in error rate vs its legacy agentic pipelines (which cost 3–6 cents per page); available in preview via a Parse API configuration flag; an 'r-1 mini' and automatic model routing are planned for later in 2026; no model size, latency, or self-hosting details disclosed.  
+  Source: https://reducto.ai/blog/parse-r-1-model
+- (medium, as of 2026-04-01) Secondary sources describe Reducto's pre-r-1 pricing as 1 credit per page (~$0.015/page) for standard parsing, 2 credits for complex/VLM-reviewed pages, 2–4 credits for agentic modes, and a batch queue with 20% credit discount and 12-hour completion guarantee.  
+  Source: https://www.unsiloed.ai/blog/reducto-alternatives
+- (high, as of 2026-09-03) LlamaParse pricing docs: credits cost $1.25 per 1,000; v2 tiers are Fast 1 credit/page, Cost-effective 3, Agentic 10, Agentic Plus 45; v1 modes: Parse without AI 1, Parse page with LLM 3, Parse page with Agent 10–90, Auto 3–45; layout extraction +3 credits/page; enriched forms +10; audio 3 credits/minute; spreadsheets 1 credit/sheet; Extract Agentic Plus + Agentic parse = 60 credits, Turbo 35; indexing 2 credits per page; classification 1–2; split 4 (3 cached); storage 100 credits/GB/day.  
+  Source: https://developers.llamaindex.ai/llamaparse/general/pricing/
+- (high, as of 2026-09-03) LlamaIndex pricing page: Free $0/month with 10K credits; Starter $50/month with 40K credits (PAYG up to $500/mo); Pro $500/month with 400K credits (PAYG up to $5,000/mo; limited-time one-time bonus 800K credits); Enterprise custom; 1,000 credits = $1.25.  
+  Source: https://www.llamaindex.ai/pricing
+- (high, as of 2026-09-03) Extend pricing page: Pay As You Go is free with 10,000 free credits and $0.0125 per additional credit; Scale is $500/month with 50,000 credits/month included and $0.01 per additional credit; Enterprise is custom; example: a 10-page extraction (3 extract + 2 parse credits per page) costs about $0.63 on PAYG.  
+  Source: https://www.extend.ai/pricing
+- (high, as of 2026-09-03) Extend credits docs: performance-mode base credits per page are Parse 2, Extract 3, Split 2, Classify 1, Edit filling 1, Form detection 2; light mode reduces to Parse 0.5, Extract 0.7, Split 0.5, Classify 0.3; PAYG performance-mode dollar equivalents Parse $0.025, Extract $0.0375, Split $0.025, Classify $0.0125 per page; Review Agent adds +1 credit/page (extraction) or +0.5 (classification); priority parsing is a 2x multiplier.  
+  Source: https://docs.extend.ai/product/general/how-credits-work
+- (high, as of 2026-09-03) Unstructured pricing page: 10,000 free pages to start (no card); Pay-As-You-Go charges $0.015 per page after the first 10,000 pages, one rate across Auto/VLM/High-Res/Fast strategies; Business plan is custom with dedicated instance, VPC, or multi-tenant SaaS options.  
+  Source: https://unstructured.io/pricing
+- (medium, as of 2024-06-25) At the June 2024 Unstructured Serverless API launch, pricing was Fast pipeline $1 per 1,000 pages and Hi-Res pipeline $10 per 1,000 pages.  
+  Source: https://unstructured.io/blog/introducing-unstructured-serverless-api
+- (high, as of 2026-09-03) Mistral API pricing page: OCR 4.1 is $4 per 1,000 pages; Document AI is $5 per 1,000 pages; Batch processing is offered 'at half price'.  
+  Source: https://mistral.ai/pricing/api/
+- (high, as of 2026-06-23) Mistral OCR 4 launch post (2026-06-23): $4 per 1,000 pages via API, $2 per 1,000 pages via Batch API, Document AI $5 per 1,000 pages; self-reported olmOCR-Bench 85.20 and OmniDocBench 93.07; 72% average human-preference win rate against leading competitors; Crawl Multilingual 0.98 across 8 language groups; available via Mistral Studio API, Amazon SageMaker, Microsoft Foundry, Snowflake Parse Document (coming soon), and self-hosted for enterprise; model id mistral-ocr-latest.  
+  Source: https://mistral.ai/news/ocr-4/
+- (high, as of 2025-12-17) Mistral OCR 3 launch post (2025-12-17): $2 per 1,000 pages via API and $1 per 1,000 pages via Batch API; 74% overall win rate over Mistral OCR 2 on forms, scanned documents, complex tables, and handwriting.  
+  Source: https://mistral.ai/news/mistral-ocr-3/
+- (high, as of 2026-09-03) OpenAI image token rules: patch-based models count 32x32-pixel patches times a multiplier — gpt-5.6-sol/terra/luna, gpt-5.5, gpt-5.4, gpt-5.4-mini, gpt-5.4-nano, gpt-5.2: 1.2; gpt-4.1-mini: 1.62; gpt-4.1-nano: 2.46; o4-mini: 1.72. Example: a 1024x1024 image is 1024 patches and bills ceil(1024 x 1.2) = 1229 tokens. Detail levels on gpt-5.4: low = 512x512 max; high = up to 2,500 patches / 2048px max dimension; original = up to 10,000 patches / 6000px max.  
+  Source: https://developers.openai.com/api/docs/guides/images-vision
+- (high, as of 2026-09-03) OpenAI tile-based models: gpt-5.1 and gpt-5 bill 70 base + 140 tokens per 512px tile; gpt-4o and gpt-4.1 bill 85 base + 170 per tile; gpt-4o-mini bills 2833 base + 5667 per tile; with detail 'low' only base tokens are charged; 'high'/'auto' scales the image to fit 2048x2048 with shortest side reduced to 768px, then counts 512px squares.  
+  Source: https://developers.openai.com/api/docs/guides/images-vision
+- (high, as of 2026-09-03) OpenAI API pricing (per 1M tokens, input/output): gpt-5.6-sol $4.00/$20.00; gpt-5.6-terra $2.00/$12.00; gpt-5.6-luna $0.20/$1.20; gpt-5.5 $5.00/$30.00; gpt-5.4 $2.50/$15.00; gpt-5.4-mini $0.75/$4.50; gpt-5.4-nano $0.20/$1.25; gpt-4.1 $2.00/$8.00; gpt-4.1-mini $0.40/$1.60; gpt-4.1-nano $0.10/$0.40; gpt-4o $2.50/$10.00; gpt-4o-mini $0.15/$0.60; batch pricing is 50% of standard. Image inputs are billed as input tokens per the image-token rules (derived: a 1024x1024 image on gpt-5.4 = 1,229 tokens ≈ $0.0031; on gpt-5.6-luna ≈ $0.00025).  
+  Source: https://developers.openai.com/api/docs/pricing
+- (high, as of 2026-09-03) OpenAI PDF inputs: each file must be under 50 MB and combined files per request under 50 MB; PDF parsing includes both extracted text and page images in context; requires vision models such as gpt-4o and later; docs do not state a per-page token count.  
+  Source: https://developers.openai.com/api/docs/guides/pdf-files
+- (high, as of 2026-09-03) Claude vision docs: images are counted in 28x28-pixel patches, cost = ceil(width/28) x ceil(height/28) visual tokens; Standard tier (all models before Claude 4.7) downsizes to max long edge 1568 px / max 1568 tokens; High-resolution tier (Claude 4.7 and later) allows 2576 px / 4784 tokens. Examples: 1000x1000 = 1296 tokens on both tiers; 1920x1080 = 1560 (standard) vs 2691 (high-res); 3840x2160 = 1560 vs 4784.  
+  Source: https://platform.claude.com/docs/en/build-with-claude/vision
+- (high, as of 2026-09-03) Claude vision docs cost examples: at Claude Haiku 4.5's $1/MTok input, a 1000x1000 image costs about $1.30 per thousand images; at Claude Opus 5's $5/MTok (high-resolution tier) the same image costs about $6.48 per thousand and a 4K image about $23.92 per thousand. Limits: 100 images per API request on 200k-context models, 600 on others; max 8000x8000 px; 10 MB base64 per image (5 MB on Bedrock/Google Cloud); 32 MB request size.  
+  Source: https://platform.claude.com/docs/en/build-with-claude/vision
+- (high, as of 2026-09-03) Claude PDF support docs: each page is converted to an image and its text extracted alongside; text token costs are typically 1,500–3,000 tokens per page depending on density, plus image token costs per the vision formula; max 600 pages per request (100 when the request's context window is under 1M tokens); 32 MB max request size; no additional PDF fees.  
+  Source: https://platform.claude.com/docs/en/build-with-claude/pdf-support
+- (high, as of 2026-09-03) Claude API pricing (input/output per MTok): Claude Fable 5.1 $10/$50; Claude Opus 5 $5/$25 (also Opus 4.8/4.7/4.6/4.5); Claude Sonnet 5 $2/$10 (introductory price made permanent; scheduled Sept 1 2026 increase to $3/$15 cancelled); Sonnet 4.6/4.5 $3/$15; Haiku 4.5 $1/$5; Batch API 50% off; cache reads 0.1x base (0.025x on Fable 5.1); Claude 4.7+ models use a tokenizer producing ~30% more tokens for the same text.  
+  Source: https://platform.claude.com/docs/en/about-claude/pricing
+- (high, as of 2026-09-03) Gemini image understanding docs: images with both dimensions <= 384 px cost 258 tokens; larger images are cropped/scaled into 768x768 tiles at 258 tokens each (crop unit ≈ floor(min(width,height)/1.5)); a 960x540 image = 6 tiles; max 3,600 image files per request; Gemini 3 adds a media_resolution parameter setting the max tokens per image/frame.  
+  Source: https://ai.google.dev/gemini-api/docs/image-understanding
+- (high, as of 2026-09-03) Gemini media_resolution docs (Gemini 3): per image tokens — low 280, medium 560, high 1120, ultra_high 2240, unspecified/default 1120; per PDF page — low 280 + native text, medium 560 + native text, high 1120 + native text, unspecified 560; docs state quality for document understanding 'typically saturates at medium'.  
+  Source: https://ai.google.dev/gemini-api/docs/media-resolution
+- (high, as of 2026-09-03) Gemini document processing docs: 'Each document page is equivalent to 258 tokens'; PDFs up to 50 MB or 1,000 pages; pages are scaled to at most 3072x3072 and at least 768x768 preserving aspect ratio, with no cost reduction for smaller pages; users are not charged for tokens from native text extracted from PDFs; PDF page tokens count under the IMAGE modality.  
+  Source: https://ai.google.dev/gemini-api/docs/document-processing
+- (high, as of 2026-09-03) Gemini API pricing (input/output per 1M tokens): Gemini 3.8 Flash and 3.7 Flash $0.75/$3.75 (standard pricing through Dec 31, 2026; batch $0.375/$1.875); Gemini 3.5 Flash $1.50/$9.00 (batch $0.75/$4.50); Gemini 3.5 Flash-Lite $0.30/$2.50; Gemini 2.5 Pro $1.25/$10.00 (<=200k prompts); Gemini 2.5 Flash $0.30/$2.50; Gemini 2.5 Flash-Lite $0.10/$0.40 (derived: a PDF page at medium 560 tokens on Gemini 3.8 Flash ≈ $0.00042 input, i.e., ≈ $0.42 per 1,000 pages before output tokens).  
+  Source: https://ai.google.dev/gemini-api/docs/pricing
+- (high, as of 2025-11-26) Qwen3-VL Technical Report (arXiv 2511.21631, submitted 2025-11-26), Table 2: DocVQA(test) Qwen3-VL-235B-A22B-Instruct 97.1 / Thinking 96.5; Gemini 2.5 Pro 92.6 (thinking) / 94.0 (budget-128); GPT-5 91.5 (high) / 89.6 (minimal); Claude Opus 4.1 92.5 (thinking) / 89.2 (non-thinking). OCRBench: 920 / 875; Gemini 2.5 Pro 866 / 872; GPT-5 810 / 787; Opus 4.1 764 / 750. OmniDocBench-en edit distance (lower is better): 0.143 / 0.155; Gemini 2.5 Pro 0.347 / 0.206; GPT-5 0.356 / 0.174; Opus 4.1 0.194. InfoVQA 89.2 / 89.5; ChartQA 90.3 / 90.3.  
+  Source: https://arxiv.org/abs/2511.21631
+- (high, as of 2025-11-26) Qwen3-VL Technical Report Table 3 (medium models): Qwen3-VL-32B-Instruct DocVQA 96.9, OCRBench 895, OmniDocBench-en 0.151; Qwen3-VL-30B-A3B-Instruct DocVQA 95.0, OCRBench 903, OmniDocBench-en 0.183; Gemini 2.5 Flash (non-thinking) 93.0 / 864 / 0.228; GPT-5 mini (high) 90.5 / 821 / 0.181, (minimal) 90.6 / 807 / 0.260.  
+  Source: https://arxiv.org/abs/2511.21631
+- (high, as of 2025-11-26) Qwen3-VL Technical Report Table 4 (small models): Qwen3-VL-8B-Instruct DocVQA 96.1, OCRBench 896, OmniDocBench-en 0.170; Qwen3-VL-4B-Instruct 95.3 / 881 / 0.244; Qwen3-VL-2B-Instruct 93.3 / 858 / 0.292; GPT-5 nano (high) 88.2 / 753 / 0.401, (minimal) 78.3 / 701 / 0.454.  
+  Source: https://arxiv.org/abs/2511.21631
+- (high, as of 2026-09-03) Qwen3-VL GitHub: checkpoints released 2025-09-23 (235B-A22B Instruct/Thinking), 2025-10-04 (30B-A3B and FP8), 2025-10-15 (4B, 8B), 2025-10-21 (2B, 32B); paper released 2025-11-27; Apache-2.0 license; README documents serving via both vLLM and SGLang with an OpenAI-style API.  
+  Source: https://github.com/QwenLM/Qwen3-VL
+- (high, as of 2026-09-03) Together AI hosts Qwen3-VL-32B-Instruct at $0.50 per 1M input tokens and $1.50 per 1M output tokens, 256K native context (expandable to 1M); its page lists DocVQA 93.3% and OCRBench 86.9% (these differ from the technical report's 96.9 / 895 for 32B-Instruct).  
+  Source: https://www.together.ai/models/qwen3-vl-32b-instruct
+- (high, as of 2026-09-03) DeepInfra hosts Qwen3-VL-235B-A22B-Instruct at $0.20 per 1M input, $0.88 per 1M output, $0.11 cached input, 262,144-token context.  
+  Source: https://deepinfra.com/Qwen/Qwen3-VL-235B-A22B-Instruct
+- (medium, as of 2026-09-03) Secondary price aggregators list Qwen3-VL-8B-Instruct at $0.20 per 1M tokens on both DeepInfra and Fireworks, and Alibaba Model Studio (Singapore) Qwen3-VL-Plus at $0.20 input / $1.60 output per 1M tokens.  
+  Source: https://cloudprice.net/models/alibaba-qwen3-vl-plus
+- (high, as of 2025-08-25) InternVL3.5 (arXiv 2508.18265, submitted 2025-08-25), Table 4 DocVQA / OCRBench: 1B 85.6 / 795; 2B 89.4 / 836; 4B 92.4 / 815; 8B 92.3 / 832; 14B 93.4 / 836; 30B-A3B 94.2 / 880; 38B 94.0 / 870; 241B-A28B 94.9 / 907.  
+  Source: https://arxiv.org/html/2508.18265v1
+- (high, as of 2025-08-25) InternVL3.5 describes a Visual Resolution Router (ViR): each image patch starts as 1024 visual tokens compressed to 256 via pixel shuffle; InternVL3.5-Flash adds a higher-compression pixel shuffle down to 64 tokens; ViR reduces visual tokens by roughly 50% while retaining nearly 100% of InternVL3.5 performance; the paper reports a 4.05x inference speedup over InternVL3.  
+  Source: https://arxiv.org/html/2508.18265v1
+- (high, as of 2026-09-03) Pixtral Large (Hugging Face model card, released 2024-11-18): 124B multimodal decoder + 1B vision encoder, Mistral Research License; DocVQA 93.3, ChartQA 88.1, MathVista 69.4 vs GPT-4o DocVQA 88.5, Gemini-1.5 Pro 92.3, Claude-3.5 Sonnet 88.6, Llama-3.2 90B 85.7.  
+  Source: https://huggingface.co/mistralai/Pixtral-Large-Instruct-2411
+- (high, as of 2026-09-03) Mistral's Pixtral Large news page is marked '[Deprecated]' and states 'Pixtral Large is no longer maintained and has been replaced by our latest, more powerful vision and multimodal models'.  
+  Source: https://mistral.ai/news/pixtral-large/
+- (high, as of 2025-04-08) AWS announced Pixtral Large 25.02 (model id mistral.pixtral-large-2502-v1:0) as a fully managed serverless model in Amazon Bedrock on 2025-04-08, available via cross-Region inference in US East (Ohio, N. Virginia), US West (Oregon), and Europe (Frankfurt, Ireland, Paris, Stockholm), 128K context.  
+  Source: https://aws.amazon.com/blogs/aws/aws-announces-pixtral-large-25-02-model-in-amazon-bedrock-serverless/
+- (high, as of 2025-04-05) Llama 4 model card (released 2025-04-05, Llama 4 Community License): DocVQA (ANLS) instruction-tuned Scout 94.4 and Maverick 94.4 (pre-trained 89.4 and 91.6); ChartQA relaxed accuracy instruction-tuned Scout 88.8, Maverick 90.0.  
+  Source: https://github.com/meta-llama/llama-models/blob/main/models/llama4/MODEL_CARD.md
+- (medium, as of 2026-09-03) Groq hosts meta-llama/llama-4-maverick-17b-128e-instruct with native multimodality, up to 5 image inputs per request and a 128K context window; Groq's docs page does not list prices; secondary aggregators report Groq at $0.20 input / $0.60 output per 1M tokens for Llama 4 Maverick.  
+  Source: https://console.groq.com/docs/model/meta-llama/llama-4-maverick-17b-128e-instruct
+- (high, as of 2026-04-02) Molmo2 (arXiv 2601.10611v4, 2026-04-02; Apache 2.0; Qwen3-8B LLM + SigLIP 2 vision backbone) Table 6: Molmo2-8B DocVQA 93.2, InfoQA 80.1, ChartQA 86.0, TextVQA 85.7; Molmo2-4B DocVQA 87.8, InfoQA 78.6, ChartQA 86.1; comparison rows in the same table: Qwen3-VL-8B DocVQA 96.1 / InfoQA 83.1 / ChartQA 89.6; Gemini 2.5 Pro DocVQA 91.5 / InfoQA 82.0.  
+  Source: https://arxiv.org/html/2601.10611v4
+- (high, as of 2024-12-13) DeepSeek-VL2 (arXiv 2412.10302): DeepSeek-VL2-Tiny (1.0B activated) DocVQA 88.9, ChartQA 81.0, InfoVQA 66.1, OCRBench 809; DeepSeek-VL2-Small (2.8B activated) 92.3 / 84.5 / 75.8 / 834; DeepSeek-VL2 (4.5B activated) 93.3 / 86.0 / 78.1 / 811.  
+  Source: https://arxiv.org/html/2412.10302v1
+- (high, as of 2025-10-21) DeepSeek-OCR (arXiv 2510.18234, submitted 2025-10-21): DeepEncoder + DeepSeek3B-MoE-A570M decoder; at compression ratio <10x (text tokens within 10x of vision tokens) OCR precision is 97%, at 20x about 60%; on OmniDocBench it surpasses GOT-OCR2.0 (256 tokens/page) using only 100 vision tokens and outperforms MinerU2.0 (6000+ tokens/page) with fewer than 800 vision tokens; generates 200k+ pages/day on a single A100-40G.  
+  Source: https://arxiv.org/abs/2510.18234
+- (high, as of 2025-10-22) olmOCR 2 (arXiv 2510.19817, submitted 2025-10-22): olmOCR-2-7B-1025 is fine-tuned from Qwen2.5-VL-7B; olmOCR-Bench overall 82.4±1.1 vs first olmOCR release 68.2±1.1; comparison scores in the paper: Chandra OCR 0.1.0 83.1±0.9, Infinity-Parser 7B 82.5, PaddleOCR-VL 80.0±1.0, Marker 1.10.1 76.1±1.1, DeepSeek-OCR 75.7±1.0, MinerU 2.5.4 75.2±1.1, Mistral OCR API (Mar 2025) 72.0±1.1, GPT-4o (May 2024) 68.9±1.1, Gemini Flash 2 (Dec 2024) 57.8±1.1; synthetic training data cost ~$0.12 per page via Claude Sonnet 4; models/data/code released under permissive open licenses.  
+  Source: https://arxiv.org/html/2510.19817
+- (high, as of 2026-09-03) olmOCR-Bench README leaderboard: Chandra OCR 0.1.0 83.1±0.9; Infinity-Parser 7B 82.5; olmOCR v0.4.0 82.4±1.1; PaddleOCR-VL 80.0±1.0; olmOCR v0.3.0 and v0.2.0 78.5±1.1; Marker 1.10.1 76.1±1.1; DeepSeek-OCR 75.7±1.0; MinerU 2.5.4 75.2±1.1; Mistral OCR API 72.0±1.1; Nanonets-OCR2-3B 69.5±1.1; seven categories (ArXiv math, old scans math, tables, old scans, headers/footers, multi-column, long tiny text).  
+  Source: https://github.com/allenai/olmocr/tree/main/olmocr/bench
+- (high, as of 2026-09-03) dots.ocr GitHub (rednote-hilab): 3B-parameter model, MIT license; dots.ocr released 2025-07-30, rebranded/updated as dots.mocr 2026-03-19; dots.mocr olmOCR-Bench 83.9±0.9 vs olmOCR v0.4.0 82.4±1.1 and PaddleOCR-VL 80.0±1.0; OmniDocBench v1.5 Elo 1059.0 vs HunyuanOCR 1003.9, PaddleOCR-VL-1.5 997.9, GLM-OCR 972.6; officially integrated in vLLM 0.11.0.  
+  Source: https://github.com/rednote-hilab/dots.ocr
+- (medium, as of 2026-09-03) Nanonets IDP Leaderboard front page lists Nanonets OCR-3 at 87.4% on olmOCR-Bench (v1.0), Gemini-3-Flash at 90.1% on OmniDocBench (v1.5), and Gemini 3.1 Pro at 89.6% on IDP Core Bench (v1.0).  
+  Source: https://benchmarking.nanonets.com/benchmarks
+- (high, as of 2024-09-02) FastV (arXiv 2403.06764, 'An Image is Worth 1/2 Tokens After Layer 2', submitted 2024-03-11): learns adaptive attention patterns in early layers and prunes visual tokens in subsequent layers; claims a 45% reduction in FLOPs for LLaVA-1.5-13B without performance loss; plug-and-play, training-free.  
+  Source: https://arxiv.org/abs/2403.06764
+- (high, as of 2025-06-03) SparseVLM (arXiv 2410.04417, submitted 2024-10-06, v4 2025-06-03): text-guided visual token sparsification; on LLaVA reports 54% FLOPs reduction, 37% decrease in CUDA latency, retaining 97% of original accuracy.  
+  Source: https://arxiv.org/abs/2410.04417
+- (medium, as of 2024-10-22) PyramidDrop (arXiv 2410.17247, submitted 2024-10-22): drops image tokens at the end of each of several stages with a pre-defined ratio; reports 40% training time and 55% inference FLOPs acceleration on LLaVA-NeXT with comparable performance; can be used training-free at inference.  
+  Source: https://arxiv.org/abs/2410.17247
+- (high, as of 2026-03-15) VisionZip (arXiv 2412.04467, submitted 2024-12-05, revised 2026-03-15): selects informative visual tokens before the LLM (based on vision-encoder attention) and merges the rest; abstract claims at least 5% gains over the prior SOTA across nearly all settings, 8x faster prefilling, and LLaVA-Next 13B inferring faster than LLaVA-Next 7B with better results.  
+  Source: https://arxiv.org/abs/2412.04467
+- (medium, as of 2023-03-01) ToMe / Token Merging (arXiv 2210.09461, submitted 2022-10-17, ICLR 2023 oral): training-free bipartite token matching in ViTs; 2x throughput for ViT-L@512 and ViT-H@518 on images and 2.2x for ViT-L on video with a 0.2–0.3% accuracy drop; code at github.com/facebookresearch/ToMe.  
+  Source: https://arxiv.org/abs/2210.09461
+- (medium, as of 2025-10-16) Efficient Video Sampling (EVS, arXiv 2510.14624) prunes temporally static patches across consecutive video frames; the paper claims up to 4x LLM time-to-first-token reduction with minimal accuracy loss and KV-cache memory savings linear in the pruning rate q.  
+  Source: https://arxiv.org/abs/2510.14624
+- (high, as of 2026-09-03) vLLM stable docs (Multimodal Inputs): '--video-pruning-rate <q>' prunes fraction q of video tokens after the vision encoder to reduce prefill time and KV-cache usage 'at some cost in accuracy'; methods are 'evs' (default; drops tokens with lowest temporal dissimilarity to the previous frame, first frame always preserved) and 'vidcom2' (Video Compression Commander, Qwen3-VL only); enabling video pruning disables encoder CUDA graphs; the docs contain no image-token pruning flag.  
+  Source: https://docs.vllm.ai/en/stable/features/multimodal_inputs/
+- (high, as of 2026-09-03) vLLM issue #45098 '[RFC]: Image Token Pruning for Multimodal Models' (opened 2026-06-10 by garrygale, status open) proposes '--image-pruning-rate' (0.0–1.0), '--image-pruning-config' (JSON method/params), and '--video-pruning-config' (default {"method": "evs"}), with prune_image()/prune_video() dispatch functions operating on vision-encoder embeddings, Qwen3-VL as the integration example, pruning off unless explicitly enabled; no maintainer comments were visible at fetch time.  
+  Source: https://github.com/vllm-project/vllm/issues/45098
+- (medium, as of 2026-09-03) vLLM issue #39708 is a feature request for 'Pre-ViT visual token pruning for VLMs (PixelPrune)', which removes redundant patches from the ViT input via predictive coding.  
+  Source: https://github.com/vllm-project/vllm/issues/39708
+- (high, as of 2026-09-03) SGLang ships an EVS module (python/sglang/srt/multimodal/evs/: README.md, evs_module.py, evs_processor.py; test/registered/unit/multimodal/test_evs.py; wired into nano_nemotron_vl); EVS is enabled via 'video_pruning_rate' in model config.json or '--json-model-override-args {"video_pruning_rate": 0.7}'; README states it is tested on Nemotron-Nano-12B-v2-VL and that the current SGLang implementation 'cannot work with VLMs that use positional embeddings [Such as Qwen2.5VL]'; 30-video benchmark: q=0.7 TTFT 8.79 s vs 11.96 s off, VideoMME 0.644 vs 0.665–0.668.  
+  Source: https://github.com/sgl-project/sglang/blob/main/python/sglang/srt/multimodal/evs/README.md
+- (high, as of 2026-09-03) GitHub code search for '"token pruning"' in sgl-project/sglang returned 0 results; a search for 'pruning_rate' returned only the EVS module, nano_nemotron_vl model/config files, the EVS unit test, and docs/docs/supported-models/multimodal_language_models.mdx; the only related issue found is #26507 (2026-05-27, closed): 'EVS video chunked prefill crashes when optimized path reshapes EVSEmbeddingResult'.  
+  Source: https://github.com/sgl-project/sglang/issues/26507
+- (medium, as of 2026-04-28) vLLM blog posts document running NVIDIA Nemotron Nano V2 VL (2025-10-31) and Nemotron 3 Nano Omni (2026-04-28) with EVS video token pruning on vLLM.  
+  Source: https://vllm.ai/blog/2026-04-28-nemotron-omni
+- (medium, as of 2026-09-03) Extend raised a $17M Series A (announced on its site as 'Extend Raises $17 Million to Build the Document Processing Cloud').  
+  Source: https://www.extend.ai/resources/series-a
+- (medium, as of 2026-09-03) Mistral OCR (25.05) is also listed as a partner model on Google Cloud Vertex AI.  
+  Source: https://docs.cloud.google.com/vertex-ai/generative-ai/docs/partner-models/mistral/mistral-ocr
+
+## Unknowns
+
+- Azure Document Intelligence: whether the East US retail prices apply in all regions; the official pricing page could not be read (JS placeholders), so the retail API is the only primary source captured.
+- Google Document AI Summarizer: the page shows '$0.025' but the billing unit (per page vs per 1,000) was not captured in the text extraction.
+- Amazon Bedrock on-demand token prices for Pixtral Large 25.02 and Llama 4 Maverick/Scout were not found on the Bedrock pricing page fetch.
+- Groq's official per-token prices for Llama 4 Maverick/Scout: the groq.com pricing page did not render prices; only secondary aggregator numbers ($0.20/$0.60) were found.
+- Fireworks AI and Alibaba Model Studio official Qwen3-VL price pages were not fetched; only secondary aggregator prices.
+- Which managed API providers (if any) host InternVL3.5, Molmo2, olmOCR-2, dots.ocr/dots.mocr, or DeepSeek-OCR as hosted endpoints — no primary listing found.
+- Reducto r-1: model size/architecture, throughput/latency, and self-hosting availability are not disclosed; whether the $0.01/page r-1 price replaces the $10/1K 'r-1 Parse' line on the pricing page or is the same figure (they are numerically equal).
+- Extend Enterprise per-credit pricing, and the secondary claim of '$0.007–0.01 per page cost-optimized vs $0.03–0.05 performance' was not verified against Extend's own docs.
+- Mistral OCR 4: the specific competitor names and per-competitor numbers in its benchmark comparison were not captured; per-page pricing on SageMaker/Microsoft Foundry/Snowflake is unknown.
+- OpenAI PDF inputs: per-page token counts (text + image) are not stated in the docs.
+- Gemini: which rule (258 tokens per 768px tile vs media_resolution 280/560/1120) applies to each specific 3.x/2.5 model, and whether Gemini 3.x Flash models default to 1120 or 560 per image; per-image cost for Gemini 3.8 Flash beyond derived arithmetic.
+- Together AI's listed Qwen3-VL-32B benchmark numbers (DocVQA 93.3, OCRBench 86.9) differ from the Qwen3-VL technical report (96.9 / 895); the source of Together's figures is unknown.
+- Qwen3-VL technical report numbers for GPT-5/Gemini 2.5 Pro/Claude Opus 4.1 are as reported by Qwen (some marked as sourced from vendor reports); independent replication not checked.
+- vLLM RFC #45098 (image token pruning): whether a PR has been merged since 2026-06-10 and whether maintainers endorsed the design.
+- SGLang: no image-token pruning feature was found; whether EVS support has been extended to Qwen3-VL or other RoPE-based VLMs after the README's stated limitation is unknown.
+- Unstructured 'VLM' strategy: which underlying VLM is used and whether any pass-through model cost applies beyond the flat $0.015/page.
+- LlamaParse: whether Starter/Pro overage credits are priced at the same $1.25 per 1,000 as the baseline.
+- Mistral Pixtral model per-token/per-image pricing on Mistral's API was not found on the pricing page fetch (Pixtral Large is deprecated).
+- OmniDocBench and olmOCR-Bench scores for Gemini 3.x, GPT-5.x, Claude 4.x/5 and Azure/Google/AWS parsers were not found in the sources fetched (Nanonets leaderboard front page showed only three leaders).

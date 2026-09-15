@@ -1,0 +1,266 @@
+{
+ "id": "C",
+ "name": "Session-aware serving engine: one residency scheduler for every idle regime (hosted + BYOC)",
+ "one_line": "A hint-driven KV residency scheduler (pin / RAM / NVMe / drop per session) inside stock vLLM, sold hosted and BYOC, whose one in-engine win (voice arm D, 300 vs 200 sessions per L40S) is single-seed, synthetic-trace and 8 ms from failing, and whose agent-regime claim has no in-engine measurement above 16k tokens.",
+ "evidence_grade": "C",
+ "evidence_grade_reason": "The differentiating claim (a return-time hint beats reactive/LRU residency at matched memory) is measured exactly once in-engine and the ledger labels it BOUNDED: voice arm D, seed 1, L40S 46 GB, synthetic traces whose medians the predictor was given, 8.1 ms margin on the full-load-window p95, 3 of 7 full-load buckets over the gate, N=400 collapsed. The restore-vs-re-prefill physics is PROVEN single-request but is LMCache's mechanism, and the same repo holds CONTRADICTED results (0.37x single-request, P99 1.6-2.2x worse under concurrency on a disk tier). The agent regime that the brief's larger customer and pricing depend on has zero in-engine evidence above 16k tokens (vLLM crashed at >=32k), the cost model is HF-level and modeled, and tiering enforcement does not exist in code. Nothing has been reproduced across seeds, GPUs, engines or real traces, so this is 'measured but bounded/contradicted', not B.",
+ "build_cost_weeks_to_proof": "8-10 weeks to a credible public Metric A (voice) proof; 12-14 weeks for Metric B (agent). Assumptions: 1-2 engineers; the voice connector port from vLLM 0.9.2 to 0.28 (changed KVConnector hooks and CachedRequestData shape, 3-arg ctor) takes 2-3 weeks including provenance and server-metric capture; 3-seed sweeps at N {250,300,350,400} on L40S and H100 against vLLM OffloadingConnector LRU/ARC, LMCache 0.5.x and FP8 KV take ~100-150 GPU-h (~$300-600 at the $1.95-3.95/GPU-h Modal rates in 05-research-gpu-pricing.md) and 1-2 weeks wall-clock; 1 week write-up. Synthetic traces are acceptable for v1 only if the write-up says so; transcript-derived traces depend on a design partner. Metric B is gated on something never demonstrated in either repo: stable in-engine restore at 32k-128k on a native-128k model, plus RAM-tier restore under concurrency, so add 4+ weeks and treat the date as unknown until the week-4 in-engine test passes.",
+ "factcheck": [
+  {
+   "claim": "Section 6 Proven: 'Predictive pinning raised the 300 ms-p95 ceiling from 200 to 300 sessions on one L40S (arm D N=300 p95 272.2 ms)'",
+   "verdict": "misquoted",
+   "correction": "Numbers correct, status wrong: 02-evidence-ledger-voice.md labels vi-armD-predictive-pinning BOUNDED (single seed, one GPU, one passing N, 8.1 ms full-load-window margin, 3 of 7 buckets over 300 ms, hint uses trace medians). Moved from Proven to Bounded."
+  },
+  {
+   "claim": "Section 6 Proven: 'A 574-line stock-API connector held N=300 stable (p95 316.8 ms) where LMCache 0.3.2 collapsed'",
+   "verdict": "misquoted",
+   "correction": "Ledger status BOUNDED (vi-armB-voice-connector-reactive; vi-contiguous-vs-chunked-transfer): not a controlled comparison, two LMCache configs, no transfer timings archived, full-load-window p95 is 336.8 ms not 316.8. Moved to Bounded with caveats."
+  },
+  {
+   "claim": "Section 4: 'our connector without hints 200 (N=300 p95 316.8 ms, stable but 16.8 ms over the gate)'",
+   "verdict": "misquoted",
+   "correction": "316.8 ms is the whole-run p95; the full-load-window (min 5-40) p95 is 336.8 ms, so 36.8 ms over the gate under the metric the brief itself pre-registers. Both numbers now stated."
+  },
+  {
+   "claim": "Section 5: 'Replaced: LRU eviction ordering and the free-on-finish decision'",
+   "verdict": "unsupported",
+   "correction": "voice docs/FINDINGS.md \u00a73.2 and the connector docstring: the KVConnector API can express save-at-prefill, restore-on-match and delay-free but NOT HBM eviction ordering or request-less prefetch; 'HBM stays vLLM-managed'. Only the free-on-finish decision and the connector's own RAM-slab order are replaced. Corrected."
+  },
+  {
+   "claim": "Section 5: 'vLLM and SGLang stay unmodified: the connector uses the stock hooks'",
+   "verdict": "unsupported",
+   "correction": "True for vLLM only. SGLang's HiCacheStorage is a get/exist/set ABC with no delay-free/pin hook (05-research-kvcache.md); the repos contain zero SGLang connector code (03-build-inventory.md). SGLang path marked unbuilt and gated on RFC #27574."
+  },
+  {
+   "claim": "Section 3: quoted SGLang RFC #27574 as 'Orchestrators know session structure and tool-gap duration that request-local LRU cannot observe.'",
+   "verdict": "misquoted",
+   "correction": "That sentence is the research file's paraphrase of the RFC's motivation, not a verbatim quote. Re-labeled as a paraphrase."
+  },
+  {
+   "claim": "Section 2: '~2.5k tokens per session (~140 MB KV at 57,344 B/token fp16) ... idle-window p50 24.0 s, model idle 95.2% (vi-phase0-duty-cycle)'",
+   "verdict": "misquoted",
+   "correction": "Mixed sources: the 140 MB / 57,344 B/token figures are from the GPU runs; phase 0 (the 95.2% and 24.0 s) was computed at 131,072 B/token (310 MB/session) and 60 tok/s decode vs ~45 measured, on fully synthetic distributions (04-conflicts.md #13). Caveat added."
+  },
+  {
+   "claim": "Section 6 Unproven: 'Est. cost ~40 GPU-h H100; 7 days' etc.",
+   "verdict": "unsupported",
+   "correction": "No context file gives these; the only recorded estimate is voice RESULTS.md's '~2 GPU-hours per idea' for arm D tuning. Kept but labeled 'author's estimate'."
+  },
+  {
+   "claim": "Section 4: 'the residency tier is returned per request, so a hit is observable'",
+   "verdict": "unsupported",
+   "correction": "Today warm = not first_touch (dexa_platform/sessions/backend.py:44,60; edge session.ts:116); nothing reads connector or LMCache hit state. Re-worded as a build-plan requirement (tier read from the connector)."
+  },
+  {
+   "claim": "Section 9: Morph 'vLLM-forked engine'",
+   "verdict": "misquoted",
+   "correction": "05-research-morph.md: 'forked from vLLM' is stated only for the Reflexes classifier engine; the engine behind Fast Apply and open-model serving is not disclosed (org also forked ai-dynamo/dynamo). Corrected to 'Reflexes engine forked from vLLM'."
+  },
+  {
+   "claim": "Section 7: 'Week 1: Port the voice connector to vLLM 0.28'",
+   "verdict": "unsupported",
+   "correction": "The connector is pinned to vLLM 0.9.2's batched CachedRequestData shape (03-build-inventory.md); dexa's 0.24 port surfaced a 3-arg ctor only via a live probe; the API is 'experimental and subject to change'. Re-planned as weeks 1-2 and named the likeliest slip."
+  },
+  {
+   "claim": "Section 1/2: agent regime described as 'idle gaps from seconds to hours' as the workload",
+   "verdict": "unsupported",
+   "correction": "Research gives median human gaps 1.4 min (p90 20.6 min, TraceLab), 2 s median / 11.4 min p99 (llm-d), 5.2 s median / 81.4 s p99 tool-driven (Codex), and 80% of reuses within 10 min or 10 s (SJTU/Alibaba). Hour-scale idle is the tail; added to section 2 and as a founder decision."
+  },
+  {
+   "claim": "Section 8 / 9: 'Why a per-token provider cannot express this' with no TTL-priced retention offered",
+   "verdict": "unsupported",
+   "correction": "05-research-providers.md: DeepInfra sells explicit 5m/1h prompt-cache retention at 1.25x/2x write on two models; Anthropic 1h at 2x write. Added as the closest shipped analogues and to the competitive table."
+  },
+  {
+   "claim": "Section 1: 'Every shipping KV-cache layer evicts with an LRU-family policy that does not know when a session will return'",
+   "verdict": "correct",
+   "correction": "Correct for LMCache, Mooncake, OffloadingConnector, AIBrix per 05-research-kvcache.md, with one partial exception omitted: FlexKV's 'logical LRU with frequency-aware grace time' (a time-aware knob). Added to thesis and competitive table."
+  },
+  {
+   "claim": "'HF-level restore curve widens with context: 11.8x at 4k to 28.9x at 64k; NVMe restore 246/390/646/1,228 ms'",
+   "verdict": "correct",
+   "correction": "Numbers match stateful-warm-session-hf. 04-conflicts.md superseded list flags the 'bandwidth-bound and linear' framing: restore is sub-linear (25 ms at 4k to 297 ms at 64k), so part of the widening is fixed-overhead amortization; HF prefill baseline 5-7x slower than vLLM. Caveat added."
+  },
+  {
+   "claim": "'LMCache CPU restore 10.0x at 4k (301 to 30 ms) and 17.1x at 16k (1,320 to 77 ms); 0.875 GB in 39.8 ms at 22.0 GB/s'",
+   "verdict": "correct",
+   "correction": "Matches lmcache-offload-restore (PROVEN, single request, LMCache version unpinned)."
+  },
+  {
+   "claim": "'dexa's own connector lost to vLLM re-prefill (0.37x at 8B/8k; P99 1.6-2.2x worse under 16-24-way concurrency)'",
+   "verdict": "correct",
+   "correction": "Matches connector-session-resume-single-request and connector-under-concurrency-sync-async (async numbers; the superseded sync 18,553 ms / 3.4x figures were correctly not cited)."
+  },
+  {
+   "claim": "'Baseline collapse: prefix-cache hit rate 92% at N=200 to 1.6-1.9% at N=300; ~42 GB working set vs ~26 GB pool'",
+   "verdict": "correct",
+   "correction": "Matches vi-armA-baseline-knee (server log tail 1.6-1.9%; OVERLOAD.md says 1.9-3.5%; working-set numbers are doc estimates; N=300 p95 never recorded)."
+  },
+  {
+   "claim": "'Arm C N=300 (14,958 ms) has the server unreachable from minute 41 and 37% of turns without TTFT'",
+   "verdict": "correct",
+   "correction": "Matches vi-armC-n300-archived-run-integrity (17,177 of 27,338 turns have a TTFT)."
+  },
+  {
+   "claim": "Residency cost model '6.0x/4.9x/2.0x cheaper at 2/15/120 min idle; break-evens HBM ~2 min, RAM ~11 min, NVMe ~4.9 hr; $1.80/hr, $0.006/GB-hr, $0.0002/GB-hr'",
+   "verdict": "correct",
+   "correction": "Matches residency-cost-model (OPEN, modeled from HF prefill; dexa_platform/README presents it as measured, which the brief correctly rejects)."
+  },
+  {
+   "claim": "'TraceLab ~4,300 sessions: median prefix 115,584-126,180; 857-886 new input; 184-252 output; gaps 1.4 min median / 20.6 min p90' and 'llm-d 219 sessions: 195K/317; 96% reuse >=90%; 2 s median / 11.4 min p99'",
+   "verdict": "correct",
+   "correction": "Matches 05-research-agents.md and 05-research-kvcache.md; omitted hit rates (95.7% overall, 84.4% user-initiated) added."
+  },
+  {
+   "claim": "'Codex #25604: 3.28M re-billed tokens = 71% of fresh input' and '#46829: 17.1% across 119,866 calls'",
+   "verdict": "correct",
+   "correction": "Matches 05-research-agents.md (both medium confidence, community-measured; now labeled so)."
+  },
+  {
+   "claim": "'LiveKit Gemma 4 31B on SGLang at 192 ms TTFT, $0.40/$1.20; Vapi $10/line; Retell $8/concurrency; ElevenLabs 2x burst'",
+   "verdict": "correct",
+   "correction": "Matches 05-research-voice.md."
+  },
+  {
+   "claim": "'vLLM 0.28.0 / SGLang 0.5.18; KVConnector V1 experimental since April 2025; 10/10 hook signatures on vLLM 0.24.0'",
+   "verdict": "correct",
+   "correction": "Matches 05-research-kvcache.md and connector-conformance."
+  },
+  {
+   "claim": "'gateway 692 lines, control 620 lines; 29 tests pass; forces stream=False'",
+   "verdict": "correct",
+   "correction": "Matches 03-build-inventory.md and dexa_platform/gateway/app.py _forward (payload['stream']=False)."
+  },
+  {
+   "claim": "'Tensormesh $24.5M raised; Operator coming soon; 30% of estimated savings; Mooncake 10 s leases / 30 min soft pins / draft PR #2835; Wafer $40M Series A, Neon Health 800 to ~550 ms; Morph ~$7M run rate'",
+   "verdict": "correct",
+   "correction": "Matches research files; Morph figure is self-reported (tweet/job post) and now labeled so."
+  },
+  {
+   "claim": "'SJTU/Alibaba reuse-probability eviction beat LRU/FIFO/LFU by 1.5-3.9% hit rate and up to 41.4% mean response time'",
+   "verdict": "correct",
+   "correction": "Matches 05-research-kvcache.md; omitted context (Trace B fit in GPU memory alone; P99 KV lifespan 97 s in to-B) now noted in section 2."
+  },
+  {
+   "claim": "'Continuum >8x avg JCT on SWE-Bench/BFCL/OpenHands, 8B-355B'",
+   "verdict": "correct",
+   "correction": "Matches 05-research-agents.md; dropped from the final competitive table for length (research, not a product)."
+  },
+  {
+   "claim": "'12k-token demo 5.4 s to 1.5 s, 3.7x, one run with no artifact' and 'Nothing enforces tiering'",
+   "verdict": "correct",
+   "correction": "Matches stateful-session-service-live caveats and 03-build-inventory.md (tiering.decide() stored on the session record only)."
+  }
+ ],
+ "attacks": [
+  {
+   "attack": "The proof benchmark does not isolate the claimed advantage. The arm D 'win' is 44.6 ms of p95 at one N over the same connector without hints (316.8 vs 272.2 ms whole-run); a modern reactive baseline that was never run (vLLM's native OffloadingConnector, LRU/ARC, DMA-based, 'TTFT 2-22x' since 0.11; LMCache 0.5.x layerwise) could hold N=300 under 300 ms by itself, leaving the policy with a sub-15% delta that a config change captures.",
+   "severity": "serious",
+   "what_would_settle_it": "Week-3 sweep on vLLM 0.28: vanilla, OffloadingConnector LRU and ARC, LMCache 0.5.x layerwise, ours without hints, ours with hints; seeds 1-3; N {250,300,350,400}; full-load-window p95. Kill if the best OSS baseline passes N=300 and hints add <15% N."
+  },
+  {
+   "attack": "An 80 GB GPU or a buyer-sized model dissolves the voice wall. Conflicts #5 arithmetic: with 7B weights on 80 GB the KV pool is ~60 GB, the N=300 working set (~42 GB) fits, and the arm-A cliff moves to N ~400-450; both repos call this the number-one threat. Buyers run 26-35B models (LiveKit Gemma 4 31B, ElevenLabs Qwen3.6-35B), where the pool and the cliff both move again, unmeasured.",
+   "severity": "serious",
+   "what_would_settle_it": "Same sweep on H100-80GB with Qwen2.5-7B, then one 26-35B model point. Kill if vanilla holds >=2x the voice-realistic N and the policy adds <10% sessions or <10% GPU-h/session."
+  },
+  {
+   "attack": "FP8 KV halves the working set for everyone; untested (vi-open-fp8-kv), and it moves the baseline's wall as much as the policy does. The fp8 interchange result (100% greedy agreement over 48 tokens, one passage, HF-level) says fp8 KV is safe, not that hints still matter once bytes halve.",
+   "severity": "serious",
+   "what_would_settle_it": "Config-only sweep with fp8 KV on vanilla, OffloadingConnector and ours; kill if vanilla+fp8 passes N=400 and hints add <10%."
+  },
+  {
+   "attack": "The 1.5x is inside seed noise. Margin 27.8 ms whole-run and 8.1 ms on the full-load window; 3 of 7 full-load buckets exceeded 300 ms; all GPU data is seed 1; dexa notes ~1.7x box-to-box variance on Modal; the collapse at N=300 in tiered arms was depth-triggered at minute 15-20, so aggregation window and seed both decide pass/fail.",
+   "severity": "serious",
+   "what_would_settle_it": "Seeds 1-3, full-load-window p95 with missing TTFTs counted as failures. Kill if median max-passing N <1.3x vanilla or spread >=0.2."
+  },
+  {
+   "attack": "The predictor knows the generating distribution. Arm D's hint is max_tokens x 308 ms minus generation at 45 tok/s plus the trace's own median gap (400 ms), utterance (2,500 ms) and STT delay; real-call prediction accuracy is untested, VAD/endpoint signals contributed nothing measurable, and the traces use 5 customer prompts with uncalibrated mock STT/TTS.",
+   "severity": "serious",
+   "what_would_settle_it": "Transcript-derived SessionTrace JSONL from a design partner; measure hint error, pin hit rate and wasted-pin bytes. Kill if hit <60% or waste >40% of budget."
+  },
+  {
+   "attack": "The agent regime has no in-engine evidence at all above 16k. vLLM crashed at >=32k in three configs; the 32k/64k ratios and the 4.9 hr NVMe break-even are HF tensor copies with naive torch.load; Claude Code sessions are 115K-195K tokens; the connector saves only single-step prefills (chunked prefill unsupported in dexa; prompt-KV only in voice). Metric B is currently a design, and the pricing SKU rests on it.",
+   "severity": "fatal",
+   "what_would_settle_it": "Stable restore at 32k/64k/128k in vLLM 0.28 on a native-128k model with chunked prefill, archived; then the Metric B ladder vs LMCache-LRU and OffloadingConnector-ARC at C=32. Kill if no stable 128k restore by week 4 or policy beats LRU by <15% on both TTFT p95 and GPU-s/turn."
+  },
+  {
+   "attack": "The hour-scale idle regime the pricing model monetizes is the tail of every measured distribution: TraceLab median human gap 1.4 min (p90 20.6 min), llm-d 2 s median (p99 11.4 min), Codex 5.2 s median (p99 81 s), SJTU/Alibaba 80% of reuses within 10 min or 10 s and a 97 s P99 lifespan in to-B. At those gaps vanilla prefix caching plus session affinity already hits 95.7%; the residual is the 4.3% misses and the 84.4% on user-initiated steps.",
+   "severity": "serious",
+   "what_would_settle_it": "Replay traces with the measured gap distributions and compute, at matched memory, the bytes-hours held and the TTFT saved by the policy vs LRU; report the share of turns where the decision differs. If the delta lives only in gaps >20 min, the SKU is a tail product."
+  },
+  {
+   "attack": "RAM-tier restore has never been measured under concurrency at buyer context sizes. The only concurrent restore data are 2.5k-token voice sessions (~140 MB) and dexa's disk-tier losses (P99 1.6-2.2x worse at 3k-8k); the voice connector's loads are synchronous inside the scheduler step, so a 100K-token restore (multi-GB) would stall the scheduler for hundreds of ms at every wake.",
+   "severity": "serious",
+   "what_would_settle_it": "The crossover-surface experiment from 04-conflicts.md #1: one model/GPU, context {4k..64k} x concurrency {1,8,32,128} x tier, async vs sync load, p99 TTFT and aggregate GB/s. Kill if policy p99 is worse than re-prefill at any rung."
+  },
+  {
+   "attack": "The architecture overstates what the stock hooks allow. The KVConnector API cannot express HBM eviction ordering or request-less prefetch; the connector only delays free (pin) and manages its own slab; 'enforced tiering', demote, and proactive turn-end offload (the voice PRD's arm B, projected to bound the working set to ~4 GB) were never built or run in either repo. The draft's 'Replaced: LRU eviction ordering' is false for HBM.",
+   "severity": "serious",
+   "what_would_settle_it": "Build decide() with free-after-save for long-idle sessions and measure HBM KV-pool occupancy, prefix-hit rate and N=300/400 pass/fail; that isolates 'bounded working set' from 'cheap restore plus pinning'."
+  },
+  {
+   "attack": "Version-pinned, experimental API. The voice connector targets vLLM 0.9.2's batched CachedRequestData shape; dexa's targets 0.24.0 with a 3-arg ctor found only by live probe; vLLM is at 0.28.0 with new hooks (take_events, prefer_cross_layer_blocks, SupportsHMA) and the docstring still says 'experimental and subject to change'; vLLM RFC #38260 (TieringManager) could move tiering in-tree.",
+   "severity": "serious",
+   "what_would_settle_it": "Measured port cost in weeks 1-2 and per subsequent minor release; kill if >1 engineer-week for two consecutive releases. Also decide whether to build on OffloadingConnector's cache_policy_module_path instead."
+  },
+  {
+   "attack": "Shared-prefix slab thrash: the connector evicts the entry it matched when a store extends it, so sessions sharing a system prompt (5 customers across 300 sessions in the traces; every voice platform has few prompts and many calls) evict each other's slab entries every turn; the recorded 35-52% hit rates are unarchived and may already include this.",
+   "severity": "minor",
+   "what_would_settle_it": "Hit rate and p95 at N=300 with 5 vs 300 distinct system prompts, server logs archived; kill if hit rate drops >20 points."
+  },
+  {
+   "attack": "Restore correctness is unarchived. The bitwise round-trip and forced-evict probe exist (evals/modal_kv_correctness.py) but no output is committed; a missing-entry load fills the range with garbage KV and only logs an error; the harness never checks output quality.",
+   "severity": "minor",
+   "what_would_settle_it": "Run and archive modal_kv_correctness.py on the ported connector; 0 missing-entry loads."
+  },
+  {
+   "attack": "The 6-week plan slips on three fronts: the port (2-3 weeks, not 1), the never-demonstrated 100K in-engine run (unknown), and a router plus llm-d EPP plugin plus hosted streaming endpoint in one week (the gateway forces stream=False today; the edge port has never been deployed). Metric B realistically lands in weeks 8-12.",
+   "severity": "serious",
+   "what_would_settle_it": "Milestone gates: connector ported and correctness archived by end of week 2; Metric A 3-seed data by week 3-4; 128k in-engine by week 4. If any slips, publish Metric A alone and re-date Metric B."
+  },
+  {
+   "attack": "SGLang is assumed reachable. HiCacheStorage is get/exist/set with no delay-free or pin hook; RFC #27574's first POC maps Pin to a Mooncake L3 lease; #24656 is inactive; the repos contain zero SGLang connector code. LiveKit, a named buyer archetype, runs SGLang.",
+   "severity": "minor",
+   "what_would_settle_it": "Track RFC #27574 status quarterly; scope a HiCache L3 lease-based pin prototype only after the vLLM proof lands."
+  },
+  {
+   "attack": "Trace realism: 5 system prompts flatter baseline prefix caching (RESULTS.md says varied prompts move the wall earlier), the --shared-prompt confound arm was never run, mock STT/TTS delays are PRD guesses, and speech-to-speech models could collapse the idle window entirely.",
+   "severity": "serious",
+   "what_would_settle_it": "Run the --shared-prompt arm and a 300-prompt arm; replay one real transcript set; report the wall under each. Kill if the policy's delta disappears under either prompt regime."
+  }
+ ],
+ "missing_founder_decisions": [
+  "The SLA gate: the brief adopts the voice PRD's 300 ms p95 TTFT; Twilio's published budget is 375 ms target / 750 ms max for LLM TTFT. A looser gate changes every N and could erase or enlarge the arm D delta.",
+  "The ship threshold: the voice README's decision table put 1.5x in its '<2x kill' band; RESULTS.md re-scored it against the Phase-2 arm-B gate as 'above kill, below proceed'; the brief chose >=2x as ship and <1.3x as kill without saying which table governs.",
+  "The proof rig: 7B fp16 on an L40S (what exists) versus a buyer-shaped rig (26-35B on H100/H200), which decides whether the memory wall the product sells even appears.",
+  "Own connector versus a cache_policy_module_path plugin on vLLM's native OffloadingConnector (or waiting on RFC #38260 TieringManager); the brief chose to own the connector.",
+  "Engine order: vLLM-first for six weeks with SGLang deferred; the brief made this call although LiveKit (a named buyer archetype) runs SGLang and the hint RFCs are SGLang's.",
+  "Which idle regime to sell: the brief priced the hour-scale regime (2 h rung, NVMe tier, session-hour billing) although measured gap distributions put hour-scale idle in the p90-p99 tail.",
+  "Three SKUs at once (hosted endpoint, BYOC license, optimization engagements) versus one; the brief assumed all three ship from the same six weeks.",
+  "Router form factor: the brief chose a standalone process plus an llm-d EPP plugin rather than vLLM production-stack's router, Dynamo's KV-aware router, or none (session-affinity headers only).",
+  "Whether to keep dexa's connector losses and arm C's collapse in the public benchmark write-up as the honesty argument, or publish only wins.",
+  "Hosting substrate for the hosted SKU: the brief assumed Modal serverless (all existing runs; ~1.7x box-to-box variance noted) rather than reserved GPUs.",
+  "Whether the hint protocol is an open spec aligned to SGLang RFC #27574's vocabulary (pin/demote/prefetch/TTL) or proprietary; the brief chose alignment.",
+  "Design-partner shape: the brief fixed 'one voice platform, one agent product' by week 6 rather than one segment first.",
+  "Whether the evidence-grade benchmark harness is a product in its own right (sellable from week 2) or only an internal tool; the brief lists it as a combination but plans it as the first deliverable.",
+  "Whether to price against sessions-per-GPU (the voice buyer's unit) or per-token with a residency line (the agent buyer's unit) first; the two SKUs need different metering code."
+ ],
+ "strongest_version": "The strongest honest form is a benchmark-first BYOC product on stock vLLM: a session-aware connector plus an enforced residency policy and a published hint protocol, sold to voice and agent platforms that already self-host open models and pay by concurrency, with the vkv harness as the proof instrument they can run themselves. Its one measured advantage is narrow but real in-engine: on a 46 GB L40S with a 7B model, per-request return-time hints lifted the 300 ms-p95 ceiling from 200 to 300 synthetic sessions where vanilla vLLM, LMCache 0.3.2 and the same connector without hints all stopped at 200, and the physics underneath (pinned-RAM restore 10-17x faster than re-prefill single-request) is proven. Every shipping KV layer evicts by LRU-family policy and the hint RFCs that would change that are unimplemented, so the policy layer is genuinely unoccupied. The claim earns a public benchmark only after three seeds, a modern OffloadingConnector/LMCache 0.5.x baseline, FP8 KV and an H100 point, because each of those could erase an 8 ms margin; and the agent regime, where the larger customer and the session-hour pricing live, must first show that vLLM can restore 100K-token sessions in-engine at all, which neither repo has done. If both gates pass, the product is 'more sessions per GPU inside the SLA, with hits you can see'; if only the voice gate passes, it is a voice-serving optimization sold per GPU-hour.",
+ "changes_made": [
+  "Moved arm D (200 to 300 sessions) and the 'connector held N=300 where LMCache collapsed' result from Proven to Bounded/contradicted, matching the ledger status, and added the omitted caveats (single seed, 8.1 ms full-load-window margin, 3 of 7 buckets over gate, hint uses trace medians, unarchived server hit rates, uncontrolled LMCache comparison, docstring-only 7 ms restore).",
+  "Corrected the architecture claim that the connector replaces LRU eviction ordering: per voice FINDINGS \u00a73.2 the stock KVConnector API can express delay-free but not HBM eviction ordering or request-less prefetch; vLLM's HBM LRU stays; proactive turn-end offload was never built.",
+  "Marked the SGLang path as unbuilt (HiCacheStorage is get/exist/set with no pin hook; zero SGLang code in the repos) instead of 'vLLM and SGLang stay unmodified'.",
+  "Added the full-load-window p95 numbers (336.8 ms for the connector without hints, 291.9 ms for arm D) next to the whole-run numbers the draft quoted, and made missing-TTFT turns count as failures in Metric A.",
+  "Added modern baselines the draft omitted (vLLM OffloadingConnector LRU/ARC, LMCache 0.5.x, FP8 KV) and a kill gate against the best OSS baseline (<1.15x), so the benchmark isolates the policy rather than crediting LMCache's mechanism.",
+  "Added the customer-workload caveat that hour-scale idle is the tail of measured gap distributions (TraceLab, llm-d, SJTU/Alibaba) and turned 'which idle regime to sell' into a founder decision.",
+  "Stated that no in-engine measurement exists above 16k (vLLM crashed at >=32k) and made 'stable 128k restore on a native-128k model' a pre-registered kill gate ahead of Metric B.",
+  "Added the phase-0 caveat (131,072 B/token and 60 tok/s assumptions vs 57,344 B/token and ~45 tok/s served) and separated GPU-run KV sizes from phase-0 figures.",
+  "Added risks with kill gates for: modern reactive baseline erasing the delta, FP8 KV, RAM-tier restore under concurrency (synchronous loads), 128k in-engine, shared-prefix slab thrash, silent KV corruption.",
+  "Re-planned week 1 as weeks 1-2 for the vLLM 0.9.2 to 0.28 port and named it the likeliest slip; moved the llm-d EPP plugin and SGLang past week 6; added a realistic-slip line.",
+  "Labeled the SGLang RFC #27574 'quote' as a paraphrase, Morph's 'vLLM fork' as Reflexes-only, and Morph's run rate as self-reported.",
+  "Added DeepInfra's explicit 5m/1h retention pricing and FlexKV's frequency-aware grace time to pricing/competitive facts, softening the 'no provider can express TTL retention' and 'every layer is time-blind' claims.",
+  "Labeled unproven-table costs as the author's estimates (no source in the context files) and added a proactive turn-end offload experiment.",
+  "Added founder decisions the draft made implicitly: the 300 ms SLA gate, the ship threshold table, own connector vs OffloadingConnector plugin, proof rig, idle regime, and dropped market-size judgments into the founder list unchanged.",
+  "Trimmed the brief from ~3,670 to ~3,300 words by removing numbers repeated between sections 4 and 6 and shortening table cells; every retained number traces to a ledger entry or research file cited inline."
+ ]
+}

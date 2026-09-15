@@ -1,0 +1,320 @@
+{
+ "rounds": 665453,
+ "sessions": 8058,
+ "machine_tool_share_time_weighted": {
+  "claude": 0.5315889479804936,
+  "codex": 0.44723959339926617
+ },
+ "machine_tool_share_per_step_median": 0.02981007618404511,
+ "steps_where_machine_tool_exceeds_generation": {
+  "claude": 0.10146594295527572,
+  "codex": 0.20618616426531333
+ },
+ "mean_seconds_per_step": {
+  "claude": {
+   "generation": 16.501507030489943,
+   "machine_tool": 18.727181445892878
+  },
+  "codex": {
+   "generation": 10.294376627168521,
+   "machine_tool": 8.32920151670582
+  }
+ },
+ "tool_time_by_category": {
+  "claude:shell": {
+   "calls": 158385,
+   "p50": 0.328,
+   "p90": 20.386600000000005,
+   "p99": 300.136,
+   "share_of_all_tool_time": 0.43257349188372674,
+   "frac_long": 0.2007450200460902
+  },
+  "claude:human": {
+   "calls": 2160,
+   "p50": 89.1165,
+   "p90": 1033.4443000000012,
+   "p99": 32263.173339999623,
+   "share_of_all_tool_time": 0.3143602903918694,
+   "frac_long": 0.9643518518518519
+  },
+  "codex:shell": {
+   "calls": 236230,
+   "p50": 0.294,
+   "p90": 6.244,
+   "p99": 120.003,
+   "share_of_all_tool_time": 0.14072114590225882,
+   "frac_long": 0.16634635736358633
+  },
+  "claude:subagent": {
+   "calls": 3679,
+   "p50": 17.232,
+   "p90": 233.0300000000002,
+   "p99": 772.813,
+   "share_of_all_tool_time": 0.03811675880864495,
+   "frac_long": 0.5332970916009785
+  },
+  "claude:file": {
+   "calls": 113172,
+   "p50": 0.044,
+   "p90": 0.66,
+   "p99": 31.489119999999822,
+   "share_of_all_tool_time": 0.036222835563458976,
+   "frac_long": 0.028620153394832645
+  },
+  "claude:web": {
+   "calls": 5345,
+   "p50": 7.704,
+   "p90": 48.481200000000094,
+   "p99": 248.13592000000003,
+   "share_of_all_tool_time": 0.01685776813708271,
+   "frac_long": 0.7507951356407858
+  },
+  "codex:file": {
+   "calls": 20979,
+   "p50": 0.057,
+   "p90": 1.179,
+   "p99": 18.05978000000023,
+   "share_of_all_tool_time": 0.009068461457991972,
+   "frac_long": 0.0313646980313647
+  },
+  "claude:other": {
+   "calls": 21267,
+   "p50": 0.037,
+   "p90": 0.7772000000000044,
+   "p99": 14.898820000000011,
+   "share_of_all_tool_time": 0.005460188863178901,
+   "frac_long": 0.029247190482907793
+  },
+  "codex:subagent": {
+   "calls": 573,
+   "p50": 0.277,
+   "p90": 240.002,
+   "p99": 637.4260399999964,
+   "share_of_all_tool_time": 0.0040029494506499735,
+   "frac_long": 0.39965095986038396
+  },
+  "codex:other": {
+   "calls": 11122,
+   "p50": 0.066,
+   "p90": 1.0758999999999996,
+   "p99": 10.082,
+   "share_of_all_tool_time": 0.002175530738066327,
+   "frac_long": 0.036953785290415396
+  },
+  "codex:human": {
+   "calls": 47,
+   "p50": 58.206,
+   "p90": 227.8072,
+   "p99": 418.6146799999999,
+   "share_of_all_tool_time": 0.0004405788030712223,
+   "frac_long": 0.9574468085106383
+  }
+ },
+ "idle_window_s": {
+  "tool_machine": {
+   "n": 416372,
+   "p50": 0.18500018119812012,
+   "p90": 12.270899915695214,
+   "p99": 175.94780992507538,
+   "mean": 12.6011280249244
+  },
+  "tool_any": {
+   "n": 421135,
+   "p50": 0.18999981880187988,
+   "p90": 14.361999988555908,
+   "p99": 209.36755989551503,
+   "mean": 18.629043907522327
+  },
+  "user": {
+   "n": 85131,
+   "p50": 61.092000007629395,
+   "p90": 749.2439999580383,
+   "p99": 20354.69889998426,
+   "mean": 826.2495017554686
+  }
+ },
+ "idle_machine_share_above": {
+  "1": 0.359022700854044,
+  "5": 0.18867743268039158,
+  "25": 0.07036015870423563,
+  "60": 0.03490148232830258
+ },
+ "idle_machine_time_in_windows_above": {
+  "1": 0.9928008154551734,
+  "5": 0.9632873894287525,
+  "25": 0.8728918757786344,
+  "60": 0.7745835439879227
+ },
+ "testish_share_of_shell_time": 0.39711558863408575,
+ "long_wait_predictability_machine_tools": {
+  "identity": "tool + first non-trivial executable",
+  "base_rate_long": 0.14127802294792585,
+  "accuracy": 0.8865966460723742,
+  "precision": 0.6054209226250084,
+  "recall": 0.5665467176450009,
+  "share_of_long_wait_time_predicted": 0.3332910675729989,
+  "identities": 1121
+ },
+ "machine_tool_identities_top": [
+  {
+   "id": "codex:write_stdin",
+   "calls": 55042,
+   "p50": 5.002,
+   "p90": 42.11860000000001,
+   "frac_long": 0.5755604810871698,
+   "share_of_machine_tool_time": 0.16011363158467873
+  },
+  {
+   "id": "claude:Bash:tail",
+   "calls": 4188,
+   "p50": 0.176,
+   "p90": 5.939100000000005,
+   "frac_long": 0.11198662846227316,
+   "share_of_machine_tool_time": 0.11432812882212648
+  },
+  {
+   "id": "claude:Bash:python-script",
+   "calls": 9227,
+   "p50": 2.721,
+   "p90": 56.83279999999997,
+   "frac_long": 0.3732524114013222,
+   "share_of_machine_tool_time": 0.05674219158218333
+  },
+  {
+   "id": "claude:Bash:conda",
+   "calls": 2280,
+   "p50": 4.605,
+   "p90": 85.42019999999988,
+   "frac_long": 0.48903508771929827,
+   "share_of_machine_tool_time": 0.055921017208090645
+  },
+  {
+   "id": "claude:Bash:python",
+   "calls": 8658,
+   "p50": 1.9815,
+   "p90": 26.01080000000001,
+   "frac_long": 0.2875952875952876,
+   "share_of_machine_tool_time": 0.054483797888928154
+  },
+  {
+   "id": "claude:Bash:grep",
+   "calls": 37354,
+   "p50": 0.119,
+   "p90": 2.568400000000009,
+   "frac_long": 0.059672324249076404,
+   "share_of_machine_tool_time": 0.053041933071694275
+  },
+  {
+   "id": "claude:Bash:sleep",
+   "calls": 4292,
+   "p50": 40.298,
+   "p90": 120.4314,
+   "frac_long": 0.7255358807082946,
+   "share_of_machine_tool_time": 0.05265974006245668
+  },
+  {
+   "id": "claude:Edit",
+   "calls": 36522,
+   "p50": 0.075,
+   "p90": 1.988,
+   "frac_long": 0.06029242648266798,
+   "share_of_machine_tool_time": 0.033735628657341116
+  },
+  {
+   "id": "claude:Bash:docker",
+   "calls": 4717,
+   "p50": 2.411,
+   "p90": 62.268600000000085,
+   "frac_long": 0.3514945940216239,
+   "share_of_machine_tool_time": 0.025209507002354876
+  },
+  {
+   "id": "claude:Bash:find",
+   "calls": 9660,
+   "p50": 0.138,
+   "p90": 4.289100000000004,
+   "frac_long": 0.09233954451345756,
+   "share_of_machine_tool_time": 0.02302498349810479
+  },
+  {
+   "id": "claude:Bash:cargo",
+   "calls": 1873,
+   "p50": 7.505,
+   "p90": 62.84299999999997,
+   "frac_long": 0.589428723972237,
+   "share_of_machine_tool_time": 0.018720738931143587
+  },
+  {
+   "id": "claude:WebFetch",
+   "calls": 3636,
+   "p50": 6.2605,
+   "p90": 22.627499999999998,
+   "frac_long": 0.6427392739273927,
+   "share_of_machine_tool_time": 0.016536254089231702
+  },
+  {
+   "id": "claude:Bash:rm",
+   "calls": 1557,
+   "p50": 2.152,
+   "p90": 49.296800000000026,
+   "frac_long": 0.34232498394348104,
+   "share_of_machine_tool_time": 0.015618665471584497
+  },
+  {
+   "id": "codex:apply_patch",
+   "calls": 20672,
+   "p50": 0.056,
+   "p90": 1.166,
+   "frac_long": 0.031056501547987617,
+   "share_of_machine_tool_time": 0.014060549020796514
+  },
+  {
+   "id": "claude:Bash:seq",
+   "calls": 1133,
+   "p50": 33.322,
+   "p90": 183.6908,
+   "frac_long": 0.6125330979699912,
+   "share_of_machine_tool_time": 0.013958861805969489
+  },
+  {
+   "id": "claude:Bash:wc",
+   "calls": 2553,
+   "p50": 0.122,
+   "p90": 3.496200000000007,
+   "frac_long": 0.08186447316882099,
+   "share_of_machine_tool_time": 0.013210220987126627
+  },
+  {
+   "id": "claude:Bash:head",
+   "calls": 6361,
+   "p50": 0.13,
+   "p90": 4.516,
+   "frac_long": 0.09353875176858985,
+   "share_of_machine_tool_time": 0.012921805660588578
+  },
+  {
+   "id": "claude:Write",
+   "calls": 8597,
+   "p50": 0.068,
+   "p90": 2.1024000000000007,
+   "frac_long": 0.05746190531580784,
+   "share_of_machine_tool_time": 0.012903462261565359
+  },
+  {
+   "id": "codex:exec_command:python-script",
+   "calls": 26759,
+   "p50": 1.107,
+   "p90": 2.4924000000000013,
+   "frac_long": 0.070705183302814,
+   "share_of_machine_tool_time": 0.01251835363062627
+  },
+  {
+   "id": "claude:Bash:git",
+   "calls": 13594,
+   "p50": 0.168,
+   "p90": 4.124400000000001,
+   "frac_long": 0.08268353685449463,
+   "share_of_machine_tool_time": 0.01233713121640383
+  }
+ ]
+}

@@ -1,0 +1,287 @@
+{
+ "id": "H",
+ "name": "Computer-use agent inference provider",
+ "one_line": "An OpenAI-compatible, hosted-or-BYOC endpoint for screenshot-heavy computer-use agents: an open VLM at a screenshot-sized visual-token budget (322 tokens per 1280x800 frame vs 1,105 on GPT-4o), exact-frame dedup, session-affinity prefix warmth and per-request savings telemetry, with the ~40x headline shown to be modeled, the 7.3x redundancy prize bounded at ~2.3x, no OSWorld/WebArena validation yet, and a backend that is stock vLLM flags.",
+ "numeric_claims": [
+  {
+   "claim": "322 Qwen2.5-VL visual tokens for a 1280x800 screenshot (README says ~324)",
+   "source": "/home/user/dexa/dexa_platform/gateway/pricing.py qwen_vision_tokens (executed this session: 1288x784/56 = 23x14 = 322); 01-evidence-ledger-dexa.md entry gpt4o-docvqa-head-to-head; 04-conflicts.md #10"
+  },
+  {
+   "claim": "1,105 GPT-4o image tokens for 1280x800 (85 + 170 x 6 tiles)",
+   "source": "/home/user/dexa/dexa_platform/gateway/pricing.py openai_image_tokens; /home/user/dexa/dexa_platform/tests/test_pricing.py; 05-research-docai.md (https://developers.openai.com/api/docs/guides/images-vision)"
+  },
+  {
+   "claim": "36,835 GPT-4o-mini image tokens for 1280x800 (README ~35,000)",
+   "source": "/home/user/dexa/dexa_platform/gateway/pricing.py (2833 + 5667 x 6); 01-evidence-ledger-dexa.md gpt4o-docvqa-head-to-head"
+  },
+  {
+   "claim": "1,334 Claude image tokens for 1280x800 (46 x 29), derived from ceil(w/28) x ceil(h/28); 1000x1000 = 1,296; standard-tier cap 1,568",
+   "source": "05-research-docai.md, https://platform.claude.com/docs/en/build-with-claude/vision (derivation done this session)"
+  },
+  {
+   "claim": "1,366 Claude tokens per pricing.py's own Anthropic formula (w*h/750, 1.15 MP cap)",
+   "source": "/home/user/dexa/dexa_platform/gateway/pricing.py anthropic_image_tokens (executed this session)"
+  },
+  {
+   "claim": "~40x cheaper decomposes as 3.4x fewer image tokens (1105/322) x 12.5x assumed price ratio ($2.50/$0.20) = ~43x on image tokens alone",
+   "source": "04-conflicts.md #10; /home/user/dexa/dexa_platform/gateway/pricing.py PRICES"
+  },
+  {
+   "claim": "31.9x vs gpt-4o and 46.1x vs claude-3-5-sonnet for a full request (one 1280x800 frame, 200 text-in tokens, 20 output tokens)",
+   "source": "/home/user/dexa/dexa_platform/gateway/pricing.py compare() executed this session (x_cheaper 31.94 / 46.11)"
+  },
+  {
+   "claim": "1920x1080 = 646 Qwen tokens uncapped vs 312 with the 1.05 MP cap; 2560x1440 = 1,196 vs 312; 1280x800 = 322 either way",
+   "source": "/home/user/dexa/dexa_platform/gateway/pricing.py qwen_vision_tokens with max_pixels=1050000 vs 1e9 (executed this session)"
+  },
+  {
+   "claim": "pricing.py list prices: gpt-4o $2.50/$10, gpt-4o-mini $0.15/$0.60, claude-3-5-sonnet $3/$15, dexa-cua-vlm $0.20/$0.20 (assumed blended)",
+   "source": "/home/user/dexa/dexa_platform/gateway/pricing.py PRICES dict"
+  },
+  {
+   "claim": "DocVQA: Qwen2.5-VL-7B 0.925 vs GPT-4o 0.880 on the same 200 pages, relaxed match; Qwen at 1024px = 1,017 visual tokens",
+   "source": "/home/user/dexa/evals/RESULTS.md 'Multimodal execution thesis' table; /home/user/dexa/docs/FINDINGS.md 'Multimodal / document VLM'; 01-evidence-ledger-dexa.md doc-vlm-frontier and gpt4o-docvqa-head-to-head"
+  },
+  {
+   "claim": "Budget sweep (Qwen2.5-VL-7B, vLLM 0.24.0, A100-80GB): 1536px 0.935 / 2,201 tok / 11.4 img/s; 1024px 0.925 / 1,017 / 30.2 img/s (2.7x, -1.0 pt); 768px 0.885 / 574 / 47.2 (4.1x, -5.0); 512px 0.735 / 277 / 78.6 (6.9x, -20); 384px 0.445 / 182 / 98.3 (8.6x, -49)",
+   "source": "/home/user/dexa/evals/RESULTS.md 'Multimodal execution thesis'; 01-evidence-ledger-dexa.md doc-vlm-frontier"
+  },
+  {
+   "claim": "Qwen cost row '$0.02-0.06 / 1k pages (rented A100 serving, not tokens)' is hardcoded, not measured; GPT-4o-mini accuracy and measured $/1k pages never recorded",
+   "source": "01-evidence-ledger-dexa.md gpt4o-docvqa-head-to-head; 04-conflicts.md #10 (/home/user/dexa/evals/modal_incumbent_docvqa.py)"
+  },
+  {
+   "claim": "Screen redundancy: 13.7% of 28px patches change per action on average (86.3% unchanged); type/edit/dropdown 2.5-6%; select row ~28%; navigation 22-46%; 7.3x headroom; 15-40x on typing/clicking",
+   "source": "/home/user/dexa/evals/RESULTS.md 'Computer-use agent screen redundancy'; 01-evidence-ledger-dexa.md cua-screen-redundancy"
+  },
+  {
+   "claim": "Redundancy bench setup: 15-step Playwright Chromium task on synthetic CRM app.html, viewport 1280x800, 180 ms wait after each action, PATCH 28, luma threshold 6",
+   "source": "/home/user/dexa/evals/agent_redundancy/bench.py"
+  },
+  {
+   "claim": "Delta-perception viability: 15.6% pixel change -> 52.8% of vision tokens shifted (cos<0.98), 3.39x spill; small actions 2.5-6% pixels -> 15-44% tokens; navigation 45-46% -> 93-95%; naive reuse ~2x",
+   "source": "/home/user/dexa/evals/RESULTS.md 'Delta-perception viability'; 01-evidence-ledger-dexa.md delta-perception-viability"
+  },
+  {
+   "claim": "Tolerance sweep: moved-token median cosine 0.83; ceiling 2.34x at cos>=0.98, ~3.1x at >=0.95, ~3.9x at >=0.90; bands 0.95-0.98 24%, 0.90-0.95 15%, 0.80-0.90 14%, 0.50-0.80 27%, <0.50 20%; n=8 frames; honest ceiling ~2.3x",
+   "source": "/home/user/dexa/evals/RESULTS.md 'Tolerance sweep'; 01-evidence-ledger-dexa.md delta-tolerance-sweep; /home/user/dexa/docs/FINDINGS.md 'Computer-use agent perception'"
+  },
+  {
+   "claim": "7.3x prize is superseded by the ~2.3x ceiling",
+   "source": "04-conflicts.md 'Superseded claims' list"
+  },
+  {
+   "claim": "Qwen2.5-VL mRoPE wall: [3,1671] computed positions vs [3,881] masked; no pruning accuracy numbers produced",
+   "source": "/home/user/dexa/evals/RESULTS.md 'Moat test'; 01-evidence-ledger-dexa.md vlm-moat-mrope"
+  },
+  {
+   "claim": "vLLM prefix-cache warm vs cold TTFT (Qwen2.5-7B text, vLLM 0.24.0 V1, A100): 4k ~280 -> ~24 ms (~12x); 16k ~1,250 -> ~45 ms (34.4x / 27.9x / 25.0x over 3 runs); >=32k crashed",
+   "source": "01-evidence-ledger-dexa.md vllm-warmstart-prefix-cache (/home/user/dexa/evals/RESULTS.md 'Production reproduction on vLLM paged KV')"
+  },
+  {
+   "claim": "Agentic serving 1.00-1.02x vs a prefix-cached SGLang baseline ('table stakes')",
+   "source": "01-evidence-ledger-dexa.md agentic-serving-value-v1 (/home/user/dexa/evals/RESULTS.md 'Agentic-serving value benchmark v1')"
+  },
+  {
+   "claim": "CUA backend flags: vllm==0.24.0, Qwen/Qwen2.5-VL-7B-Instruct, --max-model-len 16384, --gpu-memory-utilization 0.92, --enable-prefix-caching, --limit-mm-per-prompt {\"image\": 3}, --mm-processor-kwargs {\"max_pixels\": 1050000}, A100-80GB, scaledown_window 300",
+   "source": "/home/user/dexa/serve/cua_backend.py; /home/user/dexa/serve/backend_launch.sh; /home/user/dexa/dexa_platform/docker-compose.byoc.yml"
+  },
+  {
+   "claim": "Gateway app.py 261 lines, FastAPI v0.3.0, forces stream=False at line 127; pricing.py 149 lines; redundancy.py 94 lines; control plane 620 lines; text tokens estimated at len/4",
+   "source": "03-build-inventory.md dexa components table; /home/user/dexa/dexa_platform/gateway/app.py (grep 'payload[\"stream\"] = False' -> line 127)"
+  },
+  {
+   "claim": "29 dexa_platform tests pass: test_pricing 5, test_redundancy 5, test_tenants 5, test_accounts 7, test_sessions 7",
+   "source": "03-build-inventory.md 'Tests run' item 4"
+  },
+  {
+   "claim": "$5 free signup credit (DEXA_FREE_CREDIT_USD default 5); 402 on exhaustion; no OAuth callback, no Stripe",
+   "source": "/home/user/dexa/dexa_platform/README.md 'Accounts, keys & metering'; 03-build-inventory.md control plane row and Gaps"
+  },
+  {
+   "claim": "Exact-frame cache keys on (img_hash, text_hash) of the previous request in the session; examples/agent_loop.py fabricates an identical frame every third step",
+   "source": "/home/user/dexa/dexa_platform/gateway/app.py chat_completions; /home/user/dexa/dexa_platform/examples/agent_loop.py"
+  },
+  {
+   "claim": "OSWorld/WebArena validation listed as not yet built",
+   "source": "/home/user/dexa/dexa_platform/README.md 'Status'"
+  },
+  {
+   "claim": "Gateway, BYOC backend, control plane, redundancy bench, delta viability and tolerance sweep all landed 2026-08-05 (commits 4d7efcc, 300b040, 9b5abb3, 9ed36e2, fd3ba4c, a4e1058)",
+   "source": "git log -- dexa_platform serve evals/agent_redundancy in /home/user/dexa; 04-conflicts.md CHRONOLOGY"
+  },
+  {
+   "claim": "Cost model assumes GPU $1.80/hr",
+   "source": "/home/user/dexa/evals/stateful_cost_model.py line 20"
+  },
+  {
+   "claim": "Voice arm D predictive pinning: max passing N 300 vs 200 for baseline (1.5x), L40S 46 GB, seed 1, p95 272.2 ms",
+   "source": "02-evidence-ledger-voice.md vi-armD-predictive-pinning"
+  },
+  {
+   "claim": "Anthropic computer-use toolset: GA with 17 member tools; screenshots ~1,000-1,800 input tokens each; keep 20 or fewer images per request; toolset ~4,500 tokens, browser toolset ~6,600; prune screenshots keep last three / every 25 turns",
+   "source": "05-research-agents.md, https://platform.claude.com/docs/en/agents-and-tools/tool-use/computer-use-tool"
+  },
+  {
+   "claim": "Anthropic pricing: Sonnet 5 $2/$10, Opus 5 $5/$25, Haiku 4.5 $1/$5 per MTok; cache reads 0.1x; 5-minute default TTL; 1-hour TTL at 2x write",
+   "source": "05-research-caching.md, https://platform.claude.com/docs/en/about-claude/pricing and https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+  },
+  {
+   "claim": "OpenAI: gpt-5.4 $2.50/$15, gpt-4o $2.50/$10 per MTok; gpt-5.4 patch tokens 1024x1024 = 1,229; prompt_cache_key influences routing but does not pin",
+   "source": "05-research-docai.md (https://developers.openai.com/api/docs/pricing; https://developers.openai.com/api/docs/guides/images-vision); 05-research-caching.md (https://developers.openai.com/api/docs/guides/prompt-caching)"
+  },
+  {
+   "claim": "Hosted Qwen3-VL-8B ~$0.20/MTok on DeepInfra and Fireworks (secondary aggregator); Together Qwen3-VL-32B $0.50/$1.50",
+   "source": "05-research-docai.md, https://cloudprice.net/models/alibaba-qwen3-vl-plus and https://www.together.ai/models/qwen3-vl-32b-instruct"
+  },
+  {
+   "claim": "Qwen3-VL-8B-Instruct DocVQA 96.1, Apache-2.0, served via vLLM and SGLang",
+   "source": "05-research-docai.md, https://arxiv.org/abs/2511.21631 and https://github.com/QwenLM/Qwen3-VL"
+  },
+  {
+   "claim": "Browser Use: 112.1k GitHub stars; bu-30b-a3b-preview 30B total / 3B active MoE released 2025-12-16; '200 tasks per $1'; 87.4% on Odysseys; supports custom providers",
+   "source": "05-research-agents.md, https://github.com/browser-use/browser-use"
+  },
+  {
+   "claim": "Skyvern 22.9k stars; any OpenAI-compatible endpoint incl. Ollama",
+   "source": "05-research-agents.md, https://github.com/Skyvern-AI/skyvern"
+  },
+  {
+   "claim": "OpenAI Operator shut down 2025-08-31; CUA folded into ChatGPT Agent and Agents SDK",
+   "source": "05-research-agents.md, https://presenc.ai/research/openai-operator-update-tracker-2026 (medium)"
+  },
+  {
+   "claim": "Cursor Cloud Agents added computer use with browser access in February 2026",
+   "source": "05-research-agents.md, https://www.morphllm.com/cursor-background-agents (medium)"
+  },
+  {
+   "claim": "Morph Glance (morph-computer-use-v0) 'AI testing 10x cheaper than general-purpose'; sticky placement via prompt_cache_key / x-session-id; prefix caching on all models; custom speculator 3.07x vs 1.93x generic",
+   "source": "05-research-morph.md, https://morphllm.com, https://docs.morphllm.com/sdk/components/fast-models, https://www.morphllm.com/blog/codegen-inference-research"
+  },
+  {
+   "claim": "Mooncake Codex traces: 5.2 s median / 81.4 s p99 inter-turn delay; TraceLab: 1.4 min median human gap, p90 20.6 min, 95.7% prefix-cache hits",
+   "source": "05-research-agents.md, https://vllm.ai/blog/2026-05-06-mooncake-store and https://arxiv.org/html/2606.30560"
+  },
+  {
+   "claim": "Fireworks prompt caching works only within 1 replica; x-session-affinity header; cached tokens 50% discount",
+   "source": "05-research-agents.md, https://docs.fireworks.ai/guides/prompt-caching"
+  },
+  {
+   "claim": "xAI: cache entries can be evicted at any time",
+   "source": "05-research-caching.md, https://docs.x.ai/developers/advanced-api-usage/prompt-caching/best-practices"
+  },
+  {
+   "claim": "Gemini 3 media_resolution: low 280 / medium 560 / high 1,120 tokens per image",
+   "source": "05-research-docai.md, https://ai.google.dev/gemini-api/docs/media-resolution"
+  },
+  {
+   "claim": "DeepSeek deepseek-v4-flash-vision-exp (2026-08-21): images up to 384 tokens each at V4-Flash pricing; V4-Flash peak $0.44/MTok miss, $0.014 hit",
+   "source": "05-research-caching.md, https://api-docs.deepseek.com/news/news260821 and https://api-docs.deepseek.com/quick_start/pricing"
+  },
+  {
+   "claim": "Tensormesh bills cached input at $0; Qwen3 30B $0.15/$0.60; Operator 'Coming Soon'",
+   "source": "05-research-kvcache.md, https://www.tensormesh.ai/pricing and https://www.tensormesh.ai/faq"
+  },
+  {
+   "claim": "vLLM RFC #45098 image-token pruning opened 2026-06-10 and open; only video EVS shipped; SGLang EVS video-only and incompatible with Qwen2.5-VL positional embeddings",
+   "source": "05-research-docai.md, https://github.com/vllm-project/vllm/issues/45098 and https://github.com/sgl-project/sglang/blob/main/python/sglang/srt/multimodal/evs/README.md"
+  },
+  {
+   "claim": "GPU prices: Modal A100-80GB $2.50/h, H100 $3.95/h, L40S $1.95/h; RunPod A100 $1.39-1.59/h, L40S $0.99/h; Lambda H100 $3.99-4.29/h, A100 $2.79/h; H100 on-demand range $1.73 (Vast aggregator) to $12.29 (Azure); MI300X $2.59 (DigitalOcean) to $6.00 (Azure)",
+   "source": "05-research-gpu-pricing.md, https://modal.com/pricing, https://www.runpod.io/pricing, https://lambda.ai/service/gpu-cloud, https://getdeploying.com/reference/cloud-gpu/nvidia-h100, Azure Retail Prices API, https://www.digitalocean.com/pricing/gpu-droplets"
+  },
+  {
+   "claim": "Estimated experiment costs (~40, ~2, ~30, ~20, ~60, ~4 GPU-hours; 1-5 calendar days; ~$100 at Modal A100 $2.50/h)",
+   "source": "Author estimates for this brief, priced at the Modal A100 rate in 05-research-gpu-pricing.md; not measured"
+  },
+  {
+   "claim": "Kill-gate thresholds (3/8 pts, 1/3 and 1.5x cost, 3%/10% dup rate, 10/30 pts affinity gain, 2 s p95, 0.5x/50% utilization, 1.5x/2x reuse)",
+   "source": "Pre-registered choices proposed in this brief; not measured values"
+  }
+ ],
+ "unproven": [
+  {
+   "claim": "Task success holds at the 322-token (native 1280x800, 1.05 MP cap) screenshot budget on real CUA tasks",
+   "experiment": "Run OSWorld-Verified and/or a 100-200-task WebArena subset with the same model at native vs capped resolution, 5 seeds; report success and p50 step latency; the accuracy point that exists (0.925 DocVQA) is at 1,017 tokens on documents, not screenshots",
+   "cost_estimate": "~40 GPU-hours (A100 at Modal $2.50/h, ~$100) plus API spend for the Sonnet 5 arm; ~5 calendar days"
+  },
+  {
+   "claim": "Cost per completed task beats hosted Qwen3-VL-8B at $0.20/MTok and Anthropic Sonnet 5 at equal or better success",
+   "experiment": "Same run as above with five backends (vanilla vLLM default flags, SGLang, hosted Qwen3-VL-8B, Sonnet 5 with computer-use toolset and documented caching, Browser Use bu-30b-a3b on vLLM); bill from vLLM usage fields; publish $/task",
+   "cost_estimate": "Included in the run above"
+  },
+  {
+   "claim": "The exact-duplicate frame cache fires on a material share of real agent steps (it requires identical frame bytes and identical concatenated text)",
+   "experiment": "Replay recorded OSWorld / Browser Use trajectories through the gateway and count served_from_cache; compare against examples/agent_loop.py's fabricated 1-in-3 duplicate rate",
+   "cost_estimate": "~2 GPU-hours; ~2 calendar days"
+  },
+  {
+   "claim": "Session affinity raises the prefix-cache hit rate on CUA prompts (images in history) across multiple replicas",
+   "experiment": "Deploy >= 4 vLLM replicas behind a consistent-hash router keyed on x-dexa-session; measure usage.prompt_tokens_details.cached_tokens and TTFT with and without affinity; the measured 12x/25-34x prefix-cache TTFT win is on a text model, single replica",
+   "cost_estimate": "~30 GPU-hours; ~5 calendar days"
+  },
+  {
+   "claim": "Steps per GPU-hour at the CUA budget support a price below hosted Qwen and the frontier providers",
+   "experiment": "Load test with the voice-inference harness pattern (N-slot loadgen, p95 step-latency gate) on A100 and H100; the only throughput point today is 30.2 document pages/s at 1,017 tokens on one A100",
+   "cost_estimate": "~20 GPU-hours; ~3 calendar days"
+  },
+  {
+   "claim": "Delta-perception reuse of unchanged-region vision embeddings at cos >= 0.98 preserves grounding accuracy (ceiling 2.34x)",
+   "experiment": "Grounding eval (ScreenSpot-style click accuracy) with reused vs fresh embeddings; requires an mRoPE-aware forward pass since masked pruning breaks Qwen2.5-VL get_rope_index",
+   "cost_estimate": "~60 GPU-hours plus 2-3 engineer-weeks"
+  },
+  {
+   "claim": "The BYOC compose runs on a customer GPU without Dexa involvement",
+   "experiment": "Run dexa_platform/docker-compose.byoc.yml on a rented A100/H100 box and drive it with examples/agent_loop.py; the compose has never been executed in-repo",
+   "cost_estimate": "~4 GPU-hours; ~1 calendar day"
+  },
+  {
+   "claim": "CUA turn, idle-gap and concurrency distributions (needed for affinity and pinning design)",
+   "experiment": "Instrument the Week 1 trajectory corpus for inter-step gaps and session lengths; the only analogs are coding-agent traces (5.2 s median / 81.4 s p99 tool gaps; 1.4 min median human gap)",
+   "cost_estimate": "No extra GPU-hours; ~1 calendar day of analysis on the Week 1 corpus"
+  }
+ ],
+ "founder_decisions": [
+  {
+   "decision": "Which model to serve",
+   "options": "Qwen2.5-VL-7B (deployed; 0.925 DocVQA at 1024px) | Qwen3-VL-8B (DocVQA 96.1 per its report, Apache-2.0, vLLM/SGLang) | Qwen3-VL-30B-A3B | a CUA-trained model such as Browser Use's bu-30b-a3b | train a specialized grounding model Morph-style",
+   "why_not_ours_to_make": "Model choice sets cost, accuracy and defensibility at once; no CUA-suite number exists in the research files for any of these models, so the Week 1 task-success run per model is the evidence, and the trade-off between an off-the-shelf open model and a trained one is a strategic bet on the team's capabilities"
+  },
+  {
+   "decision": "Hosted vs BYOC vs open-source gateway",
+   "options": "Hosted endpoint (Modal-backed) | BYOC recipe plus telemetry license | open-source gateway with paid hosted tier | all three",
+   "why_not_ours_to_make": "Determines what is sold and to whom; BYOC removes the data-residency objection but leaves telemetry as the only paid artifact; pilot conversion in Week 6 is the evidence, and the operating-model choice is the founder's"
+  },
+  {
+   "decision": "GPU class for hosted serving",
+   "options": "A100 ($1.39-2.79/h across providers) | H100 ($1.73-12.29/h) | L40S ($0.99-1.95/h) | MI300X ($2.59-6.00/h) | spot/preemptible variants",
+   "why_not_ours_to_make": "Steps per GPU-hour at the CUA budget is unmeasured on every class; the Week 4 throughput run per class is the evidence; capex/opex posture is a founder call"
+  },
+  {
+   "decision": "Whether frontier and open-host adjacency matters",
+   "options": "Proceed regardless | proceed only if the benchmark shows >= 3x cost advantage vs Sonnet 5 and a measurable advantage vs hosted Qwen | do not proceed",
+   "why_not_ours_to_make": "Gemini 3 offers a 280-token low-res image mode, DeepSeek bills images at up to 384 tokens at $0.44/MTok, Anthropic ships the toolset and caching guidance, Morph lists Glance, and any Qwen host bills the same 322 tokens for a 1280x800 frame; these are stated as facts, and the founder asked that 'X already exists' judgments be left to them"
+  },
+  {
+   "decision": "Whether to fund the delta-perception R&D",
+   "options": "Fund the mRoPE-aware reuse engine targeting the measured ~2.3x ceiling | treat ~2x as sufficient for a pricing edge and ship the gateway-only product | drop the perception thesis and compete on price/telemetry alone",
+   "why_not_ours_to_make": "The ceiling (2.34x at cos >= 0.98, never near 7x) is measured, but whether a 2x execution-owned lever justifies 2-3 engineer-weeks plus ~60 GPU-hours against a blocked architecture is a capital-allocation judgment"
+  },
+  {
+   "decision": "Pricing unit and baseline disclosure",
+   "options": "Per step (per screenshot) flat price | per token at a blended open-VLM rate (~$0.20/MTok assumed) | $0 cached steps and discounted prefix hits (needs the affinity router) | BYOC license; publish the baseline price table or let buyers set it via x-dexa-baseline",
+   "why_not_ours_to_make": "The architecture makes per-step pricing expressible, but no $/step cost exists until the Week 4 throughput measurement; margin and positioning are founder choices"
+  },
+  {
+   "decision": "Benchmark suite and definition of proof",
+   "options": "OSWorld-Verified | WebArena | Browser Use's Odysseys | a customer-supplied task set; 1, 3 or 5 seeds; success-rate tolerance (3 pts proposed)",
+   "why_not_ours_to_make": "The pre-registered thresholds in the brief are proposals, not measurements; which suite buyers trust and how many seeds count as proof determine the credibility of the Morph-style 'proven value' claim"
+  },
+  {
+   "decision": "Whether the 'cheaper-VLM reseller' wedge is acceptable",
+   "options": "Accept the wedge (gateway + budget + telemetry on a stock engine) and compete on DX and BYOC | require an execution-owned differentiator before launch | fold this direction into the stateful-session or document-VLM candidates",
+   "why_not_ours_to_make": "docs/FINDINGS.md explicitly rejected this framing ('the defensible company isn't a cheaper-VLM reseller'), while the founder's brief asks for niches found through proven value; market size and defensibility judgments are reserved for the founder"
+  }
+ ]
+}

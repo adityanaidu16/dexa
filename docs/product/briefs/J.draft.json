@@ -1,0 +1,349 @@
+{
+ "id": "J",
+ "name": "Preemptible-GPU inference made safe by portable session state",
+ "one_line": "Run long-lived agent sessions on spot GPUs by keeping every session's KV state portable off-instance, so a preemption becomes a bit-identical restore on another instance instead of a lost session; value is continuity and fleet capacity at 64k-128k+ context, not TTFT, and the deciding number (restore bandwidth from a tier that survives the instance) is unmeasured.",
+ "numeric_claims": [
+  {
+   "claim": "Median prefix per agent step 126,180 tokens (Claude Code) / 115,584 (Codex); ~4,300 sessions; ~860 new input and ~200-250 output tokens per step; human gap median 1.4 min, p90 20.6 min",
+   "source": "05-research-agents.md, TraceLab facts; https://arxiv.org/html/2606.30560"
+  },
+  {
+   "claim": "llm-d: 219 production Claude Code sessions, median request 195K input / 317 output tokens; 96% of requests reuse >=90% of input as verbatim prefix; inter-turn pauses median 2 s, p99 11.4 min; 'TP=8 keeps eight copies of the KV cache'",
+   "source": "05-research-kvcache.md and 05-research-agents.md; https://llm-d.ai/blog/serving-glm-5-2-agentic-workloads-on-llm-d"
+  },
+  {
+   "claim": "Codex traces: input:output ~131:1; inter-turn gaps 5.2 s median / 81.4 s P99; Mooncake Store 92.2% cache hit rate",
+   "source": "05-research-agents.md and 05-research-kvcache.md; https://vllm.ai/blog/2026-05-06-mooncake-store"
+  },
+  {
+   "claim": "Claude Code median turn ~45 s; 99.9th-percentile turn grew from under 25 min to over 45 min",
+   "source": "05-research-agents.md; https://www.anthropic.com/research/measuring-agent-autonomy"
+  },
+  {
+   "claim": "vLLM latest PyPI 0.28.0; SGLang 0.5.18; vLLM KVConnector V1 merged Apr 17, 2025 and still labeled experimental",
+   "source": "05-research-kvcache.md; https://pypi.org/project/vllm/ and https://docs.vllm.ai/en/stable/api/vllm/distributed/kv_transfer/kv_connector/v1/base/"
+  },
+  {
+   "claim": "Fireworks prompt caching works only within 1 replica; cached tokens default 50% discount",
+   "source": "05-research-agents.md; https://docs.fireworks.ai/guides/prompt-caching"
+  },
+  {
+   "claim": "AWS p5 (H100) $6.88/GPU-hr on-demand vs $2.59 Spot (~62% off)",
+   "source": "05-research-gpu-pricing.md; https://instances.vantage.sh/aws/ec2/p5.48xlarge"
+  },
+  {
+   "claim": "AWS p6-b200 $14.24/GPU-hr on-demand vs $5.24 Spot (~63% off)",
+   "source": "05-research-gpu-pricing.md; https://instances.vantage.sh/aws/ec2/p6-b200.48xlarge"
+  },
+  {
+   "claim": "Azure ND96isr_H100_v5 $12.29/GPU-hr list vs $2.37 Spot (~81% off)",
+   "source": "05-research-gpu-pricing.md; Azure Retail Prices API filter armSkuName eq Standard_ND96isr_H100_v5"
+  },
+  {
+   "claim": "Nebius H100 $3.85 on-demand vs $2.15 preemptible; B200 $7.15 vs $3.95; object storage $0.0147/GiB-month",
+   "source": "05-research-gpu-pricing.md; https://nebius.com/prices"
+  },
+  {
+   "claim": "GCP a3-megagpu-8g $11.62/GPU-hr on-demand vs $3.69 Spot (~68% off)",
+   "source": "05-research-gpu-pricing.md; https://gcloud-compute.com/a3-highgpu-8g.html"
+  },
+  {
+   "claim": "AWS A100 p4de Spot ~19% off on-demand; L40S g6e.xlarge Spot ~16% off",
+   "source": "05-research-gpu-pricing.md; https://instances.vantage.sh/aws/ec2/g6e.xlarge"
+  },
+  {
+   "claim": "Azure ND96isr_H200_v5 Spot meters equal pay-as-you-go ($84.80/hr, no discount)",
+   "source": "05-research-gpu-pricing.md; Azure Retail Prices API filter armSkuName eq Standard_ND96isr_H200_v5"
+  },
+  {
+   "claim": "Neocloud H100 on-demand median $3.39/GPU-hr; lowest $1.73 (Vast)",
+   "source": "05-research-gpu-pricing.md; https://getdeploying.com/reference/cloud-gpu/nvidia-h100"
+  },
+  {
+   "claim": "AWS Spot interruption notice two minutes, best effort",
+   "source": "05-research-gpu-pricing.md; https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/spot-instance-termination-notices.html"
+  },
+  {
+   "claim": "GCP Spot preemption notice 0 seconds default or 120 seconds (Preview)",
+   "source": "05-research-gpu-pricing.md; https://docs.cloud.google.com/compute/docs/instances/spot"
+  },
+  {
+   "claim": "Azure Spot eviction notice 30 seconds best effort; eviction rates quoted per hour",
+   "source": "05-research-gpu-pricing.md; https://learn.microsoft.com/en-us/azure/virtual-machines/spot-vms"
+  },
+  {
+   "claim": "Vast interruptible instances killed on outbid with no notice window; 50-80% cheaper",
+   "source": "05-research-gpu-pricing.md; https://docs.vast.ai/guides/reference/faq/rental-types"
+  },
+  {
+   "claim": "AWS Spot Advisor interruption bands <5%, 5-10%, 10-15%, 15-20%, >20% per month; no GPU rows retrievable",
+   "source": "05-research-gpu-pricing.md; https://aws.amazon.com/ec2/spot/instance-advisor/"
+  },
+  {
+   "claim": "'60-80% off list on H100/B200' in the pain quote is a rounding of the 57-81% range above",
+   "source": "derived from the AWS/Azure/GCP/Nebius items in 05-research-gpu-pricing.md"
+  },
+  {
+   "claim": "Codex on Azure past ~150K tokens: cached_input_tokens = 0; 3.28M re-billed tokens = 71% of fresh input across 112 calls in 4 turns",
+   "source": "05-research-agents.md; https://github.com/openai/codex/issues/25604"
+  },
+  {
+   "claim": "Claude Code cache TTL change: 17.1% higher spend, $949.08 over 119,866 API calls",
+   "source": "05-research-caching.md and 05-research-agents.md; https://github.com/anthropics/claude-code/issues/46829"
+  },
+  {
+   "claim": "Anthropic cache TTL 5 minutes default, 1-hour option",
+   "source": "05-research-caching.md; https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+  },
+  {
+   "claim": "OpenAI: overflow to a machine without a matching cache entry incurs a cache miss",
+   "source": "05-research-caching.md; https://developers.openai.com/api/docs/guides/prompt-caching"
+  },
+  {
+   "claim": "Connector single-request resume 1681 ms vs vLLM cold re-prefill 617 ms (0.37x), Llama-3.1-8B/A100/8k",
+   "source": "01-evidence-ledger-dexa.md [FALSIFIED] connector-session-resume-single-request; /home/user/dexa/docs/RESULTS.md '8B measurement'"
+  },
+  {
+   "claim": "Under concurrency: 24x3072 async P99 8930 vs vanilla 5596 ms; 16x8192 async P99 20296 vs 9379 ms; adaptive 5603/9371 ms; 1.6-2.2x worse P99",
+   "source": "01-evidence-ledger-dexa.md [FALSIFIED] connector-under-concurrency-sync-async; /home/user/dexa/docs/RESULTS.md contention benchmark"
+  },
+  {
+   "claim": "Repo's estimated load-vs-prefill crossover ~64k+; chunked prefill unsupported; 16k resume saved nothing (1.00x)",
+   "source": "01-evidence-ledger-dexa.md [OPEN] chunked-prefill-gap; /home/user/dexa/docs/RESULTS.md 'Honest consequence'"
+  },
+  {
+   "claim": "Crossover calibrated three ways: ~64k measured, 32,768 connector default, 8,192 in contention bench",
+   "source": "04-conflicts.md conflict 12"
+  },
+  {
+   "claim": "Llama-3.1-8B KV state 131 KB/token bf16; 1.0/2.1/4.2/8.4 GB at 8k/16k/32k/64k; identical_output true at every length",
+   "source": "01-evidence-ledger-dexa.md [CONTRADICTED] raw-kv-resume-vs-reprefill-gpu-arc; /home/user/dexa/benchmarks/results/2026-07-09-a100-8b-persist-native-load.json"
+  },
+  {
+   "claim": "128k tokens x 131 KB/token = ~16.8 GB",
+   "source": "derived arithmetic from the 131 KB/token figure above (2 x 8.4 GB at 64k)"
+  },
+  {
+   "claim": "vLLM prefill 8k in 617 ms = ~13k tok/s",
+   "source": "/home/user/dexa/docs/RESULTS.md '8B measurement'; tok/s derivation in 04-conflicts.md conflict 1"
+  },
+  {
+   "claim": "vLLM prefill 128k in 32.68 s (eager, prefix caching off, Llama-3.1-8B/A100)",
+   "source": "01-evidence-ledger-dexa.md [FALSIFIED] context-scaling-branching numbers row (128k prefill 32.68 s)"
+  },
+  {
+   "claim": "Required durable-tier bandwidth 0.5-1.75 GB/s at 128k; ~0.8 GB/s at 64k",
+   "source": "derived: 16.8 GB / 32.68 s = 0.51 GB/s; 16.8 GB / (16 x 0.617 s = 9.9 s) = ~1.75 GB/s; 64k figure from 04-conflicts.md conflict 1 ('~0.8 GB/s at 64k')"
+  },
+  {
+   "claim": "Restore beats re-prefill iff tier bandwidth x re-prefill time > KV bytes",
+   "source": "04-conflicts.md conflict 1, 'Honest combined statement'"
+  },
+  {
+   "claim": "Connector Modal-Volume load path ~0.6-0.9 GB/s effective",
+   "source": "04-conflicts.md conflict 1 (0.62 GB/s at 8B/8k; ~0.86 GB/s post-fix persist bench)"
+  },
+  {
+   "claim": "LMCache CPU offload/restore: 4k 301->30 ms (10.0x), 16k 1,320->77 ms (17.1x); 16,384 tokens in 39.8 ms at 22.0 GB/s",
+   "source": "01-evidence-ledger-dexa.md [PROVEN] lmcache-offload-restore; /home/user/dexa/evals/RESULTS.md 'Offload -> restore through vLLM + LMCache'"
+  },
+  {
+   "claim": "LMCache/CoreWeave object-store throughput 8.5-10 GB/s per 8-GPU node; 22-32% lower TTFT vs full prefill",
+   "source": "05-research-kvcache.md; https://blog.lmcache.ai/en/2025/10/29/breaking-the-memory-barrier-how-lmcache-and-coreweave-power-efficient-llm-inference-for-cohere/"
+  },
+  {
+   "claim": "fp8 and int8 KV at 0.5x bytes give 100% greedy agreement over 48 tokens; int4 diverges at token 14",
+   "source": "01-evidence-ledger-dexa.md [PROVEN] kv-interchange-formats"
+  },
+  {
+   "claim": "base<->instruct KV injection diverges within 2-5 tokens",
+   "source": "01-evidence-ledger-dexa.md [FALSIFIED] kv-interchange-weights"
+  },
+  {
+   "claim": "Greedy decoding cascades cached-vs-full-prefill kernel numerics into divergent text (re-prefill not bit-identical)",
+   "source": "02-evidence-ledger-voice.md [OPEN] vi-kv-restore-correctness; /home/user/voice-inference/evals/modal_kv_correctness.py"
+  },
+  {
+   "claim": "llm-d P2P pull crossover ~8K-12K tokens (GLM-5.2-FP8); 48K-token pull 235 ms vs 1,988 ms recompute (gpt-oss-120b); off by default; peers must share block size and hash seed",
+   "source": "05-research-kvcache.md; https://llm-d.ai/blog/p2p-kv-cache-sharing-llm-d"
+  },
+  {
+   "claim": "Cross-instance resume: A_saved=True, B_saw_stored_KV=True, identical_output=True; 8176/8192 tokens matched, Qwen3-0.6B/A10G; TP=1 only",
+   "source": "01-evidence-ledger-dexa.md [PROVEN] cross-instance-resume; /home/user/dexa/docs/RESULTS.md 'Cross-instance confirmed'"
+  },
+  {
+   "claim": "Connector conformance 10/10 hook signatures vs vLLM 0.24.0",
+   "source": "01-evidence-ledger-dexa.md [PROVEN] connector-conformance; /home/user/dexa/benchmarks/results/2026-07-09-vllm-connector-check.json"
+  },
+  {
+   "claim": "HF restore vs HF re-prefill 11.8x at 4k to 28.9x at 64k; NVMe restore 1.2x-7.0x",
+   "source": "01-evidence-ledger-dexa.md [PROVEN] stateful-warm-session-hf"
+  },
+  {
+   "claim": "Session service demo 12k tokens: turn 1 ~5.4 s, turn 2 ~1.5 s (3.7x end-to-end); no raw artifact",
+   "source": "01-evidence-ledger-dexa.md [PROVEN] stateful-session-service-live; /home/user/dexa/dexa_platform/README.md"
+  },
+  {
+   "claim": "VoiceKVConnector N=300 p95 316.8 ms stable vs LMCache 0.3.2 default 25,997.7 ms on L40S",
+   "source": "02-evidence-ledger-voice.md [BOUNDED] vi-contiguous-vs-chunked-transfer; runs/modal/sweep_bv and sweep_b n300 summary.json"
+  },
+  {
+   "claim": "Engine OOM at 345 concurrent requests from connector staging buffers outside vLLM's memory budget",
+   "source": "02-evidence-ledger-voice.md [FALSIFIED] vi-bypass-governor-policy"
+  },
+  {
+   "claim": "10-34x restore wins (HF / vLLM prefix cache / LMCache CPU) vs 0.37x and 1.6-2.2x worse (connector) are contradicted; no LMCache concurrency run at 16k-64k",
+   "source": "01-evidence-ledger-dexa.md [CONTRADICTED] restore-vs-reprefill-cross-repo-contradiction; 04-conflicts.md conflicts 1 and 4"
+  },
+  {
+   "claim": "vllm bench serve prefix_repetition: connector mean TTFT 3355 ms vs no-cache 610 ms vs prefix cache 183 ms",
+   "source": "01-evidence-ledger-dexa.md [FALSIFIED] vllm-bench-serve-prefix-repetition"
+  },
+  {
+   "claim": "Residency cost model '2-6x cheaper' with assumed GPU $1.80/hr, RAM $0.006/GB-hr, NVMe $0.0002/GB-hr",
+   "source": "01-evidence-ledger-dexa.md [OPEN] residency-cost-model; /home/user/dexa/evals/stateful_cost_model.py"
+  },
+  {
+   "claim": "AWS host RAM proxy ~$0.0036/GiB-hr on-demand; local NVMe ~$0.0001/GB-hr; CoreWeave hot object storage $0.06/GB-month",
+   "source": "05-research-gpu-pricing.md; https://instances.vantage.sh/aws/ec2/r7i.large, https://instances.vantage.sh/aws/ec2/i4i.large, https://www.coreweave.com/pricing"
+  },
+  {
+   "claim": "vLLM in-engine runs capped at 16k; >=32k crashed the V1 EngineCore in three configs",
+   "source": "01-evidence-ledger-dexa.md [PROVEN] vllm-warmstart-prefix-cache; 04-conflicts.md conflict 11"
+  },
+  {
+   "claim": "2 min at 1 GB/s = ~120 GB; 30 s at 1 GB/s = ~30 GB flushable on notice",
+   "source": "derived arithmetic from notice windows (05-research-gpu-pricing.md) and the ~1 GB/s Modal-Volume reference (04-conflicts.md conflict 1)"
+  },
+  {
+   "claim": "dexa connector 917 lines; dexa_platform 29 tests; voice harness ~2,000 lines; 287,015 measured turns; vllm_connector.py line 608 chunked-prefill TODO",
+   "source": "03-build-inventory.md dexa and voice component tables"
+  },
+  {
+   "claim": "Experiment cost estimates (20/40/170/8/4/16/24 GPU-hours; 3-10 days) are this brief's estimates; 170 = 7 days x 24 h x 1 GPU",
+   "source": "estimates by this brief; calibration points: voice repo ~$45 GPU spend for 19 runs and '~2 GPU-hours per idea' (02-evidence-ledger-voice.md vi-open-armD-tuning, vi-harness-methodology-lessons)"
+  },
+  {
+   "claim": "Anthropic Managed Agents $0.08 per session-hour billed only while running",
+   "source": "05-research-caching.md and 05-research-agents.md; https://platform.claude.com/docs/en/about-claude/pricing"
+  },
+  {
+   "claim": "Morph Standby tier bills 50% of standard rates and admits requests only when fleet capacity is under ~25%, returning 429 otherwise",
+   "source": "05-research-morph.md; https://docs.morphllm.com/sdk/components/fast-models"
+  },
+  {
+   "claim": "Tensormesh bills cached input at $0; post-v1 pricing 30% of estimated savings; reserved H200 $2.50/hr",
+   "source": "05-research-kvcache.md; https://www.tensormesh.ai/pricing and https://www.tensormesh.ai/faq"
+  },
+  {
+   "claim": "vLLM RFC #38260 TieringManager; OffloadingConnector CPU primary with Filesystem/S3/P2P secondary tiers (developer preview)",
+   "source": "05-research-kvcache.md; https://github.com/vllm-project/vllm/issues/38260 and https://docs.vllm.ai/en/latest/features/kv_offloading_usage/"
+  },
+  {
+   "claim": "vLLM production-stack roadmap P0 'request migration on instance failure'",
+   "source": "05-research-kvcache.md; https://github.com/vllm-project/production-stack/issues/855"
+  },
+  {
+   "claim": "OpenAI 24h cache retention default for non-ZDR orgs",
+   "source": "05-research-caching.md; https://developers.openai.com/api/docs/guides/prompt-caching"
+  },
+  {
+   "claim": "Pre-registered thresholds (restore GPU-seconds < 20%, P99 within 1.2x, N>=16, 2-week / 1-engineer-week / 2-day gates) are set by this brief; 1.2x chosen below the measured 1.6-2.2x regression",
+   "source": "this brief; regression figure from 01-evidence-ledger-dexa.md connector-under-concurrency-sync-async"
+  },
+  {
+   "claim": "Voice sessions ~2.5k tokens; p95 TTFT <= 300 ms gate",
+   "source": "02-evidence-ledger-voice.md common setup and vi-armA-baseline-knee"
+  },
+  {
+   "claim": "DocVQA 0.925 at 1024px for Qwen2.5-VL-7B",
+   "source": "01-evidence-ledger-dexa.md [PROVEN] doc-vlm-frontier"
+  },
+  {
+   "claim": "Open-weight models carry a majority of OpenRouter tokens by mid-2026, concentrated in coding and agentic workloads",
+   "source": "05-research-agents.md; https://stateofopensource.ai/"
+  },
+  {
+   "claim": "OpenHands recommends Qwen3.6-35B-A3B on vLLM/SGLang; Cursor Composer 2 started from Kimi K2.5; Browser Use ships a 30B-A3B open model",
+   "source": "05-research-agents.md; https://docs.openhands.dev/openhands/usage/llms/local-llms, https://tech.yahoo.com/ai/copilot/articles/cursor-admits-coding-model-built-184109599.html, https://github.com/browser-use/browser-use"
+  },
+  {
+   "claim": "No provider found selling guaranteed session-pinned KV retention; no vendor found offering hosted KV-cache-as-a-service decoupled from its engine",
+   "source": "05-research-agents.md Unknowns; 05-research-kvcache.md Unknowns"
+  }
+ ],
+ "unproven": [
+  {
+   "claim": "Restore from a tier that survives the instance (S3-compatible object store or remote NVMe) sustains 0.5-1.75 GB/s into vLLM paged KV at 128k on an 8B model",
+   "experiment": "Move 16.8 GB (128k tokens, Llama-3.1-8B) from S3-compatible and remote-NVMe stores into vLLM on A100 and H100 through the connector; compare LMCache S3 backend and vLLM OffloadingConnector object tier on the same rig; report GB/s, TTFT, identical_output",
+   "cost_estimate": "~20 GPU-hours, 5 calendar days"
+  },
+  {
+   "claim": "At 64k-128k, kill-and-resume beats re-prefill from the message log on both TTFT and GPU-seconds",
+   "experiment": "Section 4 kill-and-resume ladder (8k/32k/64k/128k) vs vanilla vLLM re-prefill, vLLM+LMCache S3, and vLLM OffloadingConnector object tier, after chunked-prefill save lands; pre-registered target at 128k: resume TTFT below re-prefill, restore GPU-seconds < 20% of re-prefill, identical_output true",
+   "cost_estimate": "~40 GPU-hours, 10 calendar days"
+  },
+  {
+   "claim": "The spot discount on the chosen GPU class exceeds restore + re-placement + interruption loss per session-hour",
+   "experiment": "7-day interruption-frequency and notice-window log on one cloud and one class (H100 first; A100 at ~19% off as the stress case); feed measured restore cost and the 05-research-gpu-pricing.md price sheet into evals/stateful_cost_model.py with real rates",
+   "cost_estimate": "~170 spot GPU-hours (7 days x 1 GPU), 7 calendar days"
+  },
+  {
+   "claim": "Continuous write-through keeps unsaved KV bytes under notice-window x bandwidth at N>=16 concurrent sessions, including at GCP's 0 s default notice",
+   "experiment": "Instrument unsaved bytes at SIGKILL time under load; count lost turns at 0 s, 30 s and 2 min notice",
+   "cost_estimate": "~8 GPU-hours, 3 calendar days"
+  },
+  {
+   "claim": "Chunked (multi-step) prefills can be persisted by the connector",
+   "experiment": "Fix /home/user/dexa/src/dexa/engine/vllm_connector.py:608 to scan scheduled_cached_reqs; re-run the 16k resume that saved nothing (1.00x) and confirm a save occurs without the max_num_batched_tokens workaround",
+   "cost_estimate": "~4 GPU-hours, 3 calendar days"
+  },
+  {
+   "claim": "Portability and bit-identical resume hold at TP>1 and across attention backends / GPU architectures",
+   "experiment": "Repeat scripts/modal_connector_xinstance.py at TP=2 and with mixed attention backends; check identical_output",
+   "cost_estimate": "~16 GPU-hours, 5 calendar days"
+  },
+  {
+   "claim": "Compacted or fp8 KV state lowers the durable-tier bandwidth gate",
+   "experiment": "Repeat the kill test with fp8 KV (proven lossless over 48 tokens) and with a compacted cold tail; measure bytes moved and identical_output",
+   "cost_estimate": "~24 GPU-hours, 7 calendar days"
+  }
+ ],
+ "founder_decisions": [
+  {
+   "decision": "Model and tensor-parallel class for the MVP",
+   "options": "7-8B or 30B-A3B at TP=1 (the only validated regime) vs GLM-5.2 / Kimi-K3-class MoE at TP=8 (where public agent traffic is; KV replicated 8x per llm-d)",
+   "why_not_ours_to_make": "Trades measured portability today against the market's actual model sizes; informed by the TP>1 experiment and design-partner model choices, not by the evidence ledgers"
+  },
+  {
+   "decision": "GPU class and cloud provider for the spot fleet",
+   "options": "H100/B200 at hyperscalers (57-81% Spot discount, 0-120 s notice) vs A100/L40S at AWS (16-19% off) vs neocloud on-demand near hyperscaler Spot (H100 median $3.39) vs Azure H200 (no Spot discount); single-cloud vs cross-provider arbitrage",
+   "why_not_ours_to_make": "Depends on unmeasured GPU-pool interruption rates and on the founder's tolerance for provider concentration; the price sheet informs it, the 7-day interruption log would inform it further"
+  },
+  {
+   "decision": "Whether incumbent adjacency matters",
+   "options": "Treat LMCache S3 backend, vLLM OffloadingConnector object tier, llm-d P2P, Dynamo KVBM G4 and production-stack's 'request migration' roadmap as a closing window vs as a gap (none ships a spot-session product per the research files)",
+   "why_not_ours_to_make": "The founder's hard rule: a competitor's existence does not disqualify a direction; facts are stated neutrally in Section 9 and the judgment is the founder's"
+  },
+  {
+   "decision": "Hosted service vs BYOC vs open-source connector",
+   "options": "Hosted (captures the spot margin, needs fleet ops); BYOC (sells connector + control plane into the customer's own spot fleet; compose recipe exists in dexa_platform); OSS connector following the LMCache-to-Tensormesh path",
+   "why_not_ours_to_make": "A business-model choice; no survey of self-host share exists in the research files, so design-partner interviews rather than repo evidence would inform it"
+  },
+  {
+   "decision": "Which agent segment to target first",
+   "options": "Coding agents (128k contexts, human gaps to 20 min); computer-use agents; back-office agents; voice (2.5k contexts, 300 ms p95 gate) where portable KV adds nothing on speed",
+   "why_not_ours_to_make": "A market-size and go-to-market judgment the founder reserved; the evidence only says where re-prefill is expensive enough for restore to matter"
+  },
+  {
+   "decision": "Whether to sell determinism (bit-identical continuation) at small context",
+   "options": "Offer identical-continuation as a product feature for audit/replay buyers at <=16k where TTFT loses vs re-prefill, or ignore small contexts entirely",
+   "why_not_ours_to_make": "Buyer value of determinism is unmeasured; it is a positioning choice, not an engineering result"
+  },
+  {
+   "decision": "Meter shape for the preemptible tier",
+   "options": "Per token at a spot-derived rate with a restore SLO; per running session-hour (Managed Agents shape, $0.08/hr); 30% of estimated savings (Tensormesh post-v1 formula); admission-gated discount (Morph Standby shape)",
+   "why_not_ours_to_make": "Pricing strategy; the architecture makes each expressible but the evidence does not rank them, and the margin depends on the unmeasured spot-economics experiment"
+  }
+ ]
+}

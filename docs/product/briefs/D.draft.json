@@ -1,0 +1,298 @@
+{
+ "id": "D",
+ "name": "Document-VLM inference provider",
+ "one_line": "An OpenAI-compatible endpoint serving an open VLM (Qwen2.5-VL-7B measured; Qwen3-VL-8B vendor-reported) at a measured document accuracy/cost operating point, billed per page and sold on a same-pages rerunnable benchmark; the 0.925-vs-0.880 DocVQA seed is real but relaxed-match on 200 pages, the \"~40x cheaper\" is a list-price model whose Qwen token count contradicts the repo's own measurement (corrected modeled ratio ~9-10x), and the in-model pruning moat sprint has no result.",
+ "numeric_claims": [
+  {
+   "claim": "Qwen2.5-VL-7B DocVQA frontier: 1536px accuracy 0.935, 11.4 img/s, 2,201 prompt tokens, 1.0x baseline",
+   "source": "/home/user/dexa/evals/RESULTS.md section 'Multimodal execution thesis' table; context/01-evidence-ledger-dexa.md entry doc-vlm-frontier"
+  },
+  {
+   "claim": "1024px accuracy 0.925, 30.2 img/s, 1,017 prompt tokens, 2.7x throughput, -1.0 pt",
+   "source": "/home/user/dexa/evals/RESULTS.md 'Multimodal execution thesis' table; 01-evidence-ledger-dexa.md doc-vlm-frontier"
+  },
+  {
+   "claim": "768px accuracy 0.885, 47.2 img/s, 574 tokens, 4.1x, -5.0 pts",
+   "source": "/home/user/dexa/evals/RESULTS.md 'Multimodal execution thesis' table"
+  },
+  {
+   "claim": "512px 0.735 / 78.6 img/s / 277 tokens / 6.9x; 384px 0.445 / 98.3 img/s / 182 tokens / 8.6x",
+   "source": "/home/user/dexa/evals/RESULTS.md 'Multimodal execution thesis' table"
+  },
+  {
+   "claim": "Frontier eval setup: 200 lmms-lab/DocVQA validation pages, vLLM 0.24.0, A100-80GB, max_model_len 16384, enforce_eager=True, one image per prompt, max_tokens 32, temperature 0, warm-up batch of 8 at 512px, offline llm.chat batches; relaxed match = normalized exact match or gold substring (len>2) in prediction; commit 7237401 dated 2026-08-04",
+   "source": "/home/user/dexa/evals/modal_vlm_frontier.py (run(), match(), BUDGETS); git log in /home/user/dexa"
+  },
+  {
+   "claim": "GPT-4o scored 0.880 on the same 200 DocVQA pages (detail high, images capped at 2048 long side, temperature 0, max_tokens 32); GPT-4o-mini accuracy and measured $/1k pages not recorded; commit c729976 2026-08-04",
+   "source": "/home/user/dexa/docs/FINDINGS.md 'Multimodal / document VLM'; /home/user/dexa/evals/modal_incumbent_docvqa.py; 01-evidence-ledger-dexa.md gpt4o-docvqa-head-to-head"
+  },
+  {
+   "claim": "pricing.py Qwen formula uses patch 28 x merge 2 (56 px per token) and yields 322 tokens for a 1280x800 screenshot; README states ~324; GPT-4o 1,105 tokens (85 + 170 x 6 tiles); GPT-4o-mini ~36,835 (README ~35,000)",
+   "source": "/home/user/dexa/dexa_platform/gateway/pricing.py (qwen_vision_tokens, openai_image_tokens); /home/user/dexa/dexa_platform/README.md 'Why it's cheaper'; /home/user/dexa/dexa_platform/tests/test_pricing.py; 01-evidence-ledger-dexa.md gpt4o-docvqa-head-to-head"
+  },
+  {
+   "claim": "Assumed list rates in the cost model ($/M in,out): gpt-4o 2.50/10.00; gpt-4o-mini 0.15/0.60; claude-3-5-sonnet 3.00/15.00; dexa-cua-vlm 0.20/0.20 (assumed blended); labeled 'early 2026 list prices'",
+   "source": "/home/user/dexa/dexa_platform/gateway/pricing.py PRICES; /home/user/dexa/evals/modal_incumbent_docvqa.py PRICING"
+  },
+  {
+   "claim": "~40x decomposition: (1,105/322) x (2.50/0.20) = 42.9x; pricing.compare() on 1280x800 with 50 text and 10 output tokens returns x_cheaper 39.1",
+   "source": "Computed in this session by importing /home/user/dexa/dexa_platform/gateway/pricing.py (compare([(1280,800)],50,10))"
+  },
+  {
+   "claim": "At Qwen2.5-VL's 28 px/token geometry (patch 14, merge 2) pricing.py's own function gives 1,334 tokens for 1280x800, 1,036 for 791x1024, 2,310 for 1186x1536 (vs 322/252/320 at 56 px); GPT-4o gives 765 tokens for a 791x1024 page",
+   "source": "Computed in this session with qwen_vision_tokens(w,h,patch=14,merge=2) and openai_image_tokens from /home/user/dexa/dexa_platform/gateway/pricing.py; consistency with measured 1,017 and 2,201 prompt tokens per /home/user/dexa/evals/RESULTS.md"
+  },
+  {
+   "claim": "Corrected modeled ratios at the same assumed rates: 1280x800 screenshot 10.4x ((1105x2.50)/(1334x0.20)); 791x1024 document page 9.2x ((765x2.50)/(1036x0.20))",
+   "source": "Derived in this session from the token counts above and pricing.py PRICES"
+  },
+  {
+   "claim": "'$0.02-0.06 / 1k pages' for Qwen is a hard-coded print string with no recorded derivation ('rented-A100 serving, not tokens')",
+   "source": "/home/user/dexa/evals/modal_incumbent_docvqa.py (final print block); 01-evidence-ledger-dexa.md gpt4o-docvqa-head-to-head"
+  },
+  {
+   "claim": "Repo's only GPU rate assumption: $1.80/hr (RAM $0.006/GB-hr, NVMe $0.0002/GB-hr)",
+   "source": "/home/user/dexa/evals/stateful_cost_model.py; /home/user/dexa/evals/RESULTS.md line 646 'Residency cost model'; /home/user/dexa/dexa_platform/sessions/tiering.py; 01-evidence-ledger-dexa.md residency-cost-model"
+  },
+  {
+   "claim": "Derived compute floor: 30.2 pages/s = 108,720 pages/hr -> $0.017 per 1K pages at $1.80/hr and $0.023 at $2.50/hr (100% utilization, eager, 32-token outputs); 1536px 11.4 pages/s -> $0.044-0.061 per 1K pages",
+   "source": "Derived from evals/RESULTS.md img/s and the $1.80/hr assumption above; $2.50/hr from 05-research-kvcache.md (Tensormesh reserved H200, https://www.tensormesh.ai/pricing)"
+  },
+  {
+   "claim": "Tensormesh reserved H200 GPUs at $2.50/hr",
+   "source": "context/05-research-kvcache.md; https://www.tensormesh.ai/pricing"
+  },
+  {
+   "claim": "Moat test blocked: Qwen2.5-VL mRoPE get_rope_index expects [3,1671] positions vs [3,881] masked; planned FRACTIONS 0.5 and 0.25 at 1280px long side; script verdict threshold best prune minus resize >= 0.02; commit 7447e10 2026-08-04; decision recorded 'gate the moat sprint on market validation'",
+   "source": "/home/user/dexa/evals/RESULTS.md 'Moat test - hit a real Qwen2.5-VL wall'; /home/user/dexa/evals/modal_vlm_moat.py; 01-evidence-ledger-dexa.md vlm-moat-mrope"
+  },
+  {
+   "claim": "Doc-VLM endpoint config: vllm serve Qwen2.5-VL-7B-Instruct, served name doc-vlm, max-model-len 8192, one image per prompt, max_pixels 1,048,576, A100-80GB, scaledown_window 300, concurrent max_inputs 32; commit 85d292b 2026-08-04",
+   "source": "/home/user/dexa/serve/modal_doc_vlm_serve.py; git log in /home/user/dexa"
+  },
+  {
+   "claim": "BYOC compose runs vllm/vllm-openai:v0.24.0 serving Qwen2.5-VL-7B-Instruct with max_pixels 1050000 and 3 images",
+   "source": "context/03-build-inventory.md dexa repo Components row 'dexa_platform/dashboard + BYOC compose'; /home/user/dexa/dexa_platform/docker-compose.byoc.yml"
+  },
+  {
+   "claim": "29 of 29 dexa_platform tests pass (test_accounts 7, test_pricing 5, test_redundancy 5, test_sessions 7, test_tenants 5)",
+   "source": "context/03-build-inventory.md dexa repo 'Tests run' item 4"
+  },
+  {
+   "claim": "gateway app.py is 261 lines; app.py:127 forces stream=False; Dockerfile copies only gateway/ and dashboard/ (not control/ or sessions/)",
+   "source": "context/03-build-inventory.md dexa repo Components row 'dexa_platform/gateway' and Gaps 'Streaming', 'Packaging'"
+  },
+  {
+   "claim": "Computer-use screen redundancy: ~86% of 28px patches unchanged per action (13.7% changed), 7.3x headroom; realized reuse ceiling ~2x naive, 2.34x at cos>=0.98 (~2-2.3x)",
+   "source": "context/01-evidence-ledger-dexa.md entries cua-screen-redundancy, delta-perception-viability, delta-tolerance-sweep; /home/user/dexa/evals/RESULTS.md"
+  },
+  {
+   "claim": "vLLM prefix-cache warm hit vs cold TTFT: ~12x at 4k (280 -> 24 ms), 25-34x at 16k (1,250 -> 45 ms), Qwen2.5-7B text model",
+   "source": "context/01-evidence-ledger-dexa.md entry vllm-warmstart-prefix-cache; /home/user/dexa/evals/RESULTS.md 'Production reproduction on vLLM paged KV'"
+  },
+  {
+   "claim": "Azure Document Intelligence S0 Read $1.50 per 1K pages, $0.60 above 1,000K pages; Layout/Prebuilt $10/1K; Custom $30/1K",
+   "source": "context/05-research-docai.md; https://prices.azure.com/api/retail/prices?$filter=contains(productName,%20'Document%20Intelligence')%20and%20armRegionName%20eq%20'eastus'"
+  },
+  {
+   "claim": "Google Document AI Enterprise OCR $1.50/1K (first 1,000 free; $0.60 above 5M); Layout Parser $10/1K; Form Parser and Custom Extractor $30/1K ($20 above 1M)",
+   "source": "context/05-research-docai.md; https://cloud.google.com/document-ai/pricing"
+  },
+  {
+   "claim": "AWS Textract DetectDocumentText $1.50/1K ($0.60 over 1M); Tables $15/1K; Forms $50/1K; Queries $15/1K",
+   "source": "context/05-research-docai.md; https://aws.amazon.com/textract/pricing/"
+  },
+  {
+   "claim": "Reducto r-1 launched 2026-09-01 at $0.01/page 'all in', claiming 20% error-rate reduction vs legacy agentic pipelines (3-6 cents/page); pricing page: r-1 Parse $10/1K, Extract $20, Deep Extract $40, Classify $7.50; throughput guarantees 200/350/500+ concurrent pages; model size/latency/self-hosting undisclosed",
+   "source": "context/05-research-docai.md; https://reducto.ai/blog/parse-r-1-model; https://reducto.ai/pricing"
+  },
+  {
+   "claim": "LlamaParse $1.25 per 1,000 credits; v2 tiers 1/3/10/45 credits per page",
+   "source": "context/05-research-docai.md; https://developers.llamaindex.ai/llamaparse/general/pricing/"
+  },
+  {
+   "claim": "Extend Parse 2 credits/page at $0.0125 per credit PAYG = $0.025/page; Extract $0.0375/page",
+   "source": "context/05-research-docai.md; https://docs.extend.ai/product/general/how-credits-work; https://www.extend.ai/pricing"
+  },
+  {
+   "claim": "Unstructured $0.015/page after 10,000 free pages, one rate across strategies",
+   "source": "context/05-research-docai.md; https://unstructured.io/pricing"
+  },
+  {
+   "claim": "Mistral OCR 4.1 $4 per 1K pages ($2 batch); Document AI $5/1K; Mistral OCR 4 self-reported olmOCR-Bench 85.20; self-hosted for enterprise",
+   "source": "context/05-research-docai.md; https://mistral.ai/pricing/api/; https://mistral.ai/news/ocr-4/"
+  },
+  {
+   "claim": "OpenAI patch-based models count 32x32 patches x multiplier (1.2 for gpt-5.2-5.6); 1024x1024 = 1,229 tokens on gpt-5.4 (~$0.0031 at $2.50/M; ~$0.00025 on gpt-5.6-luna at $0.20/M, i.e. ~$0.25/1K pages derived); gpt-4o tiles 85 base + 170 per 512px tile",
+   "source": "context/05-research-docai.md; https://developers.openai.com/api/docs/guides/images-vision; https://developers.openai.com/api/docs/pricing"
+  },
+  {
+   "claim": "OpenAI and Anthropic Batch pricing is 50% of standard",
+   "source": "context/05-research-docai.md and 05-research-caching.md; https://developers.openai.com/api/docs/pricing; https://platform.claude.com/docs/en/about-claude/pricing"
+  },
+  {
+   "claim": "Claude counts 28x28 patches; 1000x1000 = 1,296 tokens; at Haiku 4.5 $1/MTok ~ $1.30 per 1K images; PDFs add 1,500-3,000 text tokens per page plus image tokens",
+   "source": "context/05-research-docai.md; https://platform.claude.com/docs/en/build-with-claude/vision; https://platform.claude.com/docs/en/build-with-claude/pdf-support"
+  },
+  {
+   "claim": "Gemini: 258 tokens per 768px tile (2.5-era rule); Gemini 3 media_resolution 280/560/1120/2240 per image and 280/560/1120 per PDF page with native PDF text uncharged; Gemini 3.8 Flash $0.75/M input -> a 560-token page ~ $0.00042, ~ $0.42 per 1K pages input-only (derived)",
+   "source": "context/05-research-docai.md; https://ai.google.dev/gemini-api/docs/image-understanding; https://ai.google.dev/gemini-api/docs/media-resolution; https://ai.google.dev/gemini-api/docs/pricing"
+  },
+  {
+   "claim": "Qwen3-VL Technical Report: Qwen3-VL-8B-Instruct DocVQA 96.1 / OCRBench 896 (Table 4, vs GPT-5 nano high 88.2); Qwen3-VL-235B-A22B-Instruct 97.1 and GPT-5 (high) 91.5, Gemini 2.5 Pro 94.0 (Table 2); Qwen3-VL-32B-Instruct 96.9 (Table 3)",
+   "source": "context/05-research-docai.md; https://arxiv.org/abs/2511.21631"
+  },
+  {
+   "claim": "Together hosts Qwen3-VL-32B-Instruct at $0.50/$1.50 per 1M tokens and lists DocVQA 93.3 (differs from the report's 96.9)",
+   "source": "context/05-research-docai.md; https://www.together.ai/models/qwen3-vl-32b-instruct"
+  },
+  {
+   "claim": "DeepInfra hosts Qwen3-VL-235B-A22B-Instruct at $0.20 input / $0.88 output per 1M tokens",
+   "source": "context/05-research-docai.md; https://deepinfra.com/Qwen/Qwen3-VL-235B-A22B-Instruct"
+  },
+  {
+   "claim": "Secondary aggregators list Qwen3-VL-8B-Instruct at $0.20 per 1M tokens on DeepInfra and Fireworks (medium confidence)",
+   "source": "context/05-research-docai.md; https://cloudprice.net/models/alibaba-qwen3-vl-plus"
+  },
+  {
+   "claim": "Derived: 1,017 tokens x $0.20/M = ~$0.20 per 1K pages at hosted per-token rates (input only)",
+   "source": "Derived from evals/RESULTS.md 1024px token count and the $0.20/M aggregator rate in 05-research-docai.md"
+  },
+  {
+   "claim": "Qwen3-VL checkpoints Apache-2.0; 4B and 8B released 2025-10-15; README documents serving via both vLLM and SGLang",
+   "source": "context/05-research-docai.md; https://github.com/QwenLM/Qwen3-VL"
+  },
+  {
+   "claim": "olmOCR-2-7B-1025 is fine-tuned from Qwen2.5-VL-7B; olmOCR-Bench 82.4; synthetic training data cost ~$0.12 per page via Claude Sonnet 4",
+   "source": "context/05-research-docai.md; https://arxiv.org/html/2510.19817"
+  },
+  {
+   "claim": "dots.mocr olmOCR-Bench 83.9 (3B, MIT, integrated in vLLM 0.11.0)",
+   "source": "context/05-research-docai.md; https://github.com/rednote-hilab/dots.ocr"
+  },
+  {
+   "claim": "InternVL3.5 Visual Resolution Router reduces visual tokens ~50% while retaining nearly 100% performance; 4.05x inference speedup over InternVL3",
+   "source": "context/05-research-docai.md; https://arxiv.org/html/2508.18265v1"
+  },
+  {
+   "claim": "DeepSeek-OCR: 97% OCR precision at compression <10x, ~60% at 20x; surpasses GOT-OCR2.0 using 100 vision tokens",
+   "source": "context/05-research-docai.md; https://arxiv.org/abs/2510.18234"
+  },
+  {
+   "claim": "vLLM ships --video-pruning-rate (EVS default, VidCom2 for Qwen3-VL) with no image-pruning flag; RFC #45098 '--image-pruning-rate' opened 2026-06-10, open, no maintainer comments visible",
+   "source": "context/05-research-docai.md; https://docs.vllm.ai/en/stable/features/multimodal_inputs/; https://github.com/vllm-project/vllm/issues/45098"
+  },
+  {
+   "claim": "SGLang EVS module is video-only and its README states it 'cannot work with VLMs that use positional embeddings [Such as Qwen2.5VL]'; no image-token pruning code found",
+   "source": "context/05-research-docai.md; https://github.com/sgl-project/sglang/blob/main/python/sglang/srt/multimodal/evs/README.md"
+  },
+  {
+   "claim": "Morph Standby tier bills 50% of standard per-token rates and admits requests only when fleet capacity is under ~25%",
+   "source": "context/05-research-morph.md; https://docs.morphllm.com/sdk/components/fast-models"
+  },
+  {
+   "claim": "DeepSeek off-peak rates are half of peak rates",
+   "source": "context/05-research-caching.md; https://api-docs.deepseek.com/quick_start/pricing"
+  },
+  {
+   "claim": "MI355X rental $2.29-2.95 per GPU-hour (Wafer blog)",
+   "source": "context/05-research-wafer.md; https://www.wafer.ai/blog/qwen36-mi355x"
+  },
+  {
+   "claim": "Relace/Morph specialized-model playbook: LoRA SFT on 3-8B open coding models plus task-specific speculators (Morph: 3.07x vs 1.93x generic draft)",
+   "source": "context/05-research-morph.md; https://relace.ai/blog/relace-apply-3; https://www.morphllm.com/blog/codegen-inference-research"
+  },
+  {
+   "claim": "Context per page 1-2.3K tokens (derived from measured 1,017-2,201 prompt tokens plus a short question)",
+   "source": "Derived from /home/user/dexa/evals/RESULTS.md 'Multimodal execution thesis' table"
+  },
+  {
+   "claim": "Kill-gate thresholds (ANLS +1.0/+2.0 pts; 93.0/95.0; 1.5x/2.5x; 0.00/+0.02; $0.42/$0.10 per 1K; 1 pt at 2x / 3 pts at 5x; 0 of 5 / 2 of 5) are proposed pre-registered numbers; the +0.02 is modal_vlm_moat.py's own verdict threshold, 2.7x is the measured frontier point, $0.42/1K is the derived Gemini medium-page anchor; the rest are proposals",
+   "source": "/home/user/dexa/evals/modal_vlm_moat.py verdict line; /home/user/dexa/evals/RESULTS.md; context/05-research-docai.md (Gemini derivation); remaining thresholds proposed in this brief"
+  },
+  {
+   "claim": "Experiment cost estimates (2-15 A100-hours, 1-10 days per row) are planning estimates; precedent: the frontier run's Modal timeout is 5400 s per invocation and the voice repo estimated ~2 GPU-hours per tuning idea",
+   "source": "/home/user/dexa/evals/modal_vlm_frontier.py (timeout=5400); context/02-evidence-ledger-voice.md entry vi-open-armD-tuning"
+  }
+ ],
+ "unproven": [
+  {
+   "claim": "Content-aware in-model visual-token pruning beats naive resize at a matched token budget on documents (the execution-owned moat)",
+   "experiment": "Reimplement Qwen2.5-VL get_rope_index position handling for a pruned token set in the HF path (recorded blocker: [3,1671] computed positions vs [3,881] masked), then run evals/modal_vlm_moat.py at FRACTIONS 0.5 and 0.25 on DocVQA; proceed if best prune-norm/prune-query accuracy minus resize accuracy >= +0.02 (the script's own verdict threshold); kill if <= 0.00",
+   "cost_estimate": "6-15 A100-80GB hours; 5-10 engineering days (planning estimate)"
+  },
+  {
+   "claim": "Qwen3-VL-8B reproduces >= 93 DocVQA ANLS on this harness and shows the same resize frontier shape as Qwen2.5-VL-7B",
+   "experiment": "Rerun evals/modal_vlm_frontier.py with Qwen/Qwen3-VL-8B-Instruct, an ANLS scorer, N >= 1,000 pages, serving mode (CUDA graphs on); compare to the vendor-reported 96.1",
+   "cost_estimate": "4-8 A100-hours; 2 calendar days"
+  },
+  {
+   "claim": "The 0.925 vs 0.880 Qwen-vs-GPT-4o gap survives ANLS scoring and N >= 1,000 pages",
+   "experiment": "Re-score the archived 200-page predictions with ANLS; rerun both models on 1,000 DocVQA pages with the same prompt; record GPT-4o usage tokens and usage-based $/1K pages",
+   "cost_estimate": "2 A100-hours plus OpenAI API spend; 2 calendar days"
+  },
+  {
+   "claim": "Adaptive per-page visual-token budgeting beats a fixed 1024px operating point on accuracy per GPU-hour",
+   "experiment": "Route pages by pixel density / estimated text size to 768/1024/1536px budgets; measure ANLS and pages per GPU-hour vs the fixed 1024px point and vs vanilla vLLM default resolution",
+   "cost_estimate": "4 A100-hours; 3 calendar days"
+  },
+  {
+   "claim": "Measured serving cost per 1K pages at realistic utilization, in serving mode, including transcription-length outputs, is below the Gemini medium-page anchor ($0.42/1K input-only)",
+   "experiment": "vllm bench serve-style load at 8/32/128 concurrency against serve/modal_doc_vlm_serve.py; record GPU-hours, p50/p95 TTFT and end-to-end latency; repeat with 1,000-token outputs; compute $/1K pages at 50% and 100% utilization",
+   "cost_estimate": "6 A100-hours; 3 calendar days"
+  },
+  {
+   "claim": "gpt-5.6-luna, Gemini 3.8 Flash (medium), and Claude Haiku 4.5 do not match the open model's accuracy at a similar usage-based per-page cost",
+   "experiment": "Extend evals/modal_incumbent_docvqa.py to those models plus Azure DI, Google Document AI, Textract, Reducto r-1, Mistral OCR 4.1; same pages, same scorer; record returned usage counters and compute $/1K pages",
+   "cost_estimate": "API spend only (no GPU); 1-2 calendar days"
+  },
+  {
+   "claim": "Buyers move from per-page OCR/parser bills or frontier APIs for a per-page price backed by a rerunnable same-pages benchmark",
+   "experiment": "Five design partners rerun the published harness on their own pages against their current vendor; count conversions to paid usage",
+   "cost_estimate": "0 GPU-hours; 4 calendar weeks"
+  }
+ ],
+ "founder_decisions": [
+  {
+   "decision": "Whether the per-page document-AI market is worth entering as a company versus treating document VLM serving as a feature of another direction",
+   "options": "Enter as a standalone provider; ship as one endpoint inside a broader VLM/agent provider; do not enter",
+   "why_not_ours_to_make": "The research files give list prices and tier breakpoints (Azure $0.60/1K above 1M pages; Google above 5M) but no volumes or market sizes; the founder's rule forbids market-size judgments; design-partner conversions are the evidence that would inform it"
+  },
+  {
+   "decision": "Whether the adjacency of Reducto r-1 ($0.01/page), Mistral OCR 4 ($2-4/1K), cloud OCR tiers, and hosted Qwen3-VL on Together/DeepInfra/Fireworks matters",
+   "options": "Compete head-on on the same-pages benchmark; position as the open-weight/self-hostable alternative; partner or resell",
+   "why_not_ours_to_make": "The founder's rule forbids 'already exists' judgments; the facts are stated neutrally in section 9 and none of those vendors publishes a same-pages result against open VLMs"
+  },
+  {
+   "decision": "Hosted endpoint vs BYOC vs harness-only open source",
+   "options": "Hosted per-page API (serve/modal_doc_vlm_serve.py); BYOC compose in the customer's cloud (dexa_platform/docker-compose.byoc.yml); release only the benchmark harness and operating-point config",
+   "why_not_ours_to_make": "All three artifacts exist in the repo; which one buyers want is unmeasured and depends on the founder's go-to-market preference"
+  },
+  {
+   "decision": "Model choice: Qwen2.5-VL-7B vs Qwen3-VL-8B vs a document fine-tune",
+   "options": "Qwen2.5-VL-7B (measured 0.925 vs 0.880 relaxed on 200 pages); Qwen3-VL-8B (vendor-reported 96.1 DocVQA, unreproduced, Apache-2.0); fine-tune on document data (olmOCR-2-7B precedent at ~$0.12/page synthetic data)",
+   "why_not_ours_to_make": "Week-1 ANLS reproduction is the evidence; the trade between measured-but-older and vendor-reported-but-newer, and whether to invest in training, is a founder risk call"
+  },
+  {
+   "decision": "GPU class and hardware vendor",
+   "options": "A100-80GB (all measurements); H100/H200; L40S; AMD MI355X ($2.29-2.95/GPU-hour rental per Wafer)",
+   "why_not_ours_to_make": "Only A100-80GB is measured for this workload; the cost floor on other parts is unmeasured and the choice depends on the founder's capacity strategy"
+  },
+  {
+   "decision": "Whether to fund the in-model pruning moat sprint before or after market validation",
+   "options": "Run the 6-15 GPU-hour spike first so the pitch is not 'a config flag'; validate demand first as the repo recorded ('gate the moat sprint on market validation'); skip the sprint and rely on benchmark plus per-page pricing",
+   "why_not_ours_to_make": "The sprint has no result either way; sequencing is a capital-allocation judgment the repo explicitly deferred"
+  },
+  {
+   "decision": "Product shape: question-answering/extraction vs full-page transcription vs both",
+   "options": "QA/extraction only (measured); transcription/parse (unmeasured cost and quality on olmOCR-Bench); both with separate per-page tiers",
+   "why_not_ours_to_make": "Only QA is measured; transcription economics are decode-heavy and unmeasured; the choice defines which incumbents are the comparison set"
+  },
+  {
+   "decision": "Per-page vs per-token pricing, and whether to publish the modeled compute floor ($0.017-0.023 per 1K pages at 100% utilization)",
+   "options": "Per-page tiers by output type with a batch/standby discount; per-token like hosted Qwen3-VL providers; hybrid",
+   "why_not_ours_to_make": "Where list price sits between the modeled floor and the $0.20-$15 per 1K anchors is a margin and positioning judgment; the floor itself is a model with stated assumptions, not a measurement"
+  }
+ ]
+}

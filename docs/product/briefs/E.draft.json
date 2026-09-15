@@ -1,0 +1,292 @@
+{
+ "id": "E",
+ "name": "Verifier-guided search inference for code (pass@16 quality at pass@4 cost)",
+ "one_line": "A Morph-style specialized provider for coding agents: send a prompt plus tests, an in-engine verify-abort-refill scheduler returns the first passing sample; measured 2.63x fewer decode tokens and 2.12x faster at identical pass@16 on HumanEval with an 8B model, with the repo's own 'buyer-replicable' verdict confronted via pre-registered gates.",
+ "numeric_claims": [
+  {
+   "claim": "Continuous scheduler pass@16 0.884 vs naive 0.884 (identical)",
+   "source": "/home/user/dexa/evals/RESULTS.md section 'Continuous-batch scheduler'; context/01-evidence-ledger-dexa.md entry verifier-early-stop"
+  },
+  {
+   "claim": "327,607 vs 862,050 decode tokens = 2.63x fewer",
+   "source": "/home/user/dexa/evals/RESULTS.md 'Continuous-batch scheduler'; 01-evidence-ledger-dexa.md verifier-early-stop"
+  },
+  {
+   "claim": "86.6 s vs 183.8 s end-to-end wall = 2.12x faster",
+   "source": "/home/user/dexa/evals/RESULTS.md 'Continuous-batch scheduler'; 01-evidence-ledger-dexa.md verifier-early-stop"
+  },
+  {
+   "claim": "Round engine: 330,174 tokens (2.60x), 110.0 vs 168.1 s GPU generation wall (1.53x), pass 0.878 vs 0.896, verify 18.6 vs 27.0 s",
+   "source": "/home/user/dexa/evals/RESULTS.md 'Live engine'; 01-evidence-ledger-dexa.md verifier-early-stop"
+  },
+  {
+   "claim": "Post-hoc pass@16 0.909; naive 860,830 tokens",
+   "source": "/home/user/dexa/evals/RESULTS.md 'Efficiency proof'; 01-evidence-ledger-dexa.md verifier-early-stop"
+  },
+  {
+   "claim": "Setup: 164 HumanEval problems, N=16, B=4, temperature 0.8, top_p 0.95, max_tokens 640, seed 0, Llama-3.1-8B-Instruct, A100-80GB, vLLM 0.24.0, max_model_len 4096, enforce_eager",
+   "source": "/home/user/dexa/evals/modal_verifier_sched.py (sp(), EngineArgs); 01-evidence-ledger-dexa.md verifier-early-stop Setup"
+  },
+  {
+   "claim": "Verifier = check() in a subprocess with 10 s timeout",
+   "source": "/home/user/dexa/evals/modal_verifier_sched.py passes(); evals/modal_verifier_engine.py line ~79"
+  },
+  {
+   "claim": "Naive baseline ran second on a warm prefix cache (bias against scheduler)",
+   "source": "/home/user/dexa/evals/modal_verifier_sched.py module docstring; evals/RESULTS.md 'Continuous-batch scheduler'"
+  },
+  {
+   "claim": "modal_verifier_sched.py is 194 lines",
+   "source": "wc -l /home/user/dexa/evals/modal_verifier_sched.py; 03-build-inventory.md evals row"
+  },
+  {
+   "claim": "Weak verifier Llama-3.1-8B: oracle 0.909, weak 0.848 (93%), visible FP 7.7%, oracle cost 2.85x, weak cost 3.04x",
+   "source": "/home/user/dexa/evals/RESULTS.md 'Robustness'; 01-evidence-ledger-dexa.md verifier-weak-robustness"
+  },
+  {
+   "claim": "Weak verifier Qwen2.5-Coder-7B: oracle 0.963, weak 0.921 (96%), FP 3.8%, oracle cost 3.45x, weak cost 3.52x",
+   "source": "/home/user/dexa/evals/RESULTS.md 'Robustness'; 01-evidence-ledger-dexa.md verifier-weak-robustness"
+  },
+  {
+   "claim": "Weak verifier = first 3 asserts of check() (VISIBLE_K = 3)",
+   "source": "/home/user/dexa/evals/modal_robustness.py line 43"
+  },
+  {
+   "claim": "HumanEval pass 0.689 -> 0.829 -> 0.902 at N=1/4/16; tokens 52k -> 858k; TriviaQA 0.680 -> 0.693",
+   "source": "/home/user/dexa/evals/RESULTS.md 'Compute-allocation eval'; 01-evidence-ledger-dexa.md compute-allocation-map"
+  },
+  {
+   "claim": "Best-of-N costs ~16x tokens naively",
+   "source": "/home/user/dexa/evals/RESULTS.md 'What it says' item 3; 01-evidence-ledger-dexa.md compute-allocation-map caveats"
+  },
+  {
+   "claim": "Contention v2 on SGLang: generic/agentic turns/s ratio 1.38x at C=8, 1.69x at C=32, 1.87x at C=96; C=1 4.0x is a cold-start artifact; W=4k, B=8, k=2; ~1.85x steady state",
+   "source": "/home/user/dexa/evals/RESULTS.md 'Contention v2'; 01-evidence-ledger-dexa.md contention-v2-early-stop; 04-conflicts.md superseded list (C=1 artifact)"
+  },
+  {
+   "claim": "Agentic-value v1: 1.4x/5.0x/11.5x vs re-prefill, 1.00x/1.01x/1.02x vs cached, 2x/4x/4x fewer decode tokens at W/B 4k/4, 16k/8, 32k/8",
+   "source": "/home/user/dexa/evals/RESULTS.md 'Agentic-serving value benchmark v1'; 01-evidence-ledger-dexa.md agentic-serving-value-v1"
+  },
+  {
+   "claim": "vLLM 0.24 n=8 decode/step 174x n=1 at 128k; SGLang n=8 vs n=1 2.2x at 128k, 1.04x at 32k",
+   "source": "01-evidence-ledger-dexa.md vllm-decode-pathology and sglang-gate; /home/user/dexa/evals/RESULTS.md 'Decode-pathology sweep' and 'The SGLang gate'"
+  },
+  {
+   "claim": "pass@16 values across runs: 0.909 (post-hoc), 0.896/0.878 (round engine), 0.884 (sched), 0.902 (compute-allocation)",
+   "source": "/home/user/dexa/evals/RESULTS.md sections 'Efficiency proof', 'Live engine', 'Continuous-batch scheduler', 'Compute-allocation eval'"
+  },
+  {
+   "claim": "'2.8-4.7x cheaper at equal quality' (2026-07-15) is superseded",
+   "source": "04-conflicts.md 'Superseded claims' list, evals/RESULTS.md 'Product implication' entry"
+  },
+  {
+   "claim": "Conflict 6: 2026-08-02 text 'one large, durable lever' vs FINDINGS.md 'buyer-replicable, not a moat'; stateful thesis 2026-08-05",
+   "source": "04-conflicts.md conflict 6 and CHRONOLOGY paragraph; /home/user/dexa/docs/FINDINGS.md efficiency table"
+  },
+  {
+   "claim": "'buyer-replicable, not a moat'; 'a buyer captures most of the 1.85x with round-based early-stop in their own orchestration'",
+   "source": "/home/user/dexa/docs/FINDINGS.md table row 'Verifier-guided early-stop'; evals/RESULTS.md 'Contention v2' finding 3"
+  },
+  {
+   "claim": "HumanEval sweep ~4.5 min of A100 per model-config (our derivation: 183.8 s + 86.6 s)",
+   "source": "derived in this brief from /home/user/dexa/evals/RESULTS.md 'Continuous-batch scheduler' wall times; labeled estimate"
+  },
+  {
+   "claim": "Unproven-table GPU-hour and calendar-day estimates (40-80 A100-hours/10 days; 10 GPU-hours/3 days; 6 GPU-hours/2 days; 12 GPU-hours/4 days; 5 days collection; ~$200 API spend/2 days; 100 tasks; 20 test sets)",
+   "source": "estimates made in this brief, labeled 'our estimate'; not measured anywhere in the repos or context"
+  },
+  {
+   "claim": "Verify latency contrast 5-60 s repo tests vs 10 ms HumanEval",
+   "source": "HumanEval figure derived from evals/RESULTS.md 'Live engine' verify wall 27.0 s over 164x16 samples; repo-test range is an unmeasured assumption stated as the experiment's parameter"
+  },
+  {
+   "claim": "dexa_platform: 29 tests pass; gateway app.py forces stream=False at line 127",
+   "source": "03-build-inventory.md dexa 'Tests run' item 4 and gateway component row"
+  },
+  {
+   "claim": "voice-inference harness: 27 tests pass with pytest-asyncio; ~2,000 lines harness",
+   "source": "03-build-inventory.md voice-inference 'Tests run' item 2 and REUSABILITY SUMMARY"
+  },
+  {
+   "claim": "OpenHands recommends Qwen3.6-35B-A3B on vLLM/SGLang; context 32,768 recommended",
+   "source": "05-research-agents.md, https://docs.openhands.dev/openhands/usage/llms/local-llms"
+  },
+  {
+   "claim": "Cursor Composer 2 started from Kimi K2.5 base; Kimi's account said partnership involved Fireworks",
+   "source": "05-research-agents.md, https://tech.yahoo.com/ai/copilot/articles/cursor-admits-coding-model-built-184109599.html"
+  },
+  {
+   "claim": "Cognition SWE-1.6 up to 950 tok/s on Cerebras; SWE-grep-mini over 2,800 tok/s, SWE-grep over 650 tok/s",
+   "source": "05-research-agents.md https://www.cerebras.ai/blog/case-study-cognition-x-cerebras; 05-research-morph.md https://cognition.com/blog/swe-grep"
+  },
+  {
+   "claim": "Open-weight models a majority of OpenRouter tokens by mid-2026, concentrated in coding and agentic workloads",
+   "source": "05-research-agents.md, https://stateofopensource.ai/"
+  },
+  {
+   "claim": "Morph customers create.xyz, databutton, continue.dev, Framer, Webflow, Block, Vercel (founder-stated)",
+   "source": "05-research-morph.md, https://news.ycombinator.com/item?id=44490863 and https://tejasbhakta.com/morph"
+  },
+  {
+   "claim": "TraceLab: ~4,300 sessions; median prefix 126,180 (Claude) / 115,584 (Codex) tokens; ~857/886 new input; 252/184 output; median human gap 1.4 min, p90 20.6 min",
+   "source": "05-research-agents.md, https://arxiv.org/html/2606.30560"
+  },
+  {
+   "claim": "Mooncake Codex traces ~131:1 input:output",
+   "source": "05-research-agents.md, https://vllm.ai/blog/2026-05-06-mooncake-store"
+  },
+  {
+   "claim": "Search is 56.6% of tokens in coding traces (Relace); coding agents spend 60% of turns searching (Morph)",
+   "source": "05-research-morph.md, https://relace.ai/blog/fast-agentic-search and https://docs.morphllm.com/sdk/components/warp-grep"
+  },
+  {
+   "claim": "Fireworks prompt caching within 1 replica, 50% cached discount, session-affinity headers, x-multi-turn-session-id",
+   "source": "05-research-agents.md, https://docs.fireworks.ai/guides/prompt-caching"
+  },
+  {
+   "claim": "Fireworks 350 ms TTFT case with adaptive speculative decoding",
+   "source": "05-research-voice.md, https://inworld.ai/resources/fastest-llm-inference-api"
+  },
+  {
+   "claim": "Morph Fast Apply $0.80/$1.20 (7B) and $0.90/$1.90 (14B) per M tokens; 10,500 tok/s; Router $0.005/request; Reflexes $0.001/event; standby tier 50%; engine 'forked from vLLM'; team size 3",
+   "source": "05-research-morph.md, https://morphllm.com, https://docs.morphllm.com, https://news.ycombinator.com/item?id=48739038, https://www.ycombinator.com/companies/morph"
+  },
+  {
+   "claim": "Relace Apply 3 $0.85/$1.25 per M, 256K context; LoRA SFT on 3-8B, FP8 via vLLM llm-compressor, 10k+ tok/s; FAS trained on 8xH200 ~1.5 days",
+   "source": "05-research-morph.md, https://openrouter.ai/compare/morph/morph-v3-fast/relace/relace-apply-3, https://relace.ai/blog/relace-apply-3, https://relace.ai/blog/fast-agentic-search"
+  },
+  {
+   "claim": "WarpGrep SWE-Bench Pro lifts +2.1, +3.1, +3.7 points",
+   "source": "05-research-morph.md, https://www.ycombinator.com/launches/PZx-warpgrep-v2-code-search-subagent-1-on-swe-bench-pro"
+  },
+  {
+   "claim": "Morph Launch HN: 'even claude is well over 11% error rates with search and replace'",
+   "source": "05-research-morph.md, https://news.ycombinator.com/item?id=44490863"
+  },
+  {
+   "claim": "Codex issue: ~$15.9 for ~20M tokens across 112 model calls in 4 turns",
+   "source": "05-research-agents.md, https://github.com/openai/codex/issues/25604"
+  },
+  {
+   "claim": "Tensormesh reserved H200 $2.50/hr; cached input $0; post-v1 pricing 30% of estimated savings",
+   "source": "05-research-kvcache.md, https://www.tensormesh.ai/pricing and https://www.tensormesh.ai/faq"
+  },
+  {
+   "claim": "MI355X rental $2.29-$2.95 per GPU-hour",
+   "source": "05-research-wafer.md, https://www.wafer.ai/blog/qwen36-mi355x"
+  },
+  {
+   "claim": "Wafer Turbo models 2-2.8x faster than base SGLang/vLLM; Wafer Pass $10/week Starter, $25/week Privacy",
+   "source": "05-research-wafer.md, https://www.ycombinator.com/launches/Q9i-wafer-pass-flat-rate-access-to-the-fastest-open-source-llms"
+  },
+  {
+   "claim": "Anthropic prompt cache TTL 5 min default / 1 h option; OpenAI 30 min (GPT-5.6+) or 24h retention",
+   "source": "05-research-caching.md, https://platform.claude.com/docs/en/build-with-claude/prompt-caching and https://developers.openai.com/api/docs/guides/prompt-caching"
+  },
+  {
+   "claim": "Managed Agents $0.08 per session-hour while running",
+   "source": "05-research-agents.md / 05-research-caching.md, https://platform.claude.com/docs/en/about-claude/pricing"
+  },
+  {
+   "claim": "Anthropic ~400,000 Claude Code sessions, ~4 user turns per session, ~10 actions per prompt",
+   "source": "05-research-agents.md, https://www.anthropic.com/research/claude-code-expertise"
+  },
+  {
+   "claim": "Kimi K2.7 Code and GLM-5.2 are open-weight coding MoEs with vLLM/SGLang support",
+   "source": "05-research-agents.md, https://pub.towardsai.net/kimi-k2-7-code-vs-glm-5-2-which-open-weight-coding-model-to-self-host-on-vllm-d534abb882d6"
+  },
+  {
+   "claim": "Kill-gate thresholds (1.5x/2.0x, 1.3x/1.8x, 85%/90%, 1.3x/1.6x, 1.15x/1.3x, 4x/2.5x) are pre-registered choices made in this brief, anchored to the measured 2.63x, 2.12x, 93-96%, 1.69x, 1.53x->2.12x and 2.2x",
+   "source": "thresholds set in this brief; anchors from 01-evidence-ledger-dexa.md entries verifier-early-stop, verifier-weak-robustness, contention-v2-early-stop, sglang-gate"
+  }
+ ],
+ "unproven": [
+  {
+   "claim": "The token/wall-clock gain holds on repo-level tasks with real test harnesses, not HumanEval",
+   "experiment": "SWE-bench-Verified subset (100 tasks), N=16, B=4, sandboxed pytest as verifier; measure decode tokens, end-to-end wall, pass@16 vs naive; record verify latency separately",
+   "cost_estimate": "~40-80 A100-hours (test execution dominates), ~10 calendar days (estimate)"
+  },
+  {
+   "claim": "The gain holds at 30B-A3B class and larger open MoEs",
+   "experiment": "Rerun evals/modal_verifier_sched.py on Qwen3.6-35B-A3B (OpenHands default) and one larger open MoE with identical gates",
+   "cost_estimate": "~10 GPU-hours, ~3 days (estimate)"
+  },
+  {
+   "claim": "B-way branching over 100K+ shared prefixes is not pathological on the chosen engine",
+   "experiment": "8-way branch over 32k/64k/128k prefixes as independent prefix-cached requests on vLLM 0.24 and SGLang; decode/step n=8 vs n=1 (reuse modal_decode_pathology.py, modal_sglang_pathology.py)",
+   "cost_estimate": "~6 GPU-hours, ~2 days (estimate)"
+  },
+  {
+   "claim": "In-engine continuous abort beats the best client-side round loop under load with real verification",
+   "experiment": "One run, one engine, three arms (naive / client rounds over HTTP / in-engine), real tests, concurrency C in {8,32,96}; report tokens, wall, turns/s",
+   "cost_estimate": "~12 GPU-hours, ~4 days (estimate)"
+  },
+  {
+   "claim": "Verifier latency does not consume the wall-clock win when tests take seconds to minutes",
+   "experiment": "Measure verify-on-critical-path share when tests take 5-60 s (repo tests) vs ~10 ms (HumanEval) inside the repo-level run",
+   "cost_estimate": "included in the repo-level experiment"
+  },
+  {
+   "claim": "Customers' visible tests behave like the first-3-asserts proxy",
+   "experiment": "Replay 20 customer-provided test sets over the existing samples; measure false-positive rate and no-visible-pass rate vs hidden suites",
+   "cost_estimate": "0 GPU-hours beyond existing samples; ~5 days of collection (estimate)"
+  },
+  {
+   "claim": "Per-solve pricing clears GPU cost at production concurrency",
+   "experiment": "Instrument tokens and GPU-seconds per solve at C=32 on rented A100/H200 ($2.50/hr H200 per 05-research-kvcache.md) and compare to Morph-level token rates",
+   "cost_estimate": "derived from the repo-level and contention experiments; no extra GPU time"
+  },
+  {
+   "claim": "Latency or cost advantage vs Fireworks/Together/Morph client-side loops",
+   "experiment": "Same prompts and tests; client-side best-of-N loop on their APIs vs the in-engine endpoint; compare tokens billed, wall, pass rate",
+   "cost_estimate": "~$200 of API spend, ~2 days (estimate)"
+  }
+ ],
+ "founder_decisions": [
+  {
+   "decision": "Delivery form: hosted API vs open-source scheduler vs SDK vs all three",
+   "options": "Hosted /v1/solve endpoint; Apache-2.0 scheduler plugin for vLLM/SGLang; client SDK implementing round-based early stop on any provider; a combination",
+   "why_not_ours_to_make": "The ledger says the token saving is buyer-replicable; whether the in-engine increment (bounded 1.53x -> 2.12x across two runs) justifies a hosted engine is the section 10 row-6 gate plus a business-model judgment. Morph/Relace are hosted and closed; LMCache/Tensormesh is OSS plus hosted (05-research-kvcache.md)."
+  },
+  {
+   "decision": "Whether Morph/Relace/Cognition adjacency matters",
+   "options": "Treat as validation of the buyer and distribution pattern; treat as a reason to pick a different beachhead; treat as a partnership/acquirer path",
+   "why_not_ours_to_make": "Facts only: none ships a verifier endpoint in the research files; all sell to the same buyer; Morph's published SWE-Bench Pro lifts are +2.1 to +3.7 points. The founder's rule forbids an 'already exists' judgment here."
+  },
+  {
+   "decision": "Model choice",
+   "options": "7-8B (Llama-3.1-8B / Qwen2.5-Coder-7B, measured); 30B-A3B class (OpenHands default, unmeasured); frontier open MoE (Kimi K2.7 Code, GLM-5.2, unmeasured); a fine-tuned code model with a custom speculator (Relace/Morph recipe)",
+   "why_not_ours_to_make": "Only 7-8B is measured; the Unproven row-2 experiment informs it, and the choice sets GPU cost, ceiling pass rate, and which buyers can use the endpoint."
+  },
+  {
+   "decision": "GPU class",
+   "options": "A100 (measured); H100/H200; B200; AMD MI355X (Wafer's numbers)",
+   "why_not_ours_to_make": "Nothing is measured off A100-80GB; unit economics (Unproven row 7) depend on the rental rate and per-solve GPU-seconds that must be measured on the chosen class."
+  },
+  {
+   "decision": "Engine",
+   "options": "vLLM 0.24 LLMEngine (measured scheduler); SGLang (measured under load and at long prefixes); a fork of either with the scheduler in-tree",
+   "why_not_ours_to_make": "vLLM's n>1 pathology at long prefixes (174x) vs SGLang's 2.2x is measured, but the product's independent-request branching at 100K+ is not (Unproven row 3); forking trades maintenance burden for control."
+  },
+  {
+   "decision": "Verifier scope",
+   "options": "Customer-supplied tests only; add a learned verifier/classifier in the style of Morph Reflexes; add static checks (lint/type) as cheap pre-verifiers",
+   "why_not_ours_to_make": "The repos contain no evidence for learned verifiers; the measured 93-96% ceiling retention is for test-based verifiers only."
+  },
+  {
+   "decision": "Pricing unit",
+   "options": "Per solve with a token budget; per token at peer list rates; reserved GPU-hours with scheduler included; savings-share (Tensormesh's 30%-of-savings precedent)",
+   "why_not_ours_to_make": "Per-solve GPU-seconds at production concurrency are unmeasured; the architecture makes token bills fall, so the unit determines whether the provider's revenue and the buyer's saving point the same way."
+  },
+  {
+   "decision": "Market size and the generation-vs-search share of coding-agent spend",
+   "options": "Judge the beachhead large enough; judge it too narrow; defer until pilot data",
+   "why_not_ours_to_make": "Explicitly excluded by the founder's rule; the files give search at 56.6% of coding-trace tokens (Relace) and Anthropic's ~400k sessions with ~4 user turns and ~10 actions per prompt, but no spend figures."
+  },
+  {
+   "decision": "How to read the ledger's 'buyer-replicable, not a moat' verdict",
+   "options": "Disqualifying for a hosted engine; a statement about where to place the gate (section 10 row 6); irrelevant if distribution and per-solve pricing are the product",
+   "why_not_ours_to_make": "The repo itself left this unreconciled (04-conflicts.md conflict 6) and moved to a different thesis without amending it; it is a judgment about defensibility, not a measurement."
+  }
+ ]
+}

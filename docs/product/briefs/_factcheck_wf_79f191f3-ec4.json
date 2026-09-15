@@ -1,0 +1,350 @@
+{
+ "checked": [
+  {
+   "claim": "Continuous scheduler pass@16 0.884 vs naive 0.884 (identical)",
+   "verdict": "correct",
+   "correction": "Matches evals/RESULTS.md table (pass@16 0.884 / 0.884, 'identical') and ledger entry verifier-early-stop. One run, one model (Llama-3.1-8B-Instruct), commit 354a3b7 2026-07-15.",
+   "source": "/home/user/dexa/evals/RESULTS.md 'Continuous-batch scheduler'; 01-evidence-ledger-dexa.md verifier-early-stop"
+  },
+  {
+   "claim": "327,607 vs 862,050 decode tokens = 2.63x fewer",
+   "verdict": "correct",
+   "correction": "862,050/327,607 = 2.63x; RESULTS.md row 'decode tokens (incl. aborted partials)'. Aborted partials are counted (script comment 'honest bill').",
+   "source": "/home/user/dexa/evals/RESULTS.md 'Continuous-batch scheduler'; evals/modal_verifier_sched.py sched_tokens accounting"
+  },
+  {
+   "claim": "86.6 s vs 183.8 s end-to-end wall = 2.12x faster",
+   "verdict": "correct",
+   "correction": "Matches RESULTS.md 'END-TO-END wall (s) 183.8 / 86.6 / 2.12x'. Wall includes synchronous subprocess verification inside the step loop; excludes engine boot/model load.",
+   "source": "/home/user/dexa/evals/RESULTS.md 'Continuous-batch scheduler'; evals/modal_verifier_sched.py run()"
+  },
+  {
+   "claim": "Round engine: 330,174 tokens (2.60x), 110.0 vs 168.1 s GPU generation wall (1.53x), pass 0.878 vs 0.896, verify 18.6 vs 27.0 s",
+   "verdict": "correct",
+   "correction": "All five numbers match RESULTS.md 'Live engine' table. Qualifier the brief omits: the engine script's own docstring calls wall-clock 'directional (prefix-cache state persists across calls)'; only the token ratio is called the primary metric.",
+   "source": "/home/user/dexa/evals/RESULTS.md 'Live engine'; evals/modal_verifier_engine.py module docstring"
+  },
+  {
+   "claim": "Post-hoc pass@16 0.909; naive 860,830 tokens",
+   "verdict": "correct",
+   "correction": "Matches RESULTS.md 'Efficiency proof' (naive 860,830 tok, pass@16 0.909; B=4 302,349 = 2.85x; B=1 182,431 = 4.72x). Post-hoc cost accounting from one n=16 generation, seed 0.",
+   "source": "/home/user/dexa/evals/RESULTS.md 'Efficiency proof'; evals/modal_verifier_search.py line 68"
+  },
+  {
+   "claim": "Setup: 164 HumanEval problems, N=16, B=4, temperature 0.8, top_p 0.95, max_tokens 640, seed 0, Llama-3.1-8B-Instruct, A100-80GB, vLLM 0.24.0, max_model_len 4096, enforce_eager",
+   "verdict": "misquoted",
+   "correction": "Everything matches modal_verifier_sched.py except 'seed 0': sp(nn, seed) is called with launched[idx]+1 and s+1, i.e. per-sample seeds 1..16 in both arms (which is why pass@16 is identical by construction). 'seed 0' is what modal_verifier_search.py, modal_robustness.py and modal_eval_compute.py use (SamplingParams n=N, seed=0) and what the ledger's aggregated Setup line says. Also unstated: gpu_memory_utilization=0.9; model id is unsloth/Llama-3.1-8B-Instruct.",
+   "source": "/home/user/dexa/evals/modal_verifier_sched.py sp()/launch()/naive loop; evals/modal_verifier_search.py:68; evals/modal_robustness.py:90; 01-evidence-ledger-dexa.md verifier-early-stop Setup"
+  },
+  {
+   "claim": "Verifier = check() in a subprocess with 10 s timeout",
+   "verdict": "correct",
+   "correction": "passes() in modal_verifier_sched.py builds code+test+check(entry) and runs subprocess.run([sys.executable,'-c',program], timeout=10); same code at modal_verifier_engine.py line 79. Verification is synchronous inside the engine.step() loop.",
+   "source": "/home/user/dexa/evals/modal_verifier_sched.py passes(); evals/modal_verifier_engine.py:72-84"
+  },
+  {
+   "claim": "Naive baseline ran second on a warm prefix cache (bias against scheduler)",
+   "verdict": "correct",
+   "correction": "Stated in the modal_verifier_sched.py module docstring ('Continuous runs first (cold prefix cache); naive second reuses the warm cache \u2014 a conservative bias toward naive'). Note: the RESULTS.md 'Continuous-batch scheduler' section itself does not mention this; only the script does. Same ordering bias exists in modal_verifier_engine.py (engine first, naive second).",
+   "source": "/home/user/dexa/evals/modal_verifier_sched.py docstring; evals/modal_verifier_engine.py:88-90"
+  },
+  {
+   "claim": "modal_verifier_sched.py is 194 lines",
+   "verdict": "correct",
+   "correction": "wc -l = 194; build inventory evals row also lists verifier_sched 194.",
+   "source": "wc -l /home/user/dexa/evals/modal_verifier_sched.py; 03-build-inventory.md evals row"
+  },
+  {
+   "claim": "Weak verifier Llama-3.1-8B: oracle 0.909, weak 0.848 (93%), visible FP 7.7%, oracle cost 2.85x, weak cost 3.04x",
+   "verdict": "correct",
+   "correction": "Matches RESULTS.md 'Robustness' table. Qualifier omitted: costs are post-hoc token accounting (es_b4() over one n=16, seed 0 generation), not a live scheduler run.",
+   "source": "/home/user/dexa/evals/RESULTS.md 'Robustness'; evals/modal_robustness.py:90,115; 01-evidence-ledger-dexa.md verifier-weak-robustness"
+  },
+  {
+   "claim": "Weak verifier Qwen2.5-Coder-7B: oracle 0.963, weak 0.921 (96%), FP 3.8%, oracle cost 3.45x, weak cost 3.52x",
+   "verdict": "correct",
+   "correction": "Matches RESULTS.md 'Robustness' table. Same post-hoc qualifier; this is the ONLY measurement of Qwen2.5-Coder-7B in the repo (the continuous scheduler and round engine were never run on it).",
+   "source": "/home/user/dexa/evals/RESULTS.md 'Robustness'; 01-evidence-ledger-dexa.md verifier-weak-robustness"
+  },
+  {
+   "claim": "Weak verifier = first 3 asserts of check() (VISIBLE_K = 3)",
+   "verdict": "correct",
+   "correction": "VISIBLE_K = 3 at modal_robustness.py line 43; visible_check(test_code, k) at line 51 parses HumanEval's 'def check' body. Ledger caveat: 'visible = first 3 asserts' is a proxy; HumanEval has no clean visible/hidden split.",
+   "source": "/home/user/dexa/evals/modal_robustness.py:43,51"
+  },
+  {
+   "claim": "HumanEval pass 0.689 -> 0.829 -> 0.902 at N=1/4/16; tokens 52k -> 858k; TriviaQA 0.680 -> 0.693",
+   "verdict": "correct",
+   "correction": "Matches RESULTS.md compute-allocation table. Qualifier omitted: N=1 ran at temperature 0.0 (greedy) while N=4/16 ran at 0.8 (modal_eval_compute.py:114), so 0.689 is a greedy baseline, not sampled pass@1; pass@k is an oracle selector (sampling ceiling); doc labels it 'directional, not a leaderboard'; undated, predates repo history.",
+   "source": "/home/user/dexa/evals/RESULTS.md 'Compute-allocation eval'; evals/modal_eval_compute.py:114-115; 01-evidence-ledger-dexa.md compute-allocation-map"
+  },
+  {
+   "claim": "Best-of-N costs ~16x tokens naively",
+   "verdict": "correct",
+   "correction": "RESULTS.md 'What it says' item 3: 'The cost is naive-16x'; 858k/52k = 16.5x; ledger caveat '+21 pts costs ~16x tokens naively'.",
+   "source": "/home/user/dexa/evals/RESULTS.md 'What it says' item 3; 01-evidence-ledger-dexa.md compute-allocation-map caveats"
+  },
+  {
+   "claim": "Contention v2 on SGLang: generic/agentic turns/s ratio 1.38x at C=8, 1.69x at C=32, 1.87x at C=96; C=1 4.0x is a cold-start artifact; W=4k, B=8, k=2; ~1.85x steady state",
+   "verdict": "correct",
+   "correction": "All match RESULTS.md 'Contention v2' and ledger contention-v2-early-stop (BOUNDED). Qualifiers: verification simulated via pass probability p (k = ceil(1/p), modal_contention.py:13,61), no real tests; distinct per-agent contexts (no cross-agent sharing); SGLang version unpinned; W=4k only.",
+   "source": "/home/user/dexa/evals/RESULTS.md 'Contention v2'; evals/modal_contention.py:13,44,61; 01-evidence-ledger-dexa.md contention-v2-early-stop; 04-conflicts.md superseded list (C=1)"
+  },
+  {
+   "claim": "Agentic-value v1: 1.4x/5.0x/11.5x vs re-prefill, 1.00x/1.01x/1.02x vs cached, 2x/4x/4x fewer decode tokens at W/B 4k/4, 16k/8, 32k/8",
+   "verdict": "correct",
+   "correction": "Matches RESULTS.md 'Agentic-serving value benchmark v1' table. Ledger status for this entry is FALSIFIED (the thesis), which the brief files under 'Bounded / contradicted' without stating the label. Verification simulated; single idle GPU; SGLang unpinned; 'early-stop runs waves and can increase latency on hard turns'.",
+   "source": "/home/user/dexa/evals/RESULTS.md 'Agentic-serving value benchmark v1'; evals/modal_agentic_value.py:20-22,45-46; 01-evidence-ledger-dexa.md agentic-serving-value-v1"
+  },
+  {
+   "claim": "vLLM 0.24 n=8 decode/step 174x n=1 at 128k; SGLang n=8 vs n=1 2.2x at 128k, 1.04x at 32k",
+   "verdict": "correct",
+   "correction": "Matches RESULTS.md 'Decode-pathology sweep' (21.9 -> 3812 ms, 174x) and 'The SGLang gate' (32k 20.9/21.7 = 1.04x; 128k 21.1/46.7 = 2.2x). Caveats: eager mode, prefix caching off, one run (vLLM); SGLang 4k n=1 point in timing noise, version unpinned, first measurement polluted by RadixAttention caching (fixed in 4c4bc9f).",
+   "source": "/home/user/dexa/evals/RESULTS.md 'Decode-pathology sweep', 'The SGLang gate'; 01-evidence-ledger-dexa.md vllm-decode-pathology, sglang-gate"
+  },
+  {
+   "claim": "pass@16 values across runs: 0.909 (post-hoc), 0.896/0.878 (round engine), 0.884 (sched), 0.902 (compute-allocation)",
+   "verdict": "misquoted",
+   "correction": "The five values are correct, but the brief's qualifier 'at fixed seeds across scripts' is wrong: seeds and sampling paths differ per script (search/robustness/compute-allocation: one SamplingParams(n=16, seed=0) request; engine rounds: seed r per round of B=4 and naive seed 0 n=16; sched: 16 independent n=1 requests with seeds 1..16). Variation is therefore expected from different seeds and request shapes, not only 'sampling noise at fixed seeds'.",
+   "source": "/home/user/dexa/evals/modal_verifier_search.py:68; modal_verifier_engine.py:102,120; modal_verifier_sched.py launch()/naive loop; modal_eval_compute.py:114"
+  },
+  {
+   "claim": "'2.8-4.7x cheaper at equal quality' (2026-07-15) is superseded",
+   "verdict": "correct",
+   "correction": "04-conflicts.md 'Superseded claims' lists evals/RESULTS.md \u00a7'Product implication' (2.8-4.7x) as superseded by agentic-value v1 and contention v2; the text sits in the 2026-07-15 initial commit 3e57f9d. The brief correctly does not cite it as a product number.",
+   "source": "04-conflicts.md 'Superseded claims \u2014 do NOT cite these'; /home/user/dexa/evals/RESULTS.md:141; git log 3e57f9d"
+  },
+  {
+   "claim": "Conflict 6: 2026-08-02 text 'one large, durable lever' vs FINDINGS.md 'buyer-replicable, not a moat'; stateful thesis 2026-08-05",
+   "verdict": "correct",
+   "correction": "The 'one large, durable lever' phrase is at evals/RESULTS.md:329 in 'The SGLang gate' (commit 7657367, 2026-08-02 02:26 UTC); FINDINGS.md table row says 'Real but buyer-replicable, not a moat'; stateful entries b83eec9/ef9ba6a are 2026-08-05. 04-conflicts.md conflict 6 records this as unreconciled.",
+   "source": "04-conflicts.md conflict 6 and CHRONOLOGY; /home/user/dexa/evals/RESULTS.md:329; docs/FINDINGS.md:22; git log"
+  },
+  {
+   "claim": "'buyer-replicable, not a moat'; 'a buyer captures most of the 1.85x with round-based early-stop in their own orchestration'",
+   "verdict": "correct",
+   "correction": "Verbatim: FINDINGS.md:22 'Real but **buyer-replicable**, not a moat'; RESULTS.md:391 'a buyer captures most of the 1.85\u00d7 with round-based early-stop in their **own** orchestration (send k, check, send more) on any provider.'",
+   "source": "/home/user/dexa/docs/FINDINGS.md:22; evals/RESULTS.md:391 'Contention v2' finding 3"
+  },
+  {
+   "claim": "HumanEval sweep ~4.5 min of A100 per model-config (our derivation: 183.8 s + 86.6 s)",
+   "verdict": "correct",
+   "correction": "Arithmetic holds (270.4 s = 4.5 min) and is labeled as derived. It excludes engine boot/model load/tokenization and the Modal cold start; Modal box-to-box variance (~1.7x noted in 04-conflicts.md item (f)) applies to any cross-run wall-clock estimate.",
+   "source": "/home/user/dexa/evals/RESULTS.md 'Continuous-batch scheduler'; 04-conflicts.md 'OTHER FACTS' (f)"
+  },
+  {
+   "claim": "Unproven-table GPU-hour and calendar-day estimates (40-80 A100-hours/10 days; 10 GPU-hours/3 days; 6 GPU-hours/2 days; 12 GPU-hours/4 days; 5 days collection; ~$200 API spend/2 days; 100 tasks; 20 test sets)",
+   "verdict": "unsupported",
+   "correction": "No measurement in either repo or research file supports any of these; the brief labels them 'our estimate', which satisfies the rule. Row 3's scripts (modal_decode_pathology.py, modal_sglang_pathology.py) exist. Should say 'unmeasured' explicitly for the SWE-bench per-task test-run cost, which dominates row 1.",
+   "source": "none in context; 03-build-inventory.md evals row confirms scripts exist"
+  },
+  {
+   "claim": "Verify latency contrast 5-60 s repo tests vs 10 ms HumanEval",
+   "verdict": "unsupported",
+   "correction": "The 10 ms figure divides the naive verify wall (27.0 s) by 164x16 = 2,624 samples, but modal_verifier_engine.py:124 verifies with any(passes(...) for o in req.outputs), which short-circuits at the first passing sample per problem, so far fewer than 2,624 check() subprocesses ran; the true per-verify latency (a python subprocess launch plus tests) is unmeasured and the count of invocations is not logged. The 5-60 s repo-test range has no source. Say 'unmeasured' for both.",
+   "source": "/home/user/dexa/evals/modal_verifier_engine.py:109,124-126; evals/RESULTS.md 'Live engine' verify wall row"
+  },
+  {
+   "claim": "dexa_platform: 29 tests pass; gateway app.py forces stream=False at line 127",
+   "verdict": "correct",
+   "correction": "03-build-inventory.md 'Tests run' item 4: 29 passed (test_accounts 7, test_pricing 5, test_redundancy 5, test_sessions 7, test_tenants 5); app.py:127 is payload[\"stream\"] = False (verified by sed). Note 7 of the 29 tests cover sessions/, which the brief does not reuse; no integration test against a live backend exists.",
+   "source": "03-build-inventory.md dexa 'Tests run' item 4 and gateway row; /home/user/dexa/dexa_platform/gateway/app.py:127"
+  },
+  {
+   "claim": "voice-inference harness: 27 tests pass with pytest-asyncio; ~2,000 lines harness",
+   "verdict": "correct",
+   "correction": "03-build-inventory.md: 12 failed / 15 passed without pytest-asyncio (unlisted dep), 27 passed after installing it; REUSABILITY SUMMARY sizes the harness at ~2,000 lines. Caveats: no tests for the connector, VllmHttpEngine, SessionDriver, loadgen, run/sweep; prompts are synthetic token ids; cannot abort mid-stream (urllib).",
+   "source": "03-build-inventory.md voice-inference 'Tests run' items 1-2 and REUSABILITY SUMMARY"
+  },
+  {
+   "claim": "OpenHands recommends Qwen3.6-35B-A3B on vLLM/SGLang; context 32,768 recommended",
+   "verdict": "correct",
+   "correction": "05-research-agents.md (as of 2026-05-21): recommended first local model, served via LM Studio, Ollama, vLLM, or SGLang; GPU >= 24 GB (quantized) or 64 GB Apple Silicon; context at least 22,000 and 32,768 recommended.",
+   "source": "05-research-agents.md, https://docs.openhands.dev/openhands/usage/llms/local-llms"
+  },
+  {
+   "claim": "Cursor Composer 2 started from Kimi K2.5 base; Kimi's account said partnership involved Fireworks",
+   "verdict": "correct",
+   "correction": "Medium-confidence fact (2026-03-22): Lee Robinson confirmed the open-source base; 'Kimi's account said the use was an authorized commercial partnership involving Fireworks AI.' Unknowns section: Fireworks partnership not confirmed by Cursor. Brief's section-2 wording ('Moonshot says involved Fireworks') is consistent.",
+   "source": "05-research-agents.md, https://tech.yahoo.com/ai/copilot/articles/cursor-admits-coding-model-built-184109599.html; Unknowns"
+  },
+  {
+   "claim": "Cognition SWE-1.6 up to 950 tok/s on Cerebras; SWE-grep-mini over 2,800 tok/s, SWE-grep over 650 tok/s",
+   "verdict": "misquoted",
+   "correction": "The declared claim is correct as written (Cerebras case study: SWE-1.6 up to 950 tok/s; Cognition blog: SWE-grep-mini >2,800 tok/s, SWE-grep >650 tok/s). But the competitive table (section 9) writes 'SWE-grep/SWE-grep-mini on Cerebras (2,800 tok/s)', attaching the mini's figure to both; SWE-grep is 650.",
+   "source": "05-research-agents.md https://www.cerebras.ai/blog/case-study-cognition-x-cerebras; 05-research-morph.md https://cognition.com/blog/swe-grep"
+  },
+  {
+   "claim": "Open-weight models a majority of OpenRouter tokens by mid-2026, concentrated in coding and agentic workloads",
+   "verdict": "correct",
+   "correction": "Mozilla State of Open Source AI v1.0.1 (July 2026): 'a third by late 2025 to a majority by mid-2026'; top seven models by volume Jul 1-27 2026 all open weight; lead 'concentrated in coding and agentic workloads'.",
+   "source": "05-research-agents.md, https://stateofopensource.ai/"
+  },
+  {
+   "claim": "Morph customers create.xyz, databutton, continue.dev, Framer, Webflow, Block, Vercel (founder-stated)",
+   "verdict": "correct",
+   "correction": "create.xyz/databutton/continue.dev from Launch HN (July 2025); Framer/Webflow/Block/Vercel from the founder's personal blog (undated, JS-rendered page read via search snippet, medium confidence). Research Unknowns: customer-list currency unverified.",
+   "source": "05-research-morph.md, https://news.ycombinator.com/item?id=44490863 and https://tejasbhakta.com/morph"
+  },
+  {
+   "claim": "TraceLab: ~4,300 sessions; median prefix 126,180 (Claude) / 115,584 (Codex) tokens; ~857/886 new input; 252/184 output; median human gap 1.4 min, p90 20.6 min",
+   "verdict": "correct",
+   "correction": "All match 05-research-agents.md (arXiv 2606.30560, ~4,300 sessions, ~350,000 LLM steps, 43 developers, 8 months). Sample is 43 developers.",
+   "source": "05-research-agents.md, https://arxiv.org/html/2606.30560"
+  },
+  {
+   "claim": "Mooncake Codex traces ~131:1 input:output",
+   "verdict": "correct",
+   "correction": "vLLM x Mooncake blog 2026-05-06: 'average input:output ratio ~131:1'; inter-turn delays 5.2 s median / 81.4 s P99.",
+   "source": "05-research-agents.md, https://vllm.ai/blog/2026-05-06-mooncake-store"
+  },
+  {
+   "claim": "Search is 56.6% of tokens in coding traces (Relace); coding agents spend 60% of turns searching (Morph)",
+   "verdict": "correct",
+   "correction": "Relace FAS blog: 'search accounts for 56.6% of tokens in coding traces'; Morph WarpGrep docs: coding agents spend '60% of their turns searching for code'. Both are vendor-stated.",
+   "source": "05-research-morph.md, https://relace.ai/blog/fast-agentic-search and https://docs.morphllm.com/sdk/components/warp-grep"
+  },
+  {
+   "claim": "Fireworks prompt caching within 1 replica, 50% cached discount, session-affinity headers, x-multi-turn-session-id",
+   "verdict": "correct",
+   "correction": "Matches 05-research-agents.md and 05-research-providers.md ('only works within 1 replica'; discount 'typically 50%, varies by model'; x-session-affinity / user field; x-multi-turn-session-id for RL rollouts; also x-prompt-cache-isolation-key).",
+   "source": "05-research-agents.md and 05-research-providers.md, https://docs.fireworks.ai/guides/prompt-caching"
+  },
+  {
+   "claim": "Fireworks 350 ms TTFT case with adaptive speculative decoding",
+   "verdict": "correct",
+   "correction": "Sourced from Inworld's May 2026 post (medium confidence), described as a case study, not from a Fireworks page; the brief's table attributes it to Fireworks without that qualifier.",
+   "source": "05-research-voice.md, https://inworld.ai/resources/fastest-llm-inference-api"
+  },
+  {
+   "claim": "Morph Fast Apply $0.80/$1.20 (7B) and $0.90/$1.90 (14B) per M tokens; 10,500 tok/s; Router $0.005/request; Reflexes $0.001/event; standby tier 50%; engine 'forked from vLLM'; team size 3",
+   "verdict": "correct",
+   "correction": "All match 05-research-morph.md. Qualifiers omitted: 10,500 tok/s is Morph's own B200 claim (OpenRouter observed 1,537 tps P50 for morph-v3-fast); standby tier is GLM-5.3 only and admits requests only under ~25% fleet capacity; 'forked from vLLM' appears only in the Reflexes Show HN (engine scope for Fast Apply unknown); YC 'Team Size: 3' while the company was 1 person until ~2026-08-25.",
+   "source": "05-research-morph.md, https://morphllm.com, https://docs.morphllm.com, https://news.ycombinator.com/item?id=48739038, https://www.ycombinator.com/companies/morph, https://openrouter.ai/morph/morph-v3-fast"
+  },
+  {
+   "claim": "Relace Apply 3 $0.85/$1.25 per M, 256K context; LoRA SFT on 3-8B, FP8 via vLLM llm-compressor, 10k+ tok/s; FAS trained on 8xH200 ~1.5 days",
+   "verdict": "correct",
+   "correction": "Matches 05-research-morph.md (OpenRouter comparison; Relace Apply 3 blog: LoRA rank 128, ~145k examples, single H200 via Modal, FP8 llm-compressor, 10k+ tok/s, 256k context; FAS: verl on Nebius 8xH200 ~1.5 days, 3.2k data points).",
+   "source": "05-research-morph.md, https://openrouter.ai/compare/morph/morph-v3-fast/relace/relace-apply-3, https://relace.ai/blog/relace-apply-3, https://relace.ai/blog/fast-agentic-search"
+  },
+  {
+   "claim": "WarpGrep SWE-Bench Pro lifts +2.1, +3.1, +3.7 points",
+   "verdict": "correct",
+   "correction": "Opus 4.6 55.4->57.5 (+2.1), GPT-5.3 Codex 56.0->59.1 (+3.1), MiniMax 2.5 55.4->57.6 (+3.7). Morph's own evaluations; benchmark methodology pages returned HTTP 429 and are unverified.",
+   "source": "05-research-morph.md, https://www.ycombinator.com/launches/PZx-warpgrep-v2-code-search-subagent-1-on-swe-bench-pro; Unknowns"
+  },
+  {
+   "claim": "Morph Launch HN: 'even claude is well over 11% error rates with search and replace'",
+   "verdict": "correct",
+   "correction": "Verbatim in 05-research-morph.md (Launch HN, July 2025).",
+   "source": "05-research-morph.md, https://news.ycombinator.com/item?id=44490863"
+  },
+  {
+   "claim": "Codex issue: ~$15.9 for ~20M tokens across 112 model calls in 4 turns",
+   "verdict": "correct",
+   "correction": "openai/codex #25604 (medium confidence, 2026-06-01): on Azure OpenAI, gpt-5.4 in_memory retention evicted, cached_input_tokens = 0, 3.28M re-billed tokens = 71% of fresh input. Brief's 'when caching failed' matches; it is an Azure-hosted case, not OpenAI direct.",
+   "source": "05-research-agents.md, https://github.com/openai/codex/issues/25604"
+  },
+  {
+   "claim": "Tensormesh reserved H200 $2.50/hr; cached input $0; post-v1 pricing 30% of estimated savings",
+   "verdict": "correct",
+   "correction": "Pricing page: reserved H200 $2.50/hr via Nebius and Yotta, cached input $0.00; FAQ: post-v1 formula (GPU*GPH)+(GPU*GPH*EST*0.3). Qualifier: FAQ says the SaaS is 'in beta' while the May 2026 release says 'general availability'; Operator 'Coming Soon'.",
+   "source": "05-research-kvcache.md, https://www.tensormesh.ai/pricing and https://www.tensormesh.ai/faq"
+  },
+  {
+   "claim": "MI355X rental $2.29-$2.95 per GPU-hour",
+   "verdict": "correct",
+   "correction": "From Wafer's Qwen3.6-35B on MI355X post (2026-05-11); a rental range Wafer cites, not a list price from a cloud pricing page (05-research-gpu-pricing.md has no MI355X on-demand price).",
+   "source": "05-research-wafer.md, https://www.wafer.ai/blog/qwen36-mi355x; 05-research-gpu-pricing.md Unknowns"
+  },
+  {
+   "claim": "Wafer Turbo models 2-2.8x faster than base SGLang/vLLM; Wafer Pass $10/week Starter, $25/week Privacy",
+   "verdict": "misquoted",
+   "correction": "Numbers are right but the table puts a paraphrase in quotation marks. Source text: 'Qwen3.5-397B-Turbo is 2.8x faster than base SGLang', 'GLM5.1-Turbo is 2x faster than vLLM baseline', 'DeepSeek-V4-Pro is 2x faster than vLLM baseline'. Wafer Pass: $10/week Starter = 1,000 requests per 5 hours; $25/week Privacy = 2,000 requests per 5 hours with ZDR (April 2026 launch; current status unknown).",
+   "source": "05-research-wafer.md, https://www.ycombinator.com/launches/Q9i-wafer-pass-flat-rate-access-to-the-fastest-open-source-llms; Unknowns"
+  },
+  {
+   "claim": "Anthropic prompt cache TTL 5 min default / 1 h option; OpenAI 30 min (GPT-5.6+) or 24h retention",
+   "verdict": "correct",
+   "correction": "Anthropic: 5-min default, 1h via cache_control ttl '1h' (2x write). OpenAI: GPT-5.6+ 30m TTL (only supported value); pre-5.6 prompt_cache_retention in_memory (5-10 min, up to 1 h) or 24h ('typically ~30 minutes, up to 24 hours').",
+   "source": "05-research-caching.md, https://platform.claude.com/docs/en/build-with-claude/prompt-caching and https://developers.openai.com/api/docs/guides/prompt-caching"
+  },
+  {
+   "claim": "Managed Agents $0.08 per session-hour while running",
+   "verdict": "correct",
+   "correction": "'$0.08 per session-hour ... accrues only while the session's status is running'; idle/rescheduling/terminated not billed; tokens at standard rates.",
+   "source": "05-research-agents.md / 05-research-caching.md, https://platform.claude.com/docs/en/about-claude/pricing"
+  },
+  {
+   "claim": "Anthropic ~400,000 Claude Code sessions, ~4 user turns per session, ~10 actions per prompt",
+   "verdict": "correct",
+   "correction": "~400,000 interactive sessions from ~235,000 people (Oct 2025-Apr 2026); ~4 user turns; ~10 actions per prompt (sometimes >100).",
+   "source": "05-research-agents.md, https://www.anthropic.com/research/claude-code-expertise"
+  },
+  {
+   "claim": "Kimi K2.7 Code and GLM-5.2 are open-weight coding MoEs with vLLM/SGLang support",
+   "verdict": "correct",
+   "correction": "Medium-confidence secondary source (Towards AI, 2026-07-31): Kimi K2.7 Code (2026-06-12), GLM-5.2 (2026-06-13), MoE, vLLM and SGLang serving support.",
+   "source": "05-research-agents.md, https://pub.towardsai.net/kimi-k2-7-code-vs-glm-5-2-which-open-weight-coding-model-to-self-host-on-vllm-d534abb882d6"
+  },
+  {
+   "claim": "Kill-gate thresholds (1.5x/2.0x, 1.3x/1.8x, 85%/90%, 1.3x/1.6x, 1.15x/1.3x, 4x/2.5x) are pre-registered choices made in this brief, anchored to the measured 2.63x, 2.12x, 93-96%, 1.69x, 1.53x->2.12x and 2.2x",
+   "verdict": "correct",
+   "correction": "Thresholds are the brief's own; anchors trace to the ledger. Qualifier: the '1.53x -> 2.12x' anchor compares two different runs with different baselines (168.1 s GPU-generation wall vs 183.8 s end-to-end), which the brief acknowledges in section 6; the 1.69x anchor is with a simulated verifier.",
+   "source": "01-evidence-ledger-dexa.md verifier-early-stop, verifier-weak-robustness, contention-v2-early-stop, sglang-gate"
+  },
+  {
+   "claim": "Section 4 baseline (d): 'LMCache/prefix-cached generic serving \u2014 measured in agentic-value v1 as the cached column'",
+   "verdict": "misquoted",
+   "correction": "Agentic-value v1 ran Llama-3.1-8B on SGLang; the 'cached' column is SGLang RadixAttention prefix caching. LMCache was not involved in that experiment (LMCache appears only in the stateful-session evals on vLLM). Label it 'SGLang prefix-cached'.",
+   "source": "/home/user/dexa/evals/RESULTS.md 'Agentic-serving value benchmark v1'; 01-evidence-ledger-dexa.md agentic-serving-value-v1 Setup"
+  },
+  {
+   "claim": "Section 2: 'All engine measurements here are Llama-3.1-8B-Instruct and Qwen2.5-Coder-7B-Instruct on A100-80GB, vLLM 0.24.0'",
+   "verdict": "misquoted",
+   "correction": "The contention-v2, agentic-value v1 and SGLang-gate numbers the brief relies on were measured on SGLang (pip 'sglang[all]', version unpinned), not vLLM 0.24.0; Qwen2.5-Coder-7B appears only in the vLLM 0.24.0 robustness run.",
+   "source": "01-evidence-ledger-dexa.md sglang-gate, agentic-serving-value-v1, contention-v2-early-stop Setup lines"
+  },
+  {
+   "claim": "Section 7: MVP ships on 'Qwen2.5-Coder-7B-Instruct, the measured higher-ceiling model, 0.963 oracle pass@16'",
+   "verdict": "misquoted",
+   "correction": "0.963 is correct, but it comes from modal_robustness.py's post-hoc N=16 generation; neither the continuous scheduler (modal_verifier_sched.py) nor the round engine was ever run on Qwen2.5-Coder-7B, so the in-engine 2.63x/2.12x result is unmeasured on the MVP model.",
+   "source": "/home/user/dexa/evals/RESULTS.md 'Robustness'; 01-evidence-ledger-dexa.md verifier-early-stop Setup (Llama only)"
+  },
+  {
+   "claim": "Section 12: agentic-value v1 measured prefix caching and early-stop 'as separate, additive levers'",
+   "verdict": "misquoted",
+   "correction": "RESULTS.md says the opposite for GPU-seconds: against the cached baseline early-stop gave 1.00-1.02x wall-clock (no GPU-time win on an idle GPU); it saved decode tokens (2-4x) only. 'Additive' holds only for a token-billed buyer, and the brief's own Bounded section says so.",
+   "source": "/home/user/dexa/evals/RESULTS.md 'Agentic-serving value benchmark v1' findings 1-2"
+  },
+  {
+   "claim": "Section 7 week 1: reuse evals/modal_robustness.py visible_check as the customer-tests adapter",
+   "verdict": "correct",
+   "correction": "visible_check(test_code, k) exists (line 51) but it parses HumanEval's 'def check(candidate)' assert list; it is not a general adapter for customer test files. New code, not reuse, for arbitrary pytest suites.",
+   "source": "/home/user/dexa/evals/modal_robustness.py:51-70"
+  }
+ ],
+ "missing_caveats": [
+  "Every verifier number is a single run at a single seed (search, engine, sched, robustness, compute-allocation, contention, agentic-value); 04-conflicts.md (f): 'Both repos are single-seed for every headline number' with ~1.7x Modal box-to-box wall-clock variance noted for dexa runs.",
+  "Compute-allocation N=1 baseline (0.689) was decoded greedily (temperature 0.0) while N=4/16 used 0.8 (modal_eval_compute.py:114); the '0.69 -> 0.90' lever mixes decoding regimes, and pass@k is an oracle selector (sampling ceiling), labeled 'directional, not a leaderboard'.",
+  "The weak-verifier robustness result (93-96%, 3.04-3.52x) is post-hoc token accounting (es_b4 over one n=16 generation), not the live scheduler; ledger caveat also records 6-10 problems per model with no visible pass within N=16 in addition to the 7.7%/3.8% visible false-positive rates.",
+  "The continuous scheduler (2.63x/2.12x) was run only on Llama-3.1-8B-Instruct; Qwen2.5-Coder-7B (the MVP model) has no in-engine measurement.",
+  "Verification in modal_verifier_sched.py is synchronous inside engine.step() (a python subprocess per sample, up to 10 s timeout), so the 86.6 s wall already includes serialized verify time; per-verify latency is not logged anywhere, and the engine script's 27.0 s / 18.6 s verify walls use any()-short-circuited verification.",
+  "The round engine's own docstring labels its wall-clock 'directional (prefix-cache state persists across calls)' and names decode tokens as the primary metric; the 1.53x figure carries that label in the repo.",
+  "Both engine and sched runs put the naive baseline second on a warm prefix cache; the RESULTS.md sections do not state this (only the script docstrings do), so a reader of RESULTS.md alone cannot see the bias.",
+  "max_model_len 4096, enforce_eager (no CUDA graphs) and gpu_memory_utilization 0.9 for the sched run; nothing at long shared prefixes was measured with the scheduler; eager mode is noted by the ledger to compress the vLLM n>1 pathology ratio (understates).",
+  "SGLang and LMCache versions are unpinned in every SGLang/LMCache eval (ledger provenance paragraph); the SGLang gate's 4k n=1 point landed in timing noise and its first measurement was polluted by RadixAttention caching before fix 4c4bc9f.",
+  "Contention v2 used W=4k only, k=2 derived from an assumed pass probability p (k = ceil(1/p)), distinct per-agent contexts (no cross-agent prefix sharing), and a simulated verifier; agentic-value v1 notes early-stop 'runs branches in sequential waves, so it can increase latency on harder turns'.",
+  "Ledger status labels differ from the brief's grouping: agentic-serving-value-v1 and sglang-gate are FALSIFIED theses (numbers reused as bounds), contention-v2 is BOUNDED; the brief's 'Bounded / contradicted' heading does not carry the FALSIFIED labels.",
+  "Section 12 (session-stateful combination) relies on stateful-session numbers whose in-engine runs are capped at 16k; the 32k-64k restore-vs-prefill figures are HF tensor-copy measurements (Qwen2.5-7B, single request), and docs/RESULTS.md records the Dexa connector losing to vLLM re-prefill at 8k and under 16-24-way concurrency (04-conflicts.md conflicts 1-4).",
+  "voice-inference harness reuse: all GPU data is seed 1 on an L40S with synthetic traces (every distribution marked 'assumption'); prompts are synthetic token ids with no tokenizer or output-quality measurement; pcie/hbm/resident_wait counters are sim-only and read zero in GPU runs; manifests record git_sha 'unknown' and no connector/config provenance; pytest-asyncio is an unlisted dependency (12/27 tests fail without it).",
+  "dexa_platform reuse: 29 unit tests only, no integration test against a live backend; no payment/Stripe path, signup trusts provider/subject JSON (no OAuth), management endpoints authenticate with the inference API key, no rate limiting/retries/idempotency, Dockerfile omits control/ and sessions/; metering is per token and per-request cost telemetry is image-token pricing for a VLM gateway.",
+  "Morph facts are largely self-reported: 10,500 tok/s and 98% accuracy are Morph's own B200 numbers (OpenRouter observed 1,537 tps P50); WarpGrep SWE-Bench Pro lifts are Morph's evaluations with methodology pages blocked (HTTP 429); 'forked from vLLM' is stated only for Reflexes; standby tier is GLM-5.3 only; revenue/team figures are tweets and job posts.",
+  "Fireworks 350 ms TTFT is an Inworld-reported case study (medium confidence), not a Fireworks-published figure; Cursor/Kimi/Fireworks partnership is Moonshot's statement, not confirmed by Cursor; Kimi K2.7 Code / GLM-5.2 serving support is a medium-confidence secondary source.",
+  "Tensormesh: FAQ says the SaaS is 'in beta' while the May 2026 press release says 'general availability'; $2.50/hr H200 is reserved capacity 'via Nebius and Yotta'; no customers named.",
+  "Wafer Pass prices are from the April 2026 launch with per-5-hour request caps; whether they are unchanged as of Sept 2026 is listed as unknown; MI355X $2.29-$2.95 is a rental range Wafer cites, not a cloud list price.",
+  "OpenHands' recommendation also lists LM Studio and Ollama, minimum context 22,000, and a 24 GB quantized GPU or 64 GB Apple Silicon target; TraceLab's sample is 43 developers; the Codex $15.9 case is Azure OpenAI with in_memory retention."
+ ],
+ "overall": "The brief's repo-side numbers are accurate: every headline figure (0.884=0.884, 2.63x, 2.12x, round-engine 2.60x/1.53x/0.878 vs 0.896/18.6 vs 27.0 s, post-hoc 0.909/860,830, robustness 0.909/0.848/93%/7.7%/2.85x/3.04x and 0.963/0.921/96%/3.8%/3.45x/3.52x, compute-allocation 0.689/0.829/0.902 and 52k->858k, TriviaQA 0.680->0.693, contention 1.38/1.69/1.87x, agentic-value 1.4/5.0/11.5x and 1.00/1.01/1.02x, vLLM 174x vs SGLang 2.2x/1.04x, line numbers 43/79/127, 194 lines, 29 and 27 tests) reproduces from evals/RESULTS.md, the scripts, the ledgers and the build inventory, and the proven/bounded/superseded labels follow the ledger. The competitive-table and research figures (Morph, Relace, Cognition, Fireworks, Wafer, Tensormesh, TraceLab, Mooncake, OpenHands, Anthropic/OpenAI TTLs, Managed Agents, MI355X) all trace to the 05-research files. Defects found: (1) 'seed 0' is wrong for the sched run (per-sample seeds 1..16) and 'fixed seeds across scripts' is wrong (seeds and request shapes differ per script); (2) baseline (d) mislabels SGLang RadixAttention caching as 'LMCache'; (3) 'all engine measurements ... vLLM 0.24.0' omits that the load/long-prefix numbers are on unpinned SGLang; (4) the '10 ms HumanEval verify' figure is a bad derivation (any() short-circuits, so 27.0 s / 2,624 is not per-verify latency) and the 5-60 s repo range is unsourced; (5) the section-9 table attaches SWE-grep-mini's 2,800 tok/s to SWE-grep (650); (6) a Wafer paraphrase is presented in quotation marks; (7) section 12 calls prefix caching and early-stop 'additive' when the repo measured 1.00-1.02x GPU-seconds for early-stop on an idle GPU; (8) the MVP model Qwen2.5-Coder-7B has only a post-hoc measurement, never the in-engine scheduler. The unproven-table costs are unsupported but labeled as estimates, which the rules permit. Most significant omitted caveats: single-seed/single-run for every number, the greedy N=1 baseline, post-hoc (not live) weak-verifier costs, synchronous in-loop verification, the FALSIFIED ledger labels on agentic-value v1 and the SGLang gate, and the self-reported nature of Morph's throughput and benchmark figures."
+}

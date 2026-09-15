@@ -1,0 +1,333 @@
+{
+ "id": "I",
+ "name": "Fast Parse: the Morph playbook on document-to-structure",
+ "one_line": "One specialized 2B-8B document-to-structure model (page image in; markdown + schema JSON out) served on a purpose-built vLLM path with visual-token budgeting, OCR-draft copy-speculation and constrained JSON decoding, priced per page \u2014 the Morph playbook applied to the one task where the repos hold a measured model-side result (Qwen2.5-VL-7B 0.925 vs GPT-4o 0.880 on DocVQA at 2.7x throughput).",
+ "numeric_claims": [
+  {
+   "claim": "Morph founder: 'roughly 70 or 80% of the content is almost exactly the same... using the original code as a guess'",
+   "source": "05-research-morph.md, Infra Pod transcript: https://podscripts.co/podcasts/the-infra-pod/coding-agents-need-infra-to-apply-code-changes-chat-with-tejas-from-morph"
+  },
+  {
+   "claim": "Morph Fast Apply 10,500 tok/s; Compact 33,000 tok/s",
+   "source": "05-research-morph.md: https://morphllm.com ; https://docs.morphllm.com/sdk/components/compact"
+  },
+  {
+   "claim": "OpenRouter observed 1,537 tps for Morph V3 Fast (vs 10,500 claimed)",
+   "source": "05-research-morph.md: https://openrouter.ai/morph/morph-v3-fast"
+  },
+  {
+   "claim": "Morph task-trained draft 3.07x vs generic draft 1.93x speculative-decoding speedup",
+   "source": "05-research-morph.md: https://docs.morphllm.com ; https://www.morphllm.com/blog/codegen-inference-research"
+  },
+  {
+   "claim": "Morph Reflexes engine 'forked from vLLM'",
+   "source": "05-research-morph.md: https://news.ycombinator.com/item?id=48739038"
+  },
+  {
+   "claim": "Morph benchmark/comparison pages returned HTTP 429 during research",
+   "source": "05-research-morph.md: https://www.morphllm.com/comparisons/swe-grep-vs-warpgrep"
+  },
+  {
+   "claim": "Relace apply recipe: LoRA SFT on 3-8B open coding models, ~145k examples, LoRA rank 128, single H200 via Modal; 10k+ tok/s",
+   "source": "05-research-morph.md: https://relace.ai/blog/relace-apply-3"
+  },
+  {
+   "claim": "Relace search subagent RL: verl on Nebius 8xH200 ~1.5 days on 3.2k data points",
+   "source": "05-research-morph.md: https://relace.ai/blog/fast-agentic-search"
+  },
+  {
+   "claim": "Cognition SWE-grep-mini over 2,800 tok/s on Cerebras",
+   "source": "05-research-morph.md: https://cognition.com/blog/swe-grep"
+  },
+  {
+   "claim": "Qwen2.5-VL-7B 0.925 vs GPT-4o 0.880 on the same 200 DocVQA pages (relaxed match, GPT-4o at temperature 0)",
+   "source": "01-evidence-ledger-dexa.md entry gpt4o-docvqa-head-to-head; /home/user/dexa/docs/FINDINGS.md 'Multimodal / document VLM'; /home/user/dexa/evals/modal_incumbent_docvqa.py"
+  },
+  {
+   "claim": "Visual-token budget sweep: 1536px 0.935 acc / 11.4 img/s / 2,201 tokens; 1024px 0.925 / 30.2 img/s / 1,017 tokens (2.7x, -1.0 pt); 768px 0.885 / 47.2 / 574 (4.1x, -5 pts); 512px 0.735; 384px 0.445 (Qwen2.5-VL-7B, vLLM 0.24.0, A100-80GB, 200 DocVQA pages)",
+   "source": "/home/user/dexa/evals/RESULTS.md section 'Multimodal execution thesis'; 01-evidence-ledger-dexa.md entry doc-vlm-frontier"
+  },
+  {
+   "claim": "The visual-token frontier eval used max_tokens=32 and BUDGETS [1536,1024,768,512,384]",
+   "source": "/home/user/dexa/evals/modal_vlm_frontier.py lines 38 and 61 (verified by grep)"
+  },
+  {
+   "claim": "vLLM in-engine prefix-cache hit: cold vs warm TTFT ~280 -> ~24 ms at 4k (~12x); ~1,250 -> ~45 ms at 16k (25-34x over 3 runs), Qwen2.5-7B text",
+   "source": "/home/user/dexa/evals/RESULTS.md 'Production reproduction on vLLM paged KV'; 01-evidence-ledger-dexa.md entry vllm-warmstart-prefix-cache"
+  },
+  {
+   "claim": "n=1 decode/step ~22 ms flat across context lengths (Llama-3.1-8B, vLLM 0.24.0, A100)",
+   "source": "01-evidence-ledger-dexa.md entry vllm-decode-pathology; /home/user/dexa/evals/RESULTS.md 'Decode-pathology sweep'"
+  },
+  {
+   "claim": "Verifier-guided early stop: 2.63x fewer decode tokens at identical pass@16 (0.884) on HumanEval, continuous scheduler driving vLLM LLMEngine add_request/step/abort",
+   "source": "/home/user/dexa/evals/RESULTS.md 'Continuous-batch scheduler'; /home/user/dexa/evals/modal_verifier_sched.py; 01-evidence-ledger-dexa.md entry verifier-early-stop"
+  },
+  {
+   "claim": "Qwen2.5-VL mRoPE blocker: [3,1671] computed positions vs [3,881] masked; no accuracy numbers produced",
+   "source": "01-evidence-ledger-dexa.md entry vlm-moat-mrope; /home/user/dexa/evals/RESULTS.md 'Moat test'; /home/user/dexa/evals/modal_vlm_moat.py"
+  },
+  {
+   "claim": "CUA screenshots: ~86% of 28px patches unchanged per action; capturable reuse ceiling 2.34x at cos>=0.98 (~2.3x)",
+   "source": "01-evidence-ledger-dexa.md entries cua-screen-redundancy and delta-tolerance-sweep; /home/user/dexa/evals/RESULTS.md 'Tolerance sweep'"
+  },
+  {
+   "claim": "'~40x cheaper' decomposition: 1,105 vs 322 image tokens for 1280x800 (3.4x) times $2.50/M vs assumed $0.20/M (12.5x); head-to-head script hardcodes Qwen row '$0.02-0.06/1k pages (rented A100 serving)'; GPT-4o $/page unrecorded",
+   "source": "04-conflicts.md conflict 10; /home/user/dexa/dexa_platform/gateway/pricing.py; /home/user/dexa/evals/modal_incumbent_docvqa.py; 01-evidence-ledger-dexa.md gpt4o-docvqa-head-to-head caveats"
+  },
+  {
+   "claim": "evals/RESULTS.md: resize lever 'sizes the prize but isn't yet the moat'; Aug 2 'every path inside the inference stack is closed' vs FINDINGS.md Sep 2 stateful provider",
+   "source": "03-build-inventory.md dexa disagreement 10; 04-conflicts.md conflict 6; /home/user/dexa/evals/RESULTS.md 'Multimodal execution thesis' and 'The SGLang gate'"
+  },
+  {
+   "claim": "Dexa connector KV loading loses to vLLM re-prefill below ~64k on the disk tier (0.37x at 8B/8k)",
+   "source": "01-evidence-ledger-dexa.md entry connector-session-resume-single-request; 04-conflicts.md conflict 1; /home/user/dexa/docs/RESULTS.md '8B measurement'"
+  },
+  {
+   "claim": "serve/modal_doc_vlm_serve.py serves Qwen2.5-VL-7B as 'doc-vlm' with max_pixels 1048576",
+   "source": "03-build-inventory.md dexa components table row 'serve/modal_doc_vlm_serve.py'"
+  },
+  {
+   "claim": "dexa_platform test suite: 29 collected, 29 pass",
+   "source": "03-build-inventory.md dexa 'Tests run' item 4"
+  },
+  {
+   "claim": "gateway app.py:127 forces payload['stream']=False",
+   "source": "03-build-inventory.md dexa gateway row; verified by grep on /home/user/dexa/dexa_platform/gateway/app.py"
+  },
+  {
+   "claim": "docker-compose.byoc.yml runs vllm/vllm-openai:v0.24.0 serving Qwen2.5-VL-7B-Instruct",
+   "source": "03-build-inventory.md dexa row 'dexa_platform/dashboard + BYOC compose'"
+  },
+  {
+   "claim": "voice-inference harness ran 287,015 measured turns; arm D max passing N = 300 vs 200 for A/B/C (1.5x) at p95 TTFT <= 300 ms",
+   "source": "02-evidence-ledger-voice.md entries vi-harness-methodology-lessons and vi-armD-predictive-pinning"
+  },
+  {
+   "claim": "LiveKit serves Gemma 4 31B on SGLang with speculative decoding at 192 ms TTFT",
+   "source": "05-research-voice.md: https://livekit.com/blog/latency-optimized-inference-gemma-4-on-livekit"
+  },
+  {
+   "claim": "Azure Document Intelligence S0: Read $1.50/1K pages, Layout/Prebuilt $10/1K, Custom $30/1K",
+   "source": "05-research-docai.md: https://prices.azure.com/api/retail/prices?$filter=contains(productName,%20'Document%20Intelligence')%20and%20armRegionName%20eq%20'eastus'"
+  },
+  {
+   "claim": "Google Document AI: Enterprise OCR $1.50/1K pages; Form Parser and Custom Extractor $30/1K",
+   "source": "05-research-docai.md: https://cloud.google.com/document-ai/pricing"
+  },
+  {
+   "claim": "AWS Textract: DetectDocumentText $1.50/1K; Tables $15/1K; Queries $15/1K; Forms $50/1K",
+   "source": "05-research-docai.md: https://aws.amazon.com/textract/pricing/"
+  },
+  {
+   "claim": "Reducto r-1 $0.01/page launched 2026-09-01; legacy agentic pipelines cost 3-6 cents/page; 20% error reduction claim",
+   "source": "05-research-docai.md: https://reducto.ai/blog/parse-r-1-model"
+  },
+  {
+   "claim": "Reducto pricing page: r-1 Parse $10/1K, Extract $20/1K, Deep Extract $40/1K; throughput guarantees 200/350/500+ concurrent pages",
+   "source": "05-research-docai.md: https://reducto.ai/pricing"
+  },
+  {
+   "claim": "Unstructured $0.015/page after 10,000 free pages",
+   "source": "05-research-docai.md: https://unstructured.io/pricing"
+  },
+  {
+   "claim": "Extend PAYG per page: Parse $0.025, Extract $0.0375",
+   "source": "05-research-docai.md: https://docs.extend.ai/product/general/how-credits-work"
+  },
+  {
+   "claim": "LlamaParse $1.25 per 1,000 credits; 1/3/10/45 credits per page by tier",
+   "source": "05-research-docai.md: https://developers.llamaindex.ai/llamaparse/general/pricing/"
+  },
+  {
+   "claim": "Mistral OCR 4.1 $4/1K pages ($2 batch); Mistral OCR 4 self-reported olmOCR-Bench 85.20; self-hosted for enterprise",
+   "source": "05-research-docai.md: https://mistral.ai/pricing/api/ ; https://mistral.ai/news/ocr-4/"
+  },
+  {
+   "claim": "Claude vision: 28x28 patches; 1000x1000 image = 1,296 tokens; standard tier cap 1,568 tokens, high-res tier cap 4,784; ~$1.30 per thousand images on Haiku 4.5",
+   "source": "05-research-docai.md: https://platform.claude.com/docs/en/build-with-claude/vision"
+  },
+  {
+   "claim": "OpenAI: 32x32 patches x 1.2 multiplier on gpt-5.4; 1024x1024 = 1,229 tokens \u2248 $0.0031",
+   "source": "05-research-docai.md: https://developers.openai.com/api/docs/guides/images-vision ; https://developers.openai.com/api/docs/pricing"
+  },
+  {
+   "claim": "Gemini media_resolution: 280/560/1120 tokens per PDF page (low/medium/high); \u2248$0.42 per 1,000 pages input on Gemini 3.8 Flash at $0.75/M (derived in research file); 768px tiles at 258 tokens",
+   "source": "05-research-docai.md: https://ai.google.dev/gemini-api/docs/media-resolution ; https://ai.google.dev/gemini-api/docs/pricing ; https://ai.google.dev/gemini-api/docs/image-understanding"
+  },
+  {
+   "claim": "Qwen3-VL-8B-Instruct DocVQA 96.1 / OCRBench 896; 4B 95.3; 2B 93.3; GPT-5 (high) 91.5 / 810",
+   "source": "05-research-docai.md: https://arxiv.org/abs/2511.21631 (Tables 2 and 4)"
+  },
+  {
+   "claim": "Qwen3-VL checkpoints 2B-235B, Apache-2.0, served via vLLM and SGLang",
+   "source": "05-research-docai.md: https://github.com/QwenLM/Qwen3-VL"
+  },
+  {
+   "claim": "Together hosts Qwen3-VL-32B at $0.50/$1.50 per M",
+   "source": "05-research-docai.md: https://www.together.ai/models/qwen3-vl-32b-instruct"
+  },
+  {
+   "claim": "Qwen3-VL-8B listed at $0.20/M on DeepInfra and Fireworks (aggregator, medium confidence)",
+   "source": "05-research-docai.md: https://cloudprice.net/models/alibaba-qwen3-vl-plus"
+  },
+  {
+   "claim": "olmOCR-2-7B fine-tuned from Qwen2.5-VL-7B; olmOCR-Bench 82.4; synthetic data ~$0.12/page via Claude Sonnet 4; data/code/models released",
+   "source": "05-research-docai.md: https://arxiv.org/html/2510.19817"
+  },
+  {
+   "claim": "dots.mocr 3B MIT, olmOCR-Bench 83.9; integrated in vLLM 0.11.0",
+   "source": "05-research-docai.md: https://github.com/rednote-hilab/dots.ocr"
+  },
+  {
+   "claim": "DeepSeek-OCR 97% precision at <10x compression; 200k+ pages/day on a single A100-40G",
+   "source": "05-research-docai.md: https://arxiv.org/abs/2510.18234"
+  },
+  {
+   "claim": "vLLM ships --video-pruning-rate (EVS/VidCom2) only; image-pruning RFC #45098 opened 2026-06-10 with no maintainer comment",
+   "source": "05-research-docai.md: https://docs.vllm.ai/en/stable/features/multimodal_inputs/ ; https://github.com/vllm-project/vllm/issues/45098"
+  },
+  {
+   "claim": "SGLang EVS is video-only and 'cannot work with VLMs that use positional embeddings [Such as Qwen2.5VL]'",
+   "source": "05-research-docai.md: https://github.com/sgl-project/sglang/blob/main/python/sglang/srt/multimodal/evs/README.md"
+  },
+  {
+   "claim": "Fireworks serverless 4B-16B tier $0.20/1M tokens",
+   "source": "05-research-providers.md: https://docs.fireworks.ai/serverless/pricing"
+  },
+  {
+   "claim": "Fireworks: >95% of tokens come from models specialized on customers' proprietary data",
+   "source": "05-research-providers.md: https://fireworks.ai/blog/series-d-announcement"
+  },
+  {
+   "claim": "Baseten BIS-LLM speculative decoding supports Eagle, MTP and NGram drafts",
+   "source": "05-research-providers.md: https://docs.baseten.co/engines/bis-llm/advanced-features"
+  },
+  {
+   "claim": "Together ATLAS adaptive speculative decoding",
+   "source": "05-research-providers.md: https://www.together.ai/blog/adaptive-learning-speculator-system-atlas"
+  },
+  {
+   "claim": "Modal A100-80GB $2.50/hr (derived from $0.000694/s); Modal L40S $1.95/hr",
+   "source": "05-research-gpu-pricing.md: https://modal.com/pricing"
+  },
+  {
+   "claim": "RunPod A100 SXM 80GB $1.39 community / $1.59 secure; H100 SXM $3.29 secure; L40S $0.99 secure",
+   "source": "05-research-gpu-pricing.md: https://www.runpod.io/pricing"
+  },
+  {
+   "claim": "Lambda A100 SXM 80GB $2.79; H100 SXM $3.99 (8x)",
+   "source": "05-research-gpu-pricing.md: https://lambda.ai/service/gpu-cloud"
+  },
+  {
+   "claim": "MI355X rental $2.29-$2.95 per GPU-hour",
+   "source": "05-research-wafer.md: https://www.wafer.ai/blog/qwen36-mi355x"
+  },
+  {
+   "claim": "108,720 pages/GPU-hour = 30.2 pages/s x 3,600; $0.023 per 1,000 pages = $2.50 / 108,720 x 1,000 (derived arithmetic; short-answer regime only)",
+   "source": "Derived from /home/user/dexa/evals/RESULTS.md 'Multimodal execution thesis' (30.2 img/s) and 05-research-gpu-pricing.md (Modal $2.50/hr); verified with python"
+  },
+  {
+   "claim": "~$6k synthetic-data cost = 50,000 pages x ~$0.12/page (derived)",
+   "source": "Derived from olmOCR recipe cost in 05-research-docai.md: https://arxiv.org/html/2510.19817"
+  },
+  {
+   "claim": "Kill-gate and target thresholds (>=3x batch, >=2x latency, 40%/70% copy fraction, 1.5x, 30%/50% decode share, +1 pt, $5/$1 per 1K COGS, 2 of 3 pilots, 2x/5x frontier gap) and GPU-hour/day estimates in the Unproven table",
+   "source": "Pre-registered thresholds and effort estimates chosen by this brief (Sections 4, 6, 10); not measurements"
+  }
+ ],
+ "unproven": [
+  {
+   "claim": "Document-to-structure output is mostly a verbatim copy of text present in the page (the property the copy speculator needs)",
+   "experiment": "Parse 1,000 olmOCR-Bench/DocVQA pages with Qwen3-VL-8B; measure the share of output tokens that appear verbatim in the PDF text layer or a CPU OCR pass; kill gate < 40%, proceed >= 70%",
+   "cost_estimate": "~2 GPU-hours (A100), 2 calendar days"
+  },
+  {
+   "claim": "Copy-speculation (OCR/PDF-text draft via n-gram prompt lookup plus trained draft head) yields >= 2x single-stream decode speedup on full-page parse",
+   "experiment": "Same pages on the same vLLM build with and without the copy draft; record acceptance length and seconds per page; kill < 1.5x",
+   "cost_estimate": "~5 GPU-hours, 3 days"
+  },
+  {
+   "claim": "Full-page parse is decode-dominated single-stream (so speculation matters) rather than prefill-bound",
+   "experiment": "Time prefill and decode separately at 1024 px for 50/200/500-token outputs on Qwen3-VL-8B; the ledger's ~22 ms/step is a text-model reference only",
+   "cost_estimate": "~2 GPU-hours, 1 day"
+  },
+  {
+   "claim": "A LoRA-SFT Qwen3-VL-8B/4B on synthetic parse+extract pairs beats its base and reaches >= 85.2 on olmOCR-Bench (neither ledger contains any training result)",
+   "experiment": "Generate ~50k synthetic pairs via the olmOCR recipe (~$0.12/page => ~$6k); LoRA SFT on one H100/H200; evaluate on olmOCR-Bench, DocVQA and a held-out extraction set; kill < base or < 82.4",
+   "cost_estimate": "~40 GPU-hours plus ~$6k labeling, 2 weeks"
+  },
+  {
+   "claim": "A trusted schema-extraction evaluation exists (the research files list parse benchmarks, not a field-extraction one)",
+   "experiment": "Assemble from public key-information-extraction sets plus synthetic schemas; publish with the rerunnable harness",
+   "cost_estimate": "0 GPU-hours, 1 week"
+  },
+  {
+   "claim": "Content-aware visual-token pruning beats naive resize at a matched token budget on Qwen3-VL (blocked on Qwen2.5-VL by mRoPE grid coupling)",
+   "experiment": "Re-implement masked-token position handling on Qwen3-VL; sweep 0.5/0.25 fractions vs resize on DocVQA; drop after 2 weeks if no gain at 0.5",
+   "cost_estimate": "~10 GPU-hours, 2 weeks"
+  },
+  {
+   "claim": "Pages per GPU-second and $/1k pages hold under concurrency (the measured 30.2 img/s is short-answer, single-config)",
+   "experiment": "Adapt the voice-inference loadgen/metrics harness to image prompts; sweep N = 8..256 concurrent pages on A100 and H100; report p95 s/page and pages/GPU-h; kill < 2x vs vanilla vLLM at equal accuracy",
+   "cost_estimate": "~10 GPU-hours, 3 days"
+  },
+  {
+   "claim": "Buyers value per-page latency in agent loops, not only batch $/page",
+   "experiment": "Three design-partner pilots with logged seconds/page and accepted/rejected pages; kill if 0 of 3 use the interactive lane",
+   "cost_estimate": "0 GPU-hours, 4 weeks"
+  },
+  {
+   "claim": "Per-page COGS for full-page parse (hundreds of output tokens) lands under $1 per 1,000 pages at real GPU rates",
+   "experiment": "Measure pages/GPU-hour for parse (not field QA) on A100 and H100 and multiply by the rate card in 05-research-gpu-pricing.md; kill if COGS > $5/1K",
+   "cost_estimate": "folded into the concurrency sweep (~10 GPU-hours)"
+  }
+ ],
+ "founder_decisions": [
+  {
+   "decision": "Market size of document-to-structure inference",
+   "options": "Pursue; treat as a wedge into a broader Morph-style catalog; or skip",
+   "why_not_ours_to_make": "The founder's rule forbids market-size judgments; the research files contain per-page price lists (Azure/Google/Textract $1.50-$50 per 1K, Reducto $0.01/page, Unstructured $0.015/page) but no volume disclosures for document APIs, so the informing evidence is the founder's own read plus week-1 pilot demand"
+  },
+  {
+   "decision": "Whether incumbents' adjacency matters (Reducto r-1 at $0.01/page, Mistral OCR 4 at $4/1K, open olmOCR-2/dots.mocr, hosted Qwen3-VL at $0.20/M, and Morph's ability to add a document model)",
+   "options": "Compete on latency plus per-page price with a public benchmark; pick another task from the selection table (compaction, voice, routing); or combine with another candidate direction",
+   "why_not_ours_to_make": "The brief states competitor facts neutrally; the founder's rule reserves the 'already exists' judgment; the week-1 baseline table is the evidence that would inform it"
+  },
+  {
+   "decision": "Parse-first vs extract-first SKU",
+   "options": "Parse (public benchmarks olmOCR-Bench/OmniDocBench, likely higher copy fraction, lower price points $4-$10/1K) vs extract (price points $20-$50/1K, needs a new eval)",
+   "why_not_ours_to_make": "Depends on the measured copy fraction and per-SKU accuracy from weeks 1 and 4, and on which buyers the founder can reach"
+  },
+  {
+   "decision": "Hosted vs BYOC vs open weights",
+   "options": "Hosted per-page API (gateway exists); BYOC container (compose file exists); release weights like olmOCR/dots (distribution vs moat); Mistral-style enterprise self-host",
+   "why_not_ours_to_make": "Trades moat for distribution; Morph does not release weights while olmOCR/dots do; pilot procurement requirements are the informing evidence"
+  },
+  {
+   "decision": "Base model choice",
+   "options": "Qwen3-VL-8B (DocVQA 96.1) vs 4B (95.3) vs 2B (93.3) vs dots.mocr 3B (olmOCR-Bench 83.9) vs olmOCR-2-7B (82.4); train-from-scratch is out of 6-week scope",
+   "why_not_ours_to_make": "Accuracy-vs-throughput per size is unmeasured until the week-4 fine-tune and week-5 sweep; the tradeoff between latency and accuracy is a product-positioning call"
+  },
+  {
+   "decision": "GPU class for the benchmark and for production",
+   "options": "A100-80GB (ledger data, $1.39-$2.79/hr), L40S ($0.99-$1.95/hr), H100 ($3.29-$3.99/hr), B200, or AMD MI355X ($2.29-$2.95/hr per Wafer)",
+   "why_not_ours_to_make": "No ledger data exists beyond A100/L40S; the week-5 two-class sweep informs it; capital and vendor relationships are the founder's"
+  },
+  {
+   "decision": "Speculator form",
+   "options": "Prompt-lookup n-gram draft only (no training; exists off-the-shelf, e.g. Baseten NGram) vs a trained task-specific draft head (Morph reports 3.07x vs 1.93x for task-trained vs generic drafts)",
+   "why_not_ours_to_make": "Week-2 acceptance-length measurements decide the payoff; the trained head is the moat candidate but costs training effort the founder must fund"
+  },
+  {
+   "decision": "Whether to publish the benchmark harness and numbers openly",
+   "options": "Open harness and public benchmark page (Wafer's approach) vs closed marketing pages (Morph's pages returned HTTP 429 in research)",
+   "why_not_ours_to_make": "Trades credibility with skeptical buyers against giving competitors a replication kit; pilot conversion is the evidence"
+  },
+  {
+   "decision": "Pricing unit and free tier",
+   "options": "Per page (two SKUs), per credit (LlamaParse/Extend style), or per token (hosted-VLM style); batch discount depth; free tier size (10,000 pages matching Unstructured is a comparable, not a recommendation)",
+   "why_not_ours_to_make": "Depends on measured COGS per SKU from week 5 and on the founder's go-to-market posture"
+  }
+ ]
+}

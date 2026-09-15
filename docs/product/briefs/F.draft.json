@@ -1,0 +1,354 @@
+{
+ "id": "F",
+ "name": "Portable, persistent KV state layer for self-hosters (open-core infrastructure software)",
+ "one_line": "An Apache-2.0 vLLM/SGLang connector plus state store that makes session KV a durable, tenant-keyed, audited object that survives pod death and resumes on any replica with bit-identical output (proven at TP=1), with a commercial fleet control plane as the paid layer; speed parity vs re-prefill is a gate, not the headline.",
+ "numeric_claims": [
+  {
+   "claim": "Cross-instance resume validated on vLLM 0.24.0 at TP=1: two Modal containers, identical_output=True (OPT-125m, A10G); 8,176 of 8,192 tokens matched at 8k on Qwen3-0.6B; '16 re-prefilled' is derived as 8192-8176",
+   "source": "context/01-evidence-ledger-dexa.md entry [PROVEN] cross-instance-resume; /home/user/dexa/docs/RESULTS.md 'Update (2026-07-09, latest): the vLLM connector works end-to-end' and 'Cross-instance confirmed'"
+  },
+  {
+   "claim": "vLLM latest PyPI 0.28.0 (Aug 26 2026); SGLang 0.5.18 (Aug 21 2026)",
+   "source": "context/05-research-kvcache.md Facts; https://pypi.org/project/vllm/"
+  },
+  {
+   "claim": "llm-d CNCF Sandbox Mar 2026; v0.9.0 released Aug 17 2026",
+   "source": "context/05-research-kvcache.md; https://github.com/llm-d/llm-d/releases"
+  },
+  {
+   "claim": "Tensormesh reserved H200 GPUs at $2.50/hr",
+   "source": "https://www.tensormesh.ai/pricing (context/05-research-kvcache.md)"
+  },
+  {
+   "claim": "MI355X rental $2.29-2.95 per GPU-hour",
+   "source": "https://www.wafer.ai/blog/qwen36-mi355x (context/05-research-wafer.md)"
+  },
+  {
+   "claim": "TraceLab: ~4,300 sessions; median cached prefix 115,584-126,180 tokens/step; 857-886 new input tokens; 184-252 output tokens; human gap median 1.4 min, p90 20.6 min; prefix-cache hit 95.7% overall, 84.4% on user-initiated steps",
+   "source": "https://arxiv.org/html/2606.30560 (context/05-research-agents.md)"
+  },
+  {
+   "claim": "llm-d GLM-5.2 post: 219 production Claude Code sessions; median 195K input / 317 output tokens; 96% of requests reuse >=90% verbatim prefix; inter-turn pauses median 2 s, p99 11.4 min; 'TP=8 keeps eight copies of the KV cache'",
+   "source": "https://llm-d.ai/blog/serving-glm-5-2-agentic-workloads-on-llm-d (context/05-research-kvcache.md)"
+  },
+  {
+   "claim": "Codex traces: ~131:1 input:output; inter-turn delays 5.2 s median to 81.4 s P99",
+   "source": "https://vllm.ai/blog/2026-05-06-mooncake-store (context/05-research-agents.md)"
+  },
+  {
+   "claim": "Alibaba traces: ideal hit ratios 54-62%; P99 KV lifespan 97 s in to-B",
+   "source": "https://arxiv.org/html/2506.02634v1 (context/05-research-kvcache.md)"
+  },
+  {
+   "claim": "Repo measurements cover only Llama-3.1-8B and Qwen2.5-7B (plus OPT-125m/Qwen3-0.6B for correctness) on A100-80GB, A10G, L40S at 4k-64k, TP=1",
+   "source": "context/04-conflicts.md 'MODELS/GPUS/CONNECTORS PER RESULT'; context/01-evidence-ledger-dexa.md provenance"
+  },
+  {
+   "claim": "Arm A collapse on L40S: prompt throughput 9,466-10,779 tok/s; prefix-cache hit rate ~92% -> 1.6-1.9%",
+   "source": "context/02-evidence-ledger-voice.md entry vi-armA-baseline-knee; /home/user/voice-inference/runs/modal/sweep_a/seed1/n300/server_log_tail.txt"
+  },
+  {
+   "claim": "Anthropic prompt cache: 5-minute default TTL, 1-hour option at 2x base input write price, reads at 0.1x; caches isolated per organization",
+   "source": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching and https://platform.claude.com/docs/en/about-claude/pricing (context/05-research-caching.md)"
+  },
+  {
+   "claim": "OpenAI: 30-minute TTL for GPT-5.6+ (reads 0.1x); earlier models in_memory or 24h retention",
+   "source": "https://developers.openai.com/api/docs/guides/prompt-caching (context/05-research-caching.md)"
+  },
+  {
+   "claim": "DeepSeek caches cleared 'usually within a few hours to a few days'",
+   "source": "https://api-docs.deepseek.com/guides/kv_cache (context/05-research-caching.md)"
+  },
+  {
+   "claim": "Claude Code docs: after a gap longer than the TTL the next request recomputes the full input",
+   "source": "https://code.claude.com/docs/en/prompt-caching (context/05-research-agents.md)"
+  },
+  {
+   "claim": "Codex on Azure: 3.28M re-billed tokens = 71% of fresh input once a session passed ~150K tokens",
+   "source": "https://github.com/openai/codex/issues/25604 (context/05-research-agents.md)"
+  },
+  {
+   "claim": "SGLang HiCache: host memory cannot be pooled across instances or hosts; L1/L2 private per instance",
+   "source": "https://docs.sglang.io/docs/advanced_features/hicache_best_practices (context/05-research-kvcache.md)"
+  },
+  {
+   "claim": "llm-d P2P: peers must share identical block size and hash seed or transfers silently drop to zero; off by default; 48K-token pull 235 ms vs 1,988 ms recompute on gpt-oss-120b; crossover ~8K-12K tokens for GLM-5.2-FP8; '8.5x at 48k' is derived as 1,988/235",
+   "source": "https://llm-d.ai/blog/p2p-kv-cache-sharing-llm-d (context/05-research-kvcache.md)"
+  },
+  {
+   "claim": "vLLM KVConnectorBase_V1 merged Apr 17 2025 and still documented as experimental and subject to change",
+   "source": "https://docs.vllm.ai/en/stable/api/vllm/distributed/kv_transfer/kv_connector/v1/base/ (context/05-research-kvcache.md)"
+  },
+  {
+   "claim": "Tensormesh CEO: building equivalent systems in-house takes '20 engineers and three or four months'",
+   "source": "https://techcrunch.com/2025/10/23/tensormesh-raises-4-5m-to-squeeze-more-inference-out-of-ai-server-loads/ (context/05-research-kvcache.md)"
+  },
+  {
+   "claim": "Voice connector staging buffers OOM'd the engine at 345 concurrent requests; 1 GB staging cap with backpressure added afterward",
+   "source": "context/02-evidence-ledger-voice.md entry vi-bypass-governor-policy; context/03-build-inventory.md VoiceKVConnector row"
+  },
+  {
+   "claim": "Dexa connector single-request resume 1,681 ms vs vLLM cold re-prefill 617 ms (0.37x), Llama-3.1-8B, A100, 8k",
+   "source": "context/01-evidence-ledger-dexa.md entry connector-session-resume-single-request; /home/user/dexa/docs/RESULTS.md '8B measurement'"
+  },
+  {
+   "claim": "Under 16-24-way concurrency the connector's P99 TTFT was 1.6-2.2x worse than vanilla with async loading (8,930 vs 5,596 ms; 20,296 vs 9,379 ms); adaptive policy 5,603 vs 5,596 and 9,371 vs 9,379 ms; shipped OFF",
+   "source": "context/01-evidence-ledger-dexa.md entry connector-under-concurrency-sync-async; /home/user/dexa/docs/RESULTS.md 'contention benchmark'"
+  },
+  {
+   "claim": "Reconciliation rule: restore wins iff tier bandwidth x prefill time > KV bytes; pinned RAM ~10-20 GB/s crosses over below 4k single-request; Dexa connector disk path ~0.6 GB/s (1.05 GB in 1,681 ms) crosses over only near 64k; byte accounting inconsistent (1.7 GB vs 1,048 MB)",
+   "source": "context/04-conflicts.md conflict 1 (derived arithmetic) and conflict 12"
+  },
+  {
+   "claim": "LMCache latest PyPI release 0.5.4",
+   "source": "https://pypi.org/project/lmcache/ (context/05-research-kvcache.md)"
+  },
+  {
+   "claim": "vLLM OffloadingConnector: LRU/ARC policies; CPU primary with FS/S3/P2P secondary tiers; offload_prompt_only defaults true (decode blocks skipped); CPU staging for external storage listed as future work",
+   "source": "https://docs.vllm.ai/en/latest/features/kv_offloading_usage/ and https://vllm.ai/blog/2026-01-08-kv-offloading-connector (context/05-research-kvcache.md)"
+  },
+  {
+   "claim": "LMCache paper: remote-storage loading only beats prefill when input exceeds ~256K tokens at 32 Gbps",
+   "source": "https://arxiv.org/html/2510.09665v2 (context/05-research-kvcache.md)"
+  },
+  {
+   "claim": "LMCache CPU offload/restore in vLLM 0.24.0 (prefix cache off, single request): 10.0x at 4k (301 -> 30 ms), 17.1x at 16k (1,320 -> 77 ms); 0.875 GB retrieved at 22.0 GB/s in 39.8 ms",
+   "source": "context/01-evidence-ledger-dexa.md entry lmcache-offload-restore; /home/user/dexa/evals/RESULTS.md 'Offload -> restore through vLLM + LMCache'"
+  },
+  {
+   "claim": "Code sizes: vllm_connector.py 917 lines; voice_kv_connector.py 574 lines; src/dexa/segment 643 lines; voice harness ~2,000 lines; dexa_platform/control 620 lines; test_vllm_connector.py 17 tests, 16 pass, 1 skipped",
+   "source": "context/03-build-inventory.md component tables (dexa and voice-inference)"
+  },
+  {
+   "claim": "No governance code exists: grep for rbac/audit/prometheus/retention across src/, dexa_platform/, edge/src returns only pricing.py comments; connector store key has no tenant component",
+   "source": "context/03-build-inventory.md dexa Gaps; grep of /home/user/dexa/src/dexa/engine/vllm_connector.py for cache_salt/tenant returns nothing"
+  },
+  {
+   "claim": "Connector conformance: 10/10 KVConnectorBase_V1 hook signatures match vLLM 0.24.0",
+   "source": "context/01-evidence-ledger-dexa.md entry connector-conformance; /home/user/dexa/benchmarks/results/2026-07-09-vllm-connector-check.json"
+  },
+  {
+   "claim": "HFBackend persist bench: bit-identical resume at 8k/16k/32k/64k on Llama-3.1-8B/A100; the 3.7-5.5x figure is vs HF eager prefill and superseded as a vLLM-relative speedup",
+   "source": "context/01-evidence-ledger-dexa.md entry raw-kv-resume-vs-reprefill-gpu-arc; context/04-conflicts.md conflict 2 and 'Superseded claims'; /home/user/dexa/benchmarks/results/2026-07-09-a100-8b-persist-native-load.json"
+  },
+  {
+   "claim": "fp8 and int8 KV at 0.5x bytes give 100% greedy agreement over 48 tokens; int4 diverges at token 14",
+   "source": "context/01-evidence-ledger-dexa.md entry kv-interchange-formats"
+  },
+  {
+   "claim": "Base<->instruct KV injection diverges within 2-5 tokens",
+   "source": "context/01-evidence-ledger-dexa.md entry kv-interchange-weights"
+  },
+  {
+   "claim": "VoiceKVConnector N=300 p95 316.8 ms whole-run, 336.8 ms full-load window; LMCache 0.3.2 N=300 p95 25,997.7 ms default and 6,025.1 ms layerwise; arm D N=300 p95 272.2 ms PASS vs max passing N=200 for A/B/C; 300 ms gate",
+   "source": "context/02-evidence-ledger-voice.md entries vi-armB-voice-connector-reactive, vi-armB-lmcache-reactive, vi-armD-predictive-pinning; /home/user/voice-inference/runs/modal/sweep_bv, sweep_b, diag_b_n300_lw, sweep_d summary.json"
+  },
+  {
+   "claim": "Restore-vs-re-prefill 10-34x (single request, RAM tier) vs 0.37x / 1.6-2.2x worse (disk tier, concurrency); no LMCache-under-load run in dexa; two repos never ran the same LMCache version",
+   "source": "context/01-evidence-ledger-dexa.md entry restore-vs-reprefill-cross-repo-contradiction; context/04-conflicts.md conflicts 1, 4 and Superseded claims (last bullet)"
+  },
+  {
+   "claim": "vllm bench serve prefix_repetition (OPT-125m, A10G, 1024-token prefix, 60 prompts): Dexa mean TTFT 3,355 ms at 9.8 req/s vs no-cache 610 ms vs vLLM prefix cache 183 ms; zero connector hits",
+   "source": "context/01-evidence-ledger-dexa.md entry vllm-bench-serve-prefix-repetition; /home/user/dexa/docs/RESULTS.md 'Update (2026-07-09, independent benchmark)'"
+  },
+  {
+   "claim": "Crossover calibrated to three values: ~64k measured, 32,768 default (dexa_min_load_tokens), 8,192 in the contention bench",
+   "source": "context/04-conflicts.md conflict 12; /home/user/dexa/docs/CONNECTOR_COMPLETION.md 'Adaptive load-vs-recompute'"
+  },
+  {
+   "claim": "In-engine evidence stops at 16k: vLLM V1 EngineCore died at >=32k across three configs; 32k-64k points are HF-only",
+   "source": "context/01-evidence-ledger-dexa.md entry vllm-warmstart-prefix-cache; context/04-conflicts.md conflict 11"
+  },
+  {
+   "claim": "Incremental recompute: 4.6x fewer tokens reprocessed over a 20-step simulated loop (tiny-random Llama, CPU); no GPU wall time",
+   "source": "context/01-evidence-ledger-dexa.md entry incremental-recompute; /home/user/dexa/README.md Phase 1 gate"
+  },
+  {
+   "claim": "Arm D pass margin 27.8 ms whole-run, 8.1 ms full-load window; 3 of 7 full-load buckets above 300 ms; N=400 p95 34,048 ms FAIL; single seed",
+   "source": "context/02-evidence-ledger-voice.md entries vi-armD-predictive-pinning and vi-armD-n400-failure"
+  },
+  {
+   "claim": "Residency cost model assumed rates GPU $1.80/hr, RAM $0.006/GB-hr, NVMe $0.0002/GB-hr; '2-6x cheaper' is modeled; tiering policy advisory only",
+   "source": "context/01-evidence-ledger-dexa.md entry residency-cost-model; context/04-conflicts.md conflict 3; context/03-build-inventory.md dexa_platform/sessions row"
+  },
+  {
+   "claim": "Unproven-table cost estimates (~40, ~60, ~30, ~50, ~10, 0, ~30 GPU-hours; 2-10 days; 6 weeks) are author estimates, not measurements; the only repo anchors are '~2 GPU-hours per idea' and a '~$45 GPU' doc claim",
+   "source": "context/02-evidence-ledger-voice.md entries vi-open-armD-tuning and vi-harness-methodology-lessons (anchors); estimates labeled as such in the brief"
+  },
+  {
+   "claim": "vllm_connector.py line 608 'continue # chunked prefill still in progress (TODO: scan cached reqs)'; save loop scans only scheduled_new_reqs",
+   "source": "context/03-build-inventory.md dexa Gaps 'Chunked prefill in the connector'; context/01-evidence-ledger-dexa.md entry chunked-prefill-gap"
+  },
+  {
+   "claim": "TP>1 is 'the long pole' and unimplemented (zero tensor_parallel references in the connector)",
+   "source": "/home/user/dexa/docs/CONNECTOR_COMPLETION.md 'Remaining (honest)'; context/03-build-inventory.md dexa Gaps 'Tensor parallelism'"
+  },
+  {
+   "claim": "docs/BENCHMARK_PLAN.md first experiment (Mooncake conversation_trace, three connector configs) was never run; gotcha #1 routing must defeat local prefix caching",
+   "source": "/home/user/dexa/docs/BENCHMARK_PLAN.md; context/01-evidence-ledger-dexa.md provenance ('never run')"
+  },
+  {
+   "claim": "Tensormesh post-v1 pricing formula: (GPU x GPH) + (GPU x GPH x EST x 0.3), i.e. 30% of estimated savings; SaaS bills cached input tokens at $0",
+   "source": "https://www.tensormesh.ai/faq and https://www.tensormesh.ai/blog-posts/tensormesh-raises-20m-launches-inference-platform (context/05-research-kvcache.md)"
+  },
+  {
+   "claim": "Repo infers warm = not first_touch and models savings from a static PROFILE table (no observed restore)",
+   "source": "context/03-build-inventory.md dexa_platform/sessions row (backend.py:44,60) and dexa Gaps 'Warm/cold observation'"
+  },
+  {
+   "claim": "LMCache MP mode has 21 L2 adapter types; eviction LRU/IsolatedLRU/noop only, no documented TTL/idle-window policy; Tensormesh total funding $24.5M; tenant isolation of cached KV not documented; no named customers",
+   "source": "https://docs.lmcache.ai/mp/architecture.html; https://www.tensormesh.ai/blog-posts/tensormesh-raises-20m-launches-inference-platform; context/05-research-kvcache.md Unknowns"
+  },
+  {
+   "claim": "Mooncake: Transfer Engine 87-190 GB/s; approximate LRU; 10 s default KV lease; single master default SPOF; DFS tier not production-ready; OffsetAllocator truncates on restart; soft pins not persisted across recovery; v0.3.13 adds tenant-aware metadata isolation",
+   "source": "https://github.com/kvcache-ai/Mooncake; mooncake-store.md and deployment guide; https://github.com/kvcache-ai/Mooncake/releases (context/05-research-kvcache.md)"
+  },
+  {
+   "claim": "NVIDIA Dynamo KVBM G1-G4 tiers with presence/LFU filters, no per-tier eviction algorithm detailed, no published performance numbers, disk-only experimental; NIXL v1.4.1 Sep 1 2026; BlueField-4 CMX tier available 2H 2026",
+   "source": "https://docs.nvidia.com/dynamo/design-docs/component-design/kvbm-design; https://github.com/ai-dynamo/nixl/releases; https://nvidianews.nvidia.com/news/nvidia-bluefield-4-powers-new-class-of-ai-native-storage-infrastructure-for-the-next-frontier-of-ai (context/05-research-kvcache.md)"
+  },
+  {
+   "claim": "vLLM TieringManager RFC #38260 open; SGLang RFCs #24656 (inactive) and #27574",
+   "source": "https://github.com/vllm-project/vllm/issues/38260; https://github.com/sgl-project/sglang/issues/24656; https://github.com/sgl-project/sglang/issues/27574 (context/05-research-kvcache.md)"
+  },
+  {
+   "claim": "FlexKV merged into vLLM mainline v0.17.2+; production users unknown; AIBrix S3FIFO L1; Tair KVCache quota-based eviction sold as Alibaba Cloud product",
+   "source": "https://github.com/taco-project/FlexKV; https://aibrix.readthedocs.io/latest/features/kvcache-offloading.html; https://github.com/alibaba/tair-kvcache (context/05-research-kvcache.md)"
+  },
+  {
+   "claim": "IBM Storage Scale as G4 tier: 56x TTFT speedup at 130K tokens; no pricing found for any storage-vendor KV product; no engine-independent multi-tenant KV service found",
+   "source": "https://www.redbooks.ibm.com/docs/MD260021/MD260021.html; context/05-research-kvcache.md Unknowns"
+  },
+  {
+   "claim": "Google Gemini explicit caches bill hourly storage ($0.50-$4.50 per 1M tokens per hour by model)",
+   "source": "https://ai.google.dev/gemini-api/docs/pricing (context/05-research-caching.md)"
+  },
+  {
+   "claim": "No provider was found selling a guaranteed session-pinned KV retention SKU",
+   "source": "context/05-research-agents.md Unknowns (first bullet)"
+  },
+  {
+   "claim": "vLLM 0.24.0 was the pinned version in use on 2026-07-09; 0.28.0 released 2026-08-26",
+   "source": "context/01-evidence-ledger-dexa.md provenance and docs/RESULTS.md 2026-07-09 updates; https://pypi.org/project/vllm/"
+  },
+  {
+   "claim": "L40S memory wall: N=300 working set ~42 GB vs ~26 GB KV pool; both repos name a larger-HBM GPU as the top unmeasured threat",
+   "source": "context/02-evidence-ledger-voice.md entries vi-armA-baseline-knee and vi-open-larger-hbm-gpu; context/04-conflicts.md conflict 5"
+  },
+  {
+   "claim": "Arm D pin mechanism is ~40 lines in the connector plus a 6-line client hint; KVConnector API cannot express request-less prefetch",
+   "source": "context/03-build-inventory.md voice REUSABILITY SUMMARY; context/02-evidence-ledger-voice.md entry vi-open-scheduler-native-prefetch"
+  },
+  {
+   "claim": "Attention Matching 0.53 vs H2O 0.82 at 128x multi-needle on Llama-3.1-8B; cartridge QA quality unreproduced",
+   "source": "context/01-evidence-ledger-dexa.md entries attention-matching-vs-h2o and cartridges-quality"
+  },
+  {
+   "claim": "dexa is Apache-2.0; README lists hosted multi-tenant SaaS control plane as out of scope while edge/ and dexa_platform build one",
+   "source": "/home/user/dexa/pyproject.toml license field; /home/user/dexa/README.md 'What's out of scope' and 'Open-source'; context/04-conflicts.md conflict 7"
+  },
+  {
+   "claim": "Kill-gate thresholds (1.0x at 128k, 2.0x at 64k, P99 1.2x, 1.5x/1.2x of 183 ms, 10 days, 2 breaking changes/quarter, 0 of 5 / 2 of 5 partners, 1 block = 16 tokens) are pre-registered targets set by the author, not measurements",
+   "source": "Brief section 10 (author-defined); the comparators 17.1x at 16k and 8.5x at 48k trace to context/01 lmcache-offload-restore and the llm-d P2P post"
+  }
+ ],
+ "unproven": [
+  {
+   "claim": "Resume from a pinned-CPU or NVMe tier beats vLLM re-prefill at 32k-128k in-engine once the connector uses block-hash keying and saves chunked prefills",
+   "experiment": "Re-run scripts/modal_bench_resume.py with a pinned-slab tier (ported from vkv/backends/voice_kv_connector.py) and chunked-prefill saves at 8k/32k/64k/128k on Llama-3.1-8B, A100 and H100, prefix caching off, reporting resume/cold TTFT and effective GB/s per tier (the 04-conflicts #1 crossover-surface experiment); kill if <1.0x at 128k, proceed if >=2.0x at 64k",
+   "cost_estimate": "~40 GPU-hours, 5 calendar days (estimate, not measured)"
+  },
+  {
+   "claim": "TP>1 shard-consistent save/load yields bit-identical output across TP=1/2/4 layouts without forking vLLM",
+   "experiment": "Implement per-shard KV-head layout in the DEXAKV01 header and connector per docs/CONNECTOR_COMPLETION.md 'TP>1'; run the two-process test (scripts/modal_connector_xinstance.py) at TP=2 and TP=4 with greedy-output diff; kill if not bit-identical after 10 days",
+   "cost_estimate": "~60 multi-GPU-hours, 10 calendar days (estimate)"
+  },
+  {
+   "claim": "A session survives a Kubernetes pod SIGKILL and resumes on another node with <=1 block (16 tokens) re-prefilled and identical output",
+   "experiment": "Preemption Survival Score: two vLLM instances under llm-d round-robin routing that defeats local prefix cache, vllm bench serve multi-turn with --max-active-conversations, SIGKILL instance A mid-run, measure identical-output fraction, tokens re-prefilled, and resume TTFT vs cold re-prefill",
+   "cost_estimate": "~30 GPU-hours, 5 calendar days (estimate)"
+  },
+  {
+   "claim": "The connector is at parity with LMCache, vLLM OffloadingConnector and vanilla prefix caching on Mooncake production traces and prefix_repetition",
+   "experiment": "docs/BENCHMARK_PLAN.md first experiment (never run): Mooncake conversation_trace replayed via vllm bench serve timed_trace against three identical servers with the connector swapped; plus prefix_repetition rerun (1024-token prefix, 60 prompts) and the 16x8192 contention replay; kill if mean TTFT >1.5x vLLM prefix cache or P99 >1.2x vanilla",
+   "cost_estimate": "~50 GPU-hours, 7 calendar days (estimate)"
+  },
+  {
+   "claim": "Tenant-namespaced keys and an append-only audit log add no measurable TTFT overhead and produce zero cross-tenant hits",
+   "experiment": "prefix_repetition with two tenants sending byte-identical prompts; assert zero cross-tenant hits from the audit log; compare TTFT with governance on vs off",
+   "cost_estimate": "~10 GPU-hours, 2 calendar days (estimate)"
+  },
+  {
+   "claim": "Platform, neocloud or regulated teams will deploy the layer in staging and value audit/tenant governance",
+   "experiment": "Five design-partner outreach and installs over the 6-week build; kill if 0 of 5 in staging, proceed if >=2 of 5 with the audit log enabled",
+   "cost_estimate": "0 GPU-hours, 6 calendar weeks of outreach (estimate)"
+  },
+  {
+   "claim": "An SGLang HiCacheStorage backend (get/exist/set) provides the same durability and bit-identical resume",
+   "experiment": "Implement the HiCacheStorage ABC over the same state store; repeat the survival test on SGLang 0.5.18",
+   "cost_estimate": "~30 GPU-hours, 7 calendar days (estimate)"
+  },
+  {
+   "claim": "The economics (per-GPU-month or savings-share) hold on 80 GB-class GPUs where the L40S memory wall may not exist",
+   "experiment": "Re-run evals/modal_lmcache_restore.py and the voice arm A N=300/N=400 points on H100-80GB and H200; feed measured prefill/restore times and real $/hr into evals/stateful_cost_model.py (04-conflicts #5)",
+   "cost_estimate": "~20 GPU-hours, 3 calendar days (estimate)"
+  },
+  {
+   "claim": "A measured 'recompute-avoided GPU-seconds' metric can be reported per request, making savings-share pricing expressible",
+   "experiment": "Instrument the connector to log restored tokens and bytes per request and export via Prometheus; validate against server-side vLLM prefix-cache counters over a Mooncake-trace run",
+   "cost_estimate": "~10 GPU-hours, 3 calendar days (estimate)"
+  }
+ ],
+ "founder_decisions": [
+  {
+   "decision": "Does the presence of LMCache/Tensormesh, Mooncake, NVIDIA KVBM/NIXL, llm-d and vLLM's in-tree OffloadingConnector on the same KVConnector seam disqualify this direction, or merely define its baselines?",
+   "options": "(a) Proceed and treat them as the named baselines in the Week 4 benchmark; (b) build on top of one of them (LMCache L2 adapters, NIXL, Mooncake) as transport and differentiate only on durability/governance/control plane; (c) stop. Evidence that informs it: the parity benchmark result, and whether any of them ship durable pod-death survival, tenant keying and audit logs by then (none documented today per the research files).",
+   "why_not_ours_to_make": "The founder's hard rule: a competitor's existence is not a disqualifier; the facts are stated neutrally in section 9 and the judgment about adjacency is the founder's."
+  },
+  {
+   "decision": "Is the governance-first buyer segment (regulated, sovereign, neocloud platform teams) large enough to build for?",
+   "options": "Unmeasured; no customer interviews exist in either repo. Options: run five-partner outreach during the 6-week build; commission a survey of self-hosting agent teams (none found in research files); or proceed on conviction. Evidence: partner conversion (kill gate 0 of 5 / proceed 2 of 5).",
+   "why_not_ours_to_make": "Market-size judgments are explicitly reserved for the founder."
+  },
+  {
+   "decision": "Hosted control plane vs BYOC vs pure open source",
+   "options": "(a) Apache-2.0 core only, customer-operated (README's stated scope); (b) BYOC control plane installed in the customer's cluster; (c) hosted multi-tenant control plane (what edge/ and dexa_platform prototype, contradicting the README per 04-conflicts #7). Evidence: which partners will pay, and for which surface.",
+   "why_not_ours_to_make": "An operating-model and go-to-market choice with no measured evidence either way; the repo itself holds all three framings."
+  },
+  {
+   "decision": "Own the durable store or use LMCache/NIXL/Mooncake as transport underneath the state layer",
+   "options": "(a) Own pinned-slab + NVMe + S3 store (voice connector design, 22 GB/s-class pinned RAM path); (b) reuse LMCache's 21 L2 adapters or NIXL plugins and add only keying, durability semantics and governance; (c) hybrid. Evidence: measured transfer rates (22 GB/s pinned CPU vs ~0.6 GB/s Volume), the connector API drift count, and dependency risk on projects whose roadmaps (LMCache Q2-2026, vLLM TieringManager RFC) may absorb the same features.",
+   "why_not_ours_to_make": "A build-vs-depend judgment that trades engineering control against upstream absorption risk; both sides have facts, no measurement decides it."
+  },
+  {
+   "decision": "Engine order: vLLM first, SGLang first, or Dynamo",
+   "options": "vLLM (all repo evidence, 0.24.0 conformance, but API 'experimental'); SGLang (HiCacheStorage ABC, session RFCs open, no repo evidence); Dynamo/KVBM (standalone kvbm package, no published perf). Evidence: partner engine mix and the API-drift measurement.",
+   "why_not_ours_to_make": "Depends on the customers the founder chooses; the repo only measured vLLM."
+  },
+  {
+   "decision": "GPU class and model class to target",
+   "options": "Small-HBM fleets (L40S/A10G, where the measured memory wall exists) vs 80 GB+ parts (H100/H200/B200, unmeasured; both repos call this the top threat) and 7-8B TP=1 models (measured) vs large TP>1 models where 'TP=8 keeps eight copies' (unbuilt). Evidence: the H100 re-runs listed in 04-conflicts #5 and the TP>1 experiment.",
+   "why_not_ours_to_make": "Changes the build order and the value story; only the founder can weigh which fleet the company sells into."
+  },
+  {
+   "decision": "Fork vLLM for scheduler-native prefetch and eviction ordering, or stay out-of-tree",
+   "options": "(a) Out-of-tree connector only (what the KVConnector API allows: save-at-prefill, restore-on-match, delay-free); (b) maintain a vLLM patch/fork for request-less prefetch and eviction ordering (the voice repo's 'strongest remaining version' of its thesis, untested); (c) upstream the needed hooks. Evidence: API drift rate and whether out-of-tree passes the kill gates.",
+   "why_not_ours_to_make": "A maintenance-burden vs capability trade-off the founder must own."
+  },
+  {
+   "decision": "Is the mutation/versioning/branching DAG the product, or a later substrate?",
+   "options": "(a) Lead with durability/governance (measured foundation) and defer the DAG; (b) lead with mutable versioned state (README's original wedge; HF-only, CPU tiny-model tests, 4.6x token-count reduction, no GPU wall time); (c) drop it. Evidence: a GPU wall-time measurement of recompute_incremental inside vLLM at 32k-64k (unrun).",
+   "why_not_ours_to_make": "Product-identity choice; the evidence for the DAG is design-level and the founder decides how much unproven vision to carry."
+  },
+  {
+   "decision": "Pricing model: per-GPU-month, savings-share, or $0-cached-token",
+   "options": "Per-GPU under management (expressible today); savings-share like Tensormesh's 30%-of-estimated-savings (expressible only after a measured recompute-avoided metric exists); per-token $0-cached (only if the founder also becomes a token provider). Evidence: the Week 5 metric and partner willingness.",
+   "why_not_ours_to_make": "Commercial choice that also dictates which instrumentation is built first."
+  },
+  {
+   "decision": "Upstream posture: contribute to vLLM's TieringManager RFC #38260 and SGLang's session RFCs, or differentiate out-of-tree",
+   "options": "(a) Upstream keying/durability primitives and keep governance/control plane proprietary; (b) stay fully out-of-tree; (c) fully open including control plane. Evidence: whether upstream RFCs ship durable/multi-tenant semantics within the build window.",
+   "why_not_ours_to_make": "Open-core boundary and community-strategy decision; the README's 'never cripple the core' rule is a founder value, not a measurement."
+  }
+ ]
+}

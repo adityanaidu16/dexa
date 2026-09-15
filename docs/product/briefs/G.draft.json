@@ -1,0 +1,175 @@
+{
+ "id": "G",
+ "name": "Cartridges: the context compiler",
+ "one_line": "Compile a static corpus into a trained, portable compact-KV artifact that loads into stock vLLM as a prefix; the systems half is built and tested, the quality half is unproven (one negative 360M/CPU attempt), so the plan is a two-week pre-registered GPU experiment, then a four-week build on what survives.",
+ "numeric_claims": [
+  {
+   "claim": "On a 360M model on CPU the trained cartridge does not beat no-context on held-out QA; no accuracy table recorded; GPU/real-model run not done",
+   "source": "01-evidence-ledger-dexa.md [OPEN] cartridges-quality; /home/user/dexa/docs/CARTRIDGES.md 'Status (v0.1 - honest)'"
+  },
+  {
+   "claim": "docs/CARTRIDGES.md product framing ('matches full-context quality at RAG cost, ~100x less memory') is superseded/unsupported",
+   "source": "04-conflicts.md 'Superseded claims' list"
+  },
+  {
+   "claim": "Pre-registered thresholds at 16-50x: cartridge F1 >= full_context - 2, >= best training-free method + 5, >= RAG + 3",
+   "source": "/home/user/dexa/docs/BENCHMARK.md 'Success threshold'"
+  },
+  {
+   "claim": "CartridgeCompiler defaults: t=64, steps=120, lr=0.02, n_selfstudy=16, answer_len=24, greedy generation in _selfstudy_qa",
+   "source": "/home/user/dexa/src/dexa/cartridge/compiler.py compile() signature and _selfstudy_qa"
+  },
+  {
+   "claim": "Llama-3.1-8B multi-needle 8k+16k, 6 seeds: 128x AM 0.53 / H2O 0.82 / SnapKV 0.86; 512x 0.55/0.41/0.42; 1024x 0.51/0.33/0.32",
+   "source": "01-evidence-ledger-dexa.md [BOUNDED] attention-matching-vs-h2o; /home/user/dexa/docs/RESULTS.md 'Update (2026-06-28)'"
+  },
+  {
+   "claim": "Llama-3.1-8B single-needle 8k at 128x: AM 0.96 / H2O 0.90 / SnapKV 0.90",
+   "source": "01-evidence-ledger-dexa.md [BOUNDED] attention-matching-vs-h2o (configs/extreme-8b.yaml)"
+  },
+  {
+   "claim": "STILL only smoke-trained on tiny-random Llama (KL decreases over ~12 steps); identity-init reconstruction verified to ~1e-7",
+   "source": "/home/user/dexa/docs/RESULTS.md section 5 'STILL full training'; 01-evidence-ledger-dexa.md cartridges-quality caveats"
+  },
+  {
+   "claim": "_PagedPrefixWriter.attach_to_runner raises RuntimeError at vllm_cartridge.py line 488; test_vllm_cartridge 11/14 pass, 3 skipped needing vllm",
+   "source": "03-build-inventory.md dexa components row 'vllm_backend.py + vllm_cartridge.py'; /home/user/dexa/src/dexa/engine/vllm_cartridge.py"
+  },
+  {
+   "claim": "CARTRIDGES.md records '82 passing' tests; build inventory measured 145 collected, 136 passed, 18 skipped (torch/vllm/datasets absent)",
+   "source": "/home/user/dexa/docs/CARTRIDGES.md 'Status'; 03-build-inventory.md dexa 'Tests run' item 3"
+  },
+  {
+   "claim": "Cross-instance resume: two vLLM processes sharing a Volume, identical_output=True (OPT-125m/A10G); 8176/8192 tokens matched at 8k (Qwen3-0.6B)",
+   "source": "01-evidence-ledger-dexa.md [PROVEN] cross-instance-resume"
+  },
+  {
+   "claim": "DexaConnector matches 10/10 vLLM 0.24.0 KVConnectorBase_V1 hook signatures",
+   "source": "01-evidence-ledger-dexa.md [PROVEN] connector-conformance; benchmarks/results/2026-07-09-vllm-connector-check.json"
+  },
+  {
+   "claim": "fp8 (e4m3) and int8 KV at 0.5x bytes: 100% greedy agreement over 48 tokens; int4 29%, first divergence token 14",
+   "source": "01-evidence-ledger-dexa.md [PROVEN] kv-interchange-formats"
+  },
+  {
+   "claim": "base<->instruct KV injection diverges within 2-5 tokens (12.5% / 4.2% agreement); LoRA reuse only to ~3% weight change",
+   "source": "01-evidence-ledger-dexa.md [FALSIFIED] kv-interchange-weights; [BOUNDED] lora-shared-base"
+  },
+  {
+   "claim": "vLLM n=1 decode/step flat ~22 ms from 4k to 128k (21.7/21.9/21.9 ms)",
+   "source": "01-evidence-ledger-dexa.md [PROVEN] vllm-decode-pathology"
+  },
+  {
+   "claim": "CostModel defaults: prefill 9,000 tok/s, decode 120 tok/s, $1.80/hr, 320,000 B/token",
+   "source": "/home/user/dexa/src/dexa/core/types.py class CostModel"
+  },
+  {
+   "claim": "Derived (arithmetic on corpus.py formulas + CostModel defaults, not measured): T=16k, t=320, n_selfstudy=256, steps=200, answer_len=24, n_decode=32 -> compile 3,231 GPU-s (~$1.62); break-even vs full-context ~773 queries; vs TF-IDF RAG k=3 chunk 128 ~54,000 queries",
+   "source": "/home/user/dexa/src/dexa/bench/corpus.py _cartridge_train_proxy, _decode_seconds, _break_even; /home/user/dexa/src/dexa/core/types.py CostModel"
+  },
+  {
+   "claim": "Measured KV state 131 KB/token bf16 for Llama-3.1-8B",
+   "source": "01-evidence-ledger-dexa.md [CONTRADICTED] raw-kv-resume-vs-reprefill-gpu-arc (docs/RESULTS.md persist bench)"
+  },
+  {
+   "claim": "vLLM V1 EngineCore crashed at >=32k in three configs; in-engine runs confirmed only to 16k",
+   "source": "01-evidence-ledger-dexa.md [PROVEN] vllm-warmstart-prefix-cache caveats; 04-conflicts.md conflict 11"
+  },
+  {
+   "claim": "Modal A100 80GB ~$2.50/hr; H100 SXM5 ~$3.95/hr",
+   "source": "05-research-gpu-pricing.md (https://modal.com/pricing)"
+  },
+  {
+   "claim": "Alibaba Tongyi traces: 10% of blocks contribute 77% of reuses; cross-user reuse very low; ideal hit ratios 54-62%",
+   "source": "05-research-kvcache.md (https://arxiv.org/html/2506.02634v1)"
+  },
+  {
+   "claim": "TraceLab: median prefix 126,180 tokens (Claude Code) / 115,584 (Codex); median appended input 857/886 tokens; prefix hit 95.7% overall, 84.4% on user-initiated steps",
+   "source": "05-research-agents.md (https://arxiv.org/html/2606.30560)"
+  },
+  {
+   "claim": "219 production Claude Code sessions: 96% of requests reuse >=90% of input as verbatim prefix; median 195K input tokens",
+   "source": "05-research-kvcache.md (https://llm-d.ai/blog/serving-glm-5-2-agentic-workloads-on-llm-d)"
+  },
+  {
+   "claim": "Morph WarpGrep docs claim coding agents spend 60% of their turns searching for code",
+   "source": "05-research-morph.md (https://docs.morphllm.com/sdk/components/warp-grep)"
+  },
+  {
+   "claim": "Anthropic server-side compaction default trigger 150,000 input tokens",
+   "source": "05-research-agents.md (https://platform.claude.com/docs/en/build-with-claude/compaction)"
+  },
+  {
+   "claim": "Codex issue #25604: past ~150K tokens total prompt-cache misses on Azure; 3.28M re-billed tokens = 71% of fresh input",
+   "source": "05-research-agents.md (https://github.com/openai/codex/issues/25604)"
+  },
+  {
+   "claim": "Claude Code issue #46829: 17.1% overpayment ($949) across 119,866 calls attributed to 1h->5m TTL change",
+   "source": "05-research-caching.md (https://github.com/anthropics/claude-code/issues/46829)"
+  },
+  {
+   "claim": "Fireworks prompt caching only works within 1 replica; cached prompts persist at least several minutes up to several hours",
+   "source": "05-research-providers.md / 05-research-agents.md (https://docs.fireworks.ai/guides/prompt-caching)"
+  },
+  {
+   "claim": "OpenAI: prompt_cache_key does not pin requests; ~15 requests/min per prefix before overflow",
+   "source": "05-research-caching.md (https://developers.openai.com/api/docs/guides/prompt-caching; cookbook prompt_caching_201)"
+  },
+  {
+   "claim": "LMCache paper: context truncation reduced prefix hit ratio from ~85% to ~45%",
+   "source": "05-research-kvcache.md (https://arxiv.org/html/2510.09665v2)"
+  },
+  {
+   "claim": "Gemini explicit cache storage $0.50-$4.50 per 1M tokens per hour; default TTL 1 hour",
+   "source": "05-research-caching.md (https://ai.google.dev/gemini-api/docs/pricing; caching docs)"
+  },
+  {
+   "claim": "Anthropic: 5-min default TTL; 1h write 2x base input; reads 0.1x (0.025x on Fable 5.1)",
+   "source": "05-research-caching.md (https://platform.claude.com/docs/en/about-claude/pricing)"
+  },
+  {
+   "claim": "OpenAI 24h retention default for non-ZDR orgs; GPT-5.6+ 30-minute TTL",
+   "source": "05-research-caching.md (https://developers.openai.com/api/docs/guides/prompt-caching)"
+  },
+  {
+   "claim": "DeepSeek cache hit $0.014 vs miss $0.44 per 1M (V4-Flash peak); cache cleared within a few hours to a few days; storage free",
+   "source": "05-research-caching.md (https://api-docs.deepseek.com/quick_start/pricing; kv_cache guide)"
+  },
+  {
+   "claim": "Tensormesh: cached input billed $0; total funding $24.5M; post-v1 pricing 30% of estimated savings",
+   "source": "05-research-kvcache.md (https://www.tensormesh.ai/pricing; /faq; funding blog)"
+  },
+  {
+   "claim": "LMCache Q2-2026 roadmap lists a 'token-dropping interface for sparse KV'",
+   "source": "05-research-kvcache.md (https://github.com/LMCache/LMCache/issues/2923)"
+  },
+  {
+   "claim": "Morph Compact: 33,000 tok/s, $0.20/$0.50 per M, default compression_ratio 0.5, deletes whole lines",
+   "source": "05-research-morph.md (https://docs.morphllm.com/sdk/components/compact)"
+  },
+  {
+   "claim": "DeepSeek-OCR: 97% OCR precision at <10x compression, ~60% at 20x",
+   "source": "05-research-docai.md (https://arxiv.org/abs/2510.18234)"
+  },
+  {
+   "claim": "vLLM KVConnector V1 docstring: 'experimental and subject to change'; vLLM latest PyPI 0.28.0",
+   "source": "05-research-kvcache.md (https://docs.vllm.ai/en/stable/api/vllm/distributed/kv_transfer/kv_connector/v1/base/; https://pypi.org/project/vllm/)"
+  },
+  {
+   "claim": "Voice traces: per-customer system prompts N(800,150) clipped [300,1600] tokens",
+   "source": "02-evidence-ledger-voice.md vi-phase0-duty-cycle caveats; 03-build-inventory.md traces row"
+  },
+  {
+   "claim": "dexa_platform gateway app.py:127 forces stream=False (no streaming)",
+   "source": "03-build-inventory.md dexa gateway row and Gaps"
+  },
+  {
+   "claim": "vllm_connector.py imports pack_token_major_into_blocks from vllm_cartridge (line 95)",
+   "source": "/home/user/dexa/src/dexa/engine/vllm_connector.py:95"
+  },
+  {
+   "claim": "No external facts about the Cartridges paper (Eyuboglu et al. 2025) exist in the research files; no paper numbers are cited",
+   "source": "grep of 05-research-*.md for 'cartridge|eyuboglu' returned 0 matches"
+  }
+ ]
+}

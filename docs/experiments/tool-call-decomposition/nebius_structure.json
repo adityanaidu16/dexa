@@ -1,0 +1,69 @@
+{
+ "trajectories": 400,
+ "calls": 25752,
+ "readonly_fraction": 0.4843507300403852,
+ "result_reconstructible_fraction": 0.28840478409443926,
+ "result_exact_duplicate_fraction": 0.07094594594594594,
+ "next_action_uses_new_info_from_result": 0.02575733669927422,
+ "next_action_independent_of_result": 0.9742426633007257,
+ "next_action_exact_repeat_of_earlier": 0.08863206058693594,
+ "next_action_is_think_or_finish": 0.02922846323761439,
+ "repeated_command_same_output": 0.3888888888888889,
+ "repeated_commands": 18,
+ "by_tool": {
+  "execute_bash": {
+   "calls": 13228,
+   "share": 0.5136688412550482,
+   "readonly": 0.3550801330511037,
+   "reconstructible": 0.001360749924402782,
+   "dup_result": 0.06259449652252796,
+   "next_uses_new_info": 0.01920396468948428,
+   "next_exact_repeat": 0.07495741056218058
+  },
+  "str_replace_editor:view": {
+   "calls": 6705,
+   "share": 0.2603681267474371,
+   "readonly": 1.0,
+   "reconstructible": 0.3255779269202088,
+   "dup_result": 0.015659955257270694,
+   "next_uses_new_info": 0.06049234464124888,
+   "next_exact_repeat": 0.01636145301711198
+  },
+  "str_replace_editor:create": {
+   "calls": 2274,
+   "share": 0.08830382106244175,
+   "readonly": 0.0,
+   "reconstructible": 0.9876868953386104,
+   "dup_result": 0.002638522427440633,
+   "next_uses_new_info": 0.0,
+   "next_exact_repeat": 0.004852227613586237
+  },
+  "str_replace_editor:str_replace": {
+   "calls": 2120,
+   "share": 0.08232370301335819,
+   "readonly": 0.0,
+   "reconstructible": 0.9004716981132076,
+   "dup_result": 0.017452830188679245,
+   "next_uses_new_info": 0.0009456264775413711,
+   "next_exact_repeat": 0.5158392434988179
+  },
+  "think": {
+   "calls": 1071,
+   "share": 0.041589002795899346,
+   "readonly": 1.0,
+   "reconstructible": 1.0,
+   "dup_result": 0.6265172735760971,
+   "next_uses_new_info": 0.0,
+   "next_exact_repeat": 0.020599250936329586
+  },
+  "task_tracker": {
+   "calls": 354,
+   "share": 0.01374650512581547,
+   "readonly": 0.0,
+   "reconstructible": 0.0,
+   "dup_result": 0.5084745762711864,
+   "next_uses_new_info": 0.0,
+   "next_exact_repeat": 0.1411042944785276
+  }
+ }
+}

@@ -83,7 +83,17 @@ jobs:
 
       - name: Stop the vLLM app
         if: inputs.phase == 'stop'
-        run: modal app stop spec-exec-vllm || true
+        run: |
+          modal app stop spec-exec-vllm || true
+          modal app list --json > apps.json || true
+          python - <<'PY'
+          import json, subprocess
+          try: apps = json.load(open("apps.json"))
+          except Exception: apps = []
+          for a in apps:
+              if a.get("description") == "spec-exec-vllm" and a.get("state") == "deployed":
+                  print("stopping", a.get("app_id")); subprocess.run(["modal", "app", "stop", a["app_id"]], check=False)
+          PY
 
       - name: Print the vLLM server's Modal logs
         if: inputs.phase == 'logs'
@@ -189,4 +199,14 @@ jobs:
 
       - name: Stop the vLLM server
         if: always() && inputs.phase != 'deploy-only' && inputs.phase != 'stop' && inputs.phase != 'logs'
-        run: modal app stop spec-exec-vllm || true
+        run: |
+          modal app stop spec-exec-vllm || true
+          modal app list --json > apps.json || true
+          python - <<'PY'
+          import json, subprocess
+          try: apps = json.load(open("apps.json"))
+          except Exception: apps = []
+          for a in apps:
+              if a.get("description") == "spec-exec-vllm" and a.get("state") == "deployed":
+                  print("stopping", a.get("app_id")); subprocess.run(["modal", "app", "stop", a["app_id"]], check=False)
+          PY

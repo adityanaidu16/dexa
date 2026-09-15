@@ -78,3 +78,6 @@ if __name__ == "__main__":
     arms = summarize(run_dir)
     json.dump(arms, open(os.path.join(run_dir, "summary.json"), "w"), indent=1)
     print(render(arms))
+    if arms and all(a["tasks"] and a["errors"] == a["tasks"] for a in arms.values()):
+        print("every task errored; treating the run as failed", file=sys.stderr)
+        sys.exit(2)

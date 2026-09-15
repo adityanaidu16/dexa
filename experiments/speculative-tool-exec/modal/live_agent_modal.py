@@ -17,6 +17,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 
 import modal
+import urllib.error
 import urllib.request
 from openai import OpenAI
 
@@ -53,6 +54,8 @@ def wait_for_server(base_url, api_key, max_wait=1800):
             with urllib.request.urlopen(req, timeout=60) as r:
                 if r.status == 200:
                     return time.time() - t0
+        except urllib.error.HTTPError as e:
+            last = f"HTTP {e.code} (the server is up; a 401 here means a key mismatch, or stale requests queued by an earlier run being flushed)"
         except Exception as e:
             last = repr(e)[:200]
         time.sleep(10)
@@ -71,8 +74,13 @@ class SandboxEnv:
         self.write("/tmp/editor.py", editor_src)
 
     def write(self, path, content):
-        with self.sb.open(path, "w") as f:
-            f.write(content)
+        """Sandbox.open() was removed from Modal in 2026; use the filesystem API, falling back to exec + stdin."""
+        try:
+            self.sb.filesystem.write_text(path, content)
+        except Exception:
+            rc, out, _ = self.exec(f"cat > {shlex.quote(path)}", timeout=60, stdin=content)
+            if rc != 0:
+                raise RuntimeError(f"could not write {path}: {out[-300:]}")
 
     def exec(self, cmd, timeout=300, stdin=None):
         t0 = time.time()
@@ -110,7 +118,8 @@ class SandboxEnv:
         return head.strip(), body
 
     def editor(self, args):
-        return self.exec("python3 /tmp/editor.py", timeout=120, stdin=json.dumps(args))
+        self.write("/tmp/editor_in.json", json.dumps(args))
+        return self.exec("python3 /tmp/editor.py < /tmp/editor_in.json", timeout=120)
 
     def close(self):
         try:

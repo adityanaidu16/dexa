@@ -6,7 +6,8 @@ Configuration is read from the environment of the machine running `modal deploy`
 container as a Modal secret (container code cannot see the deployer's environment otherwise):
   SPEC_MODEL          HF model id                (default Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8)
   SPEC_GPU            Modal GPU spec             (default H100)
-  SPEC_VLLM_IMAGE     vLLM image tag             (default vllm/vllm-openai:v0.11.0)
+  SPEC_VLLM_VERSION   vLLM version installed into the image (default 0.11.0; torch is pinned by vLLM itself)
+  SPEC_CUDA_IMAGE     base image                 (default nvidia/cuda:12.8.1-devel-ubuntu22.04)
   SPEC_TOOL_PARSER    vLLM tool-call parser      (default qwen3_coder)
   SPEC_MAX_MODEL_LEN  context length             (default 65536)
   SPEC_MAX_NUM_SEQS   max concurrent sequences   (default 64)
@@ -20,7 +21,8 @@ import modal
 
 MODEL = os.environ.get("SPEC_MODEL", "Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8")
 GPU = os.environ.get("SPEC_GPU", "H100")
-VLLM_IMAGE = os.environ.get("SPEC_VLLM_IMAGE", "vllm/vllm-openai:v0.11.0")
+VLLM_VERSION = os.environ.get("SPEC_VLLM_VERSION", "0.11.0")
+CUDA_IMAGE = os.environ.get("SPEC_CUDA_IMAGE", "nvidia/cuda:12.8.1-devel-ubuntu22.04")
 CONFIG = {
     "SPEC_MODEL": MODEL,
     "SPEC_TOOL_PARSER": os.environ.get("SPEC_TOOL_PARSER", "qwen3_coder"),
@@ -31,10 +33,13 @@ CONFIG = {
 
 app = modal.App("spec-exec-vllm")
 hf_cache = modal.Volume.from_name("spec-exec-hf-cache", create_if_missing=True)
+# Built the way Modal's own vLLM example does it: a CUDA base with Modal's Python added, then vLLM from PyPI.
+# (The vllm/vllm-openai image cannot be used for a Modal Function: Modal cannot detect its Python.)
 image = (
-    modal.Image.from_registry(VLLM_IMAGE)
-    .env({"HF_HOME": "/hf", "HF_HUB_ENABLE_HF_TRANSFER": "1"})
+    modal.Image.from_registry(CUDA_IMAGE, add_python="3.12")
     .entrypoint([])
+    .uv_pip_install(f"vllm=={VLLM_VERSION}", "huggingface_hub[hf_transfer]", "flashinfer-python==0.3.1")
+    .env({"HF_HOME": "/hf", "HF_HUB_ENABLE_HF_TRANSFER": "1"})
 )
 
 

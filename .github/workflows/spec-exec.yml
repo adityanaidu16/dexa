@@ -33,9 +33,9 @@ on:
       model:
         description: "HF model id served by vLLM"
         default: "Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8"
-      vllm_image:
-        description: "vLLM image tag"
-        default: "vllm/vllm-openai:v0.11.0"
+      vllm_version:
+        description: "vLLM version installed into the server image"
+        default: "0.11.0"
       environment:
         description: "GitHub environment holding the Modal secrets (repository secrets also work)"
         default: "spec-exec"
@@ -57,7 +57,7 @@ jobs:
       MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
       SPEC_GPU: ${{ inputs.gpu }}
       SPEC_MODEL: ${{ inputs.model }}
-      SPEC_VLLM_IMAGE: ${{ inputs.vllm_image }}
+      SPEC_VLLM_VERSION: ${{ inputs.vllm_version }}
       EXP_DIR: experiments/speculative-tool-exec/modal
     steps:
       - uses: actions/checkout@v4
@@ -116,7 +116,7 @@ jobs:
           mkdir -p "$OUT"
           COUNT="${{ inputs.count }}"; CONC="${{ inputs.concurrency }}"
           if [ "${{ inputs.phase }}" = "smoke" ]; then COUNT=3; CONC=1; fi
-          echo "{\"phase\":\"${{ inputs.phase }}\",\"start\":${{ inputs.start }},\"count\":$COUNT,\"concurrency\":$CONC,\"arms\":\"${{ inputs.arms }}\",\"gpu\":\"$SPEC_GPU\",\"model\":\"$SPEC_MODEL\",\"vllm_image\":\"$SPEC_VLLM_IMAGE\",\"max_steps\":${{ inputs.max_steps }},\"run_id\":\"$RUN_ID\"}" > "$OUT/config.json"
+          echo "{\"phase\":\"${{ inputs.phase }}\",\"start\":${{ inputs.start }},\"count\":$COUNT,\"concurrency\":$CONC,\"arms\":\"${{ inputs.arms }}\",\"gpu\":\"$SPEC_GPU\",\"model\":\"$SPEC_MODEL\",\"vllm_version\":\"$SPEC_VLLM_VERSION\",\"max_steps\":${{ inputs.max_steps }},\"run_id\":\"$RUN_ID\"}" > "$OUT/config.json"
           for ARM in $(echo "${{ inputs.arms }}" | tr ',' ' '); do
             echo "=== arm $ARM ==="
             python "$EXP_DIR/live_agent_modal.py" --base-url "$VLLM_URL" --api-key "$SPEC_VLLM_API_KEY" \

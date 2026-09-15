@@ -23,7 +23,7 @@ flight per arm; it should be the same in both arms.
 
 ## Files
 
-- `app.py`: the Modal app. One `VLLM` class (GPU container) runs `vllm serve` behind a `web_server` endpoint; weights are cached in the `spec-exec-hf-cache` volume; configuration travels as a Modal secret built from the deployer's environment.
+- `app.py`: the Modal app. One `VLLM` class (GPU container) runs `vllm serve` behind a `web_server` endpoint. The image is a CUDA base with vLLM installed from PyPI, the way Modal's own vLLM example builds it (the `vllm/vllm-openai` image cannot back a Modal Function because Modal cannot detect its Python). Weights are cached in the `spec-exec-hf-cache` volume; configuration travels as a Modal secret built from the deployer's environment.
 - `live_agent_modal.py`: the harness. Creates one Modal Sandbox per task from the official image `swebench/sweb.eval.x86_64.<owner>_1776_<repo>-<n>:latest`, drives the model through the OpenAI-compatible endpoint, applies the two rules when `--spec harness`, grades, and appends one JSON record per task. Resumable: tasks already in the output file are skipped.
 - `summarize.py`: per-arm table and the throughput ratio.
 - `tasks_verified_50.json`: the task list with everything the grader needs.

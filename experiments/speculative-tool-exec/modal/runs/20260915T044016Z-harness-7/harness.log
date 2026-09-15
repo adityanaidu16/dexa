@@ -1,0 +1,52 @@
+server ready after 0s; arm=harness tasks=50 concurrency=8
+django__django-11087 arm=harness wall=12s model=8s tool=0s steps=0 hits=0 misses=0 saved=0s tokens={'prompt': 0, 'completion': 0} patch_chars=0 err=AttributeError("'str' object has no attribute 'usage'")
+django__django-11066 arm=harness wall=12s model=8s tool=0s steps=0 hits=0 misses=0 saved=0s tokens={'prompt': 0, 'completion': 0} patch_chars=0 err=AttributeError("'str' object has no attribute 'usage'")
+django__django-10973 arm=harness wall=12s model=7s tool=0s steps=0 hits=0 misses=0 saved=0s tokens={'prompt': 0, 'completion': 0} patch_chars=0 err=AttributeError("'str' object has no attribute 'usage'")
+django__django-10999 arm=harness wall=12s model=8s tool=0s steps=0 hits=0 misses=0 saved=0s tokens={'prompt': 0, 'completion': 0} patch_chars=0 err=AttributeError("'str' object has no attribute 'usage'")
+django__django-10914 arm=harness wall=12s model=7s tool=0s steps=0 hits=0 misses=0 saved=0s tokens={'prompt': 0, 'completion': 0} patch_chars=0 err=AttributeError("'str' object has no attribute 'usage'")
+django__django-10097 arm=harness wall=12s model=8s tool=0s steps=0 hits=0 misses=0 saved=0s tokens={'prompt': 0, 'completion': 0} patch_chars=0 err=AttributeError("'str' object has no attribute 'usage'")
+django__django-11095 arm=harness wall=12s model=8s tool=0s steps=0 hits=0 misses=0 saved=0s tokens={'prompt': 0, 'completion': 0} patch_chars=0 err=AttributeError("'str' object has no attribute 'usage'")
+django__django-10880 arm=harness wall=12s model=8s tool=0s steps=0 hits=0 misses=0 saved=0s tokens={'prompt': 0, 'completion': 0} patch_chars=0 err=AttributeError("'str' object has no attribute 'usage'")
+django__django-11141 arm=harness wall=3s model=0s tool=0s steps=0 hits=0 misses=0 saved=0s tokens={'prompt': 0, 'completion': 0} patch_chars=0 err=AttributeError("'str' object has no attribute 'usage'")
+django__django-11206 arm=harness wall=248s model=222s tool=8s steps=23 hits=3 misses=0 saved=2s tokens={'prompt': 128461, 'completion': 3973} patch_chars=1767 err=
+django__django-11149 arm=harness wall=274s model=245s tool=9s steps=25 hits=2 misses=2 saved=1s tokens={'prompt': 251502, 'completion': 5739} patch_chars=9326 err=
+django__django-11179 arm=harness wall=276s model=241s tool=14s steps=27 hits=2 misses=1 saved=1s tokens={'prompt': 238952, 'completion': 5478} patch_chars=3889 err=
+django__django-11099 arm=harness wall=288s model=251s tool=11s steps=31 hits=4 misses=1 saved=2s tokens={'prompt': 187890, 'completion': 6178} patch_chars=9203 err=
+django__django-11133 arm=harness wall=313s model=267s tool=13s steps=40 hits=7 misses=1 saved=4s tokens={'prompt': 410334, 'completion': 7319} patch_chars=14816 err=
+django__django-11211 arm=harness wall=319s model=268s tool=19s steps=40 hits=6 misses=1 saved=4s tokens={'prompt': 646692, 'completion': 7461} patch_chars=22465 err=
+django__django-11119 arm=harness wall=344s model=294s tool=15s steps=40 hits=7 misses=0 saved=4s tokens={'prompt': 468437, 'completion': 9305} patch_chars=22332 err=
+django__django-11276 arm=harness wall=108s model=62s tool=17s steps=30 hits=5 misses=0 saved=3s tokens={'prompt': 303867, 'completion': 4471} patch_chars=920 err=
+psf__requests-1766 arm=harness wall=66s model=40s tool=10s steps=21 hits=3 misses=0 saved=2s tokens={'prompt': 123173, 'completion': 2881} patch_chars=451 err=
+psf__requests-1724 arm=harness wall=77s model=49s tool=16s steps=23 hits=3 misses=0 saved=2s tokens={'prompt': 288247, 'completion': 3412} patch_chars=4967 err=
+django__django-11239 arm=harness wall=155s model=110s tool=13s steps=34 hits=2 misses=2 saved=1s tokens={'prompt': 362605, 'completion': 8066} patch_chars=2497 err=
+psf__requests-1142 arm=harness wall=120s model=92s tool=11s steps=36 hits=4 misses=1 saved=2s tokens={'prompt': 464210, 'completion': 6746} patch_chars=200000 err=
+django__django-11265 arm=harness wall=149s model=108s tool=17s steps=40 hits=3 misses=1 saved=2s tokens={'prompt': 451434, 'completion': 8079} patch_chars=16157 err=
+pydata__xarray-2905 arm=harness wall=178s model=102s tool=48s steps=40 hits=7 misses=1 saved=4s tokens={'prompt': 385118, 'completion': 7186} patch_chars=14401 err=
+pydata__xarray-3677 arm=harness wall=119s model=58s tool=40s steps=35 hits=4 misses=0 saved=2s tokens={'prompt': 321493, 'completion': 3797} patch_chars=761 err=
+pydata__xarray-3305 arm=harness wall=134s model=79s tool=34s steps=40 hits=2 misses=0 saved=3s tokens={'prompt': 354630, 'completion': 5448} patch_chars=2537 err=
+pydata__xarray-3095 arm=harness wall=141s model=82s tool=36s steps=36 hits=4 misses=1 saved=2s tokens={'prompt': 365468, 'completion': 5744} patch_chars=7466 err=
+pydata__xarray-3151 arm=harness wall=146s model=88s tool=33s steps=34 hits=5 misses=3 saved=3s tokens={'prompt': 502637, 'completion': 6286} patch_chars=2573 err=
+pylint-dev__pylint-4604 arm=harness wall=126s model=90s tool=20s steps=40 hits=1 misses=2 saved=1s tokens={'prompt': 560599, 'completion': 6252} patch_chars=5369 err=
+pylint-dev__pylint-4661 arm=harness wall=154s model=111s tool=18s steps=40 hits=5 misses=1 saved=3s tokens={'prompt': 403509, 'completion': 8095} patch_chars=11467 err=
+pytest-dev__pytest-10051 arm=harness wall=62s model=39s tool=9s steps=24 hits=3 misses=0 saved=2s tokens={'prompt': 194401, 'completion': 2873} patch_chars=4629 err=
+pytest-dev__pytest-5809 arm=harness wall=60s model=31s tool=15s steps=17 hits=2 misses=2 saved=1s tokens={'prompt': 92109, 'completion': 2358} patch_chars=3014 err=
+pytest-dev__pytest-5631 arm=harness wall=142s model=104s tool=17s steps=37 hits=4 misses=1 saved=2s tokens={'prompt': 437767, 'completion': 8006} patch_chars=1341 err=
+pylint-dev__pylint-4970 arm=harness wall=180s model=122s tool=22s steps=40 hits=5 misses=2 saved=3s tokens={'prompt': 693633, 'completion': 9208} patch_chars=16199 err=
+sphinx-doc__sphinx-10435 arm=harness wall=163s model=120s tool=24s steps=39 hits=4 misses=1 saved=2s tokens={'prompt': 561880, 'completion': 8903} patch_chars=7571 err=
+sphinx-doc__sphinx-10466 arm=harness wall=78s model=54s tool=10s steps=20 hits=3 misses=1 saved=2s tokens={'prompt': 227479, 'completion': 3802} patch_chars=907 err=
+sympy__sympy-11618 arm=harness wall=87s model=58s tool=11s steps=27 hits=4 misses=0 saved=2s tokens={'prompt': 315176, 'completion': 4115} patch_chars=1121 err=
+sphinx-doc__sphinx-10449 arm=harness wall=194s model=148s tool=21s steps=40 hits=2 misses=5 saved=1s tokens={'prompt': 814133, 'completion': 10892} patch_chars=5191 err=
+sympy__sympy-13031 arm=harness wall=14s model=7s tool=1s steps=3 hits=1 misses=0 saved=0s tokens={'prompt': 4138, 'completion': 565} patch_chars=1282 err=
+sphinx-doc__sphinx-10323 arm=harness wall=239s model=184s tool=24s steps=40 hits=6 misses=6 saved=3s tokens={'prompt': 729286, 'completion': 14117} patch_chars=18631 err=
+sympy__sympy-12096 arm=harness wall=82s model=53s tool=13s steps=30 hits=4 misses=0 saved=2s tokens={'prompt': 263824, 'completion': 3958} patch_chars=710 err=
+sympy__sympy-13480 arm=harness wall=38s model=26s tool=6s steps=12 hits=0 misses=0 saved=0s tokens={'prompt': 38320, 'completion': 1834} patch_chars=590 err=
+sympy__sympy-13372 arm=harness wall=60s model=39s tool=10s steps=19 hits=3 misses=0 saved=2s tokens={'prompt': 96243, 'completion': 2829} patch_chars=3447 err=
+django__django-11163 arm=harness wall=886s model=764s tool=65s steps=27 hits=3 misses=1 saved=2s tokens={'prompt': 305180, 'completion': 6460} patch_chars=11257 err=
+sympy__sympy-13091 arm=harness wall=89s model=64s tool=10s steps=31 hits=3 misses=1 saved=2s tokens={'prompt': 232229, 'completion': 4672} patch_chars=578 err=
+sympy__sympy-12481 arm=harness wall=112s model=86s tool=13s steps=33 hits=2 misses=1 saved=1s tokens={'prompt': 569806, 'completion': 6552} patch_chars=6905 err=
+pytest-dev__pytest-5262 arm=harness wall=386s model=344s tool=18s steps=34 hits=8 misses=0 saved=5s tokens={'prompt': 348098, 'completion': 6215} patch_chars=3126 err=
+sympy__sympy-12419 arm=harness wall=177s model=121s tool=21s steps=40 hits=9 misses=0 saved=5s tokens={'prompt': 516664, 'completion': 9462} patch_chars=15167 err=
+sympy__sympy-13615 arm=harness wall=144s model=89s tool=22s steps=40 hits=5 misses=1 saved=2s tokens={'prompt': 663933, 'completion': 8337} patch_chars=8733 err=
+sympy__sympy-13551 arm=harness wall=158s model=112s tool=14s steps=40 hits=10 misses=3 saved=5s tokens={'prompt': 615114, 'completion': 10780} patch_chars=15674 err=
+pytest-dev__pytest-10081 arm=harness wall=1372s model=102s tool=1230s steps=40 hits=2 misses=7 saved=1s tokens={'prompt': 546806, 'completion': 10194} patch_chars=4994 err=
+arm=harness done: 50 tasks in 1907s

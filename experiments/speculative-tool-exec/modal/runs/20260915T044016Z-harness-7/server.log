@@ -1,0 +1,100 @@
+[1;36m(APIServer pid=4)[0;0m INFO:     172.20.22.147:23851 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+   POST /v1/chat/completions -> 200 OK  (duration: 2.63 s, execution: 2.58 s)
+[1;36m(APIServer pid=4)[0;0m INFO 09-15 05:29:59 [qwen3coder_tool_parser.py:76] vLLM Successfully import tool parser Qwen3CoderToolParser !
+[1;36m(APIServer pid=4)[0;0m INFO 09-15 05:29:59 [qwen3coder_tool_parser.py:76] vLLM Successfully import tool parser Qwen3CoderToolParser !
+[1;36m(APIServer pid=4)[0;0m INFO:     172.20.22.147:29737 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+   POST /v1/chat/completions -> 200 OK  (duration: 499.5 ms, execution: 458.4 ms)
+[1;36m(APIServer pid=4)[0;0m INFO 09-15 05:30:01 [loggers.py:127] Engine 000: Avg prompt throughput: 2160.0 tokens/s, Avg generation throughput: 59.8 tokens/s, Running: 0 reqs, Waiting: 0 reqs, GPU KV cache usage: 0.0%, Prefix cache hit rate: 97.0%
+[1;36m(APIServer pid=4)[0;0m INFO 09-15 05:30:01 [qwen3coder_tool_parser.py:76] vLLM Successfully import tool parser Qwen3CoderToolParser !
+[1;36m(APIServer pid=4)[0;0m INFO 09-15 05:30:03 [qwen3coder_tool_parser.py:76] vLLM Successfully import tool parser Qwen3CoderToolParser !
+[1;36m(APIServer pid=4)[0;0m INFO:     172.20.22.147:38141 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+   POST /v1/chat/completions -> 200 OK  (duration: 1.84 s, execution: 1.79 s)
+[1;36m(APIServer pid=4)[0;0m INFO 09-15 05:30:04 [qwen3coder_tool_parser.py:76] vLLM Successfully import tool parser Qwen3CoderToolParser !
+[1;36m(APIServer pid=4)[0;0m INFO 09-15 05:30:11 [loggers.py:127] Engine 000: Avg prompt throughput: 2313.3 tokens/s, Avg generation throughput: 112.1 tokens/s, Running: 1 reqs, Waiting: 0 reqs, GPU KV cache usage: 2.8%, Prefix cache hit rate: 97.0%
+[1;36m(APIServer pid=4)[0;0m INFO 09-15 05:30:11 [qwen3coder_tool_parser.py:76] vLLM Successfully import tool parser Qwen3CoderToolParser !
+[1;36m(APIServer pid=4)[0;0m INFO:     172.20.22.147:58173 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+   POST /v1/chat/completions -> 200 OK  (duration: 7.32 s, execution: 7.27 s)
+[1;36m(APIServer pid=4)[0;0m INFO 09-15 05:30:13 [qwen3coder_tool_parser.py:76] vLLM Successfully import tool parser Qwen3CoderToolParser !
+[1;36m(APIServer pid=4)[0;0m INFO 09-15 05:30:14 [qwen3coder_tool_parser.py:76] vLLM Successfully import tool parser Qwen3CoderToolParser !
+[1;36m(APIServer pid=4)[0;0m INFO:     172.20.22.147:36560 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+   POST /v1/chat/completions -> 200 OK  (duration: 448.0 ms, execution: 412.9 ms)
+[1;36m(APIServer pid=4)[0;0m INFO 09-15 05:30:16 [qwen3coder_tool_parser.py:76] vLLM Successfully import tool parser Qwen3CoderToolParser !
+[1;36m(APIServer pid=4)[0;0m INFO 09-15 05:30:21 [loggers.py:127] Engine 000: Avg prompt throughput: 2601.5 tokens/s, Avg generation throughput: 69.7 tokens/s, Running: 1 reqs, Waiting: 0 reqs, GPU KV cache usage: 3.1%, Prefix cache hit rate: 97.0%
+[1;36m(APIServer pid=4)[0;0m INFO 09-15 05:30:27 [qwen3coder_tool_parser.py:76] vLLM Successfully import tool parser Qwen3CoderToolParser !
+[1;36m(APIServer pid=4)[0;0m INFO:     172.20.22.147:57027 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+   POST /v1/chat/completions -> 200 OK  (duration: 11.4 s, execution: 11.4 s)
+[1;36m(APIServer pid=4)[0;0m INFO 09-15 05:30:29 [qwen3coder_tool_parser.py:76] vLLM Successfully import tool parser Qwen3CoderToolParser !
+[1;36m(APIServer pid=4)[0;0m INFO 09-15 05:30:30 [qwen3coder_tool_parser.py:76] vLLM Successfully import tool parser Qwen3CoderToolParser !
+[1;36m(APIServer pid=4)[0;0m INFO:     172.20.22.147:23189 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+   POST /v1/chat/completions -> 200 OK  (duration: 555.2 ms, execution: 511.8 ms)
+[1;36m(APIServer pid=4)[0;0m INFO 09-15 05:30:31 [loggers.py:127] Engine 000: Avg prompt throughput: 1459.6 tokens/s, Avg generation throughput: 81.2 tokens/s, Running: 0 reqs, Waiting: 0 reqs, GPU KV cache usage: 0.0%, Prefix cache hit rate: 97.0%
+[1;36m(APIServer pid=4)[0;0m INFO 09-15 05:30:41 [loggers.py:127] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 0.0 tokens/s, Running: 0 reqs, Waiting: 0 reqs, GPU KV cache usage: 0.0%, Prefix cache hit rate: 97.0%
+[1;36m(APIServer pid=4)[0;0m INFO 09-15 05:35:31 [qwen3coder_tool_parser.py:76] vLLM Successfully import tool parser Qwen3CoderToolParser !
+[1;36m(APIServer pid=4)[0;0m INFO 09-15 05:35:34 [qwen3coder_tool_parser.py:76] vLLM Successfully import tool parser Qwen3CoderToolParser !
+[1;36m(APIServer pid=4)[0;0m INFO:     172.20.22.147:48701 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+   POST /v1/chat/completions -> 200 OK  (duration: 3.16 s, execution: 3.12 s)
+[1;36m(APIServer pid=4)[0;0m INFO 09-15 05:35:37 [qwen3coder_tool_parser.py:76] vLLM Successfully import tool parser Qwen3CoderToolParser !
+[1;36m(APIServer pid=4)[0;0m INFO 09-15 05:35:39 [qwen3coder_tool_parser.py:76] vLLM Successfully import tool parser Qwen3CoderToolParser !
+[1;36m(APIServer pid=4)[0;0m INFO:     172.20.22.147:40153 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+   POST /v1/chat/completions -> 200 OK  (duration: 2.60 s, execution: 2.55 s)
+[1;36m(APIServer pid=4)[0;0m INFO 09-15 05:35:41 [qwen3coder_tool_parser.py:76] vLLM Successfully import tool parser Qwen3CoderToolParser !
+[1;36m(APIServer pid=4)[0;0m INFO 09-15 05:35:41 [loggers.py:127] Engine 000: Avg prompt throughput: 3024.1 tokens/s, Avg generation throughput: 66.9 tokens/s, Running: 0 reqs, Waiting: 0 reqs, GPU KV cache usage: 0.0%, Prefix cache hit rate: 97.0%
+[1;36m(APIServer pid=4)[0;0m INFO 09-15 05:35:47 [qwen3coder_tool_parser.py:76] vLLM Successfully import tool parser Qwen3CoderToolParser !
+[1;36m(APIServer pid=4)[0;0m INFO:     172.20.22.147:63784 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+   POST /v1/chat/completions -> 200 OK  (duration: 6.59 s, execution: 6.55 s)
+[1;36m(APIServer pid=4)[0;0m INFO 09-15 05:35:50 [qwen3coder_tool_parser.py:76] vLLM Successfully import tool parser Qwen3CoderToolParser !
+[1;36m(APIServer pid=4)[0;0m INFO 09-15 05:35:50 [qwen3coder_tool_parser.py:76] vLLM Successfully import tool parser Qwen3CoderToolParser !
+[1;36m(APIServer pid=4)[0;0m INFO:     172.20.22.147:41014 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+   POST /v1/chat/completions -> 200 OK  (duration: 585.4 ms, execution: 544.8 ms)
+[1;36m(APIServer pid=4)[0;0m INFO 09-15 05:35:51 [loggers.py:127] Engine 000: Avg prompt throughput: 3213.7 tokens/s, Avg generation throughput: 85.7 tokens/s, Running: 0 reqs, Waiting: 0 reqs, GPU KV cache usage: 0.0%, Prefix cache hit rate: 97.0%
+[1;36m(APIServer pid=4)[0;0m INFO 09-15 05:35:52 [qwen3coder_tool_parser.py:76] vLLM Successfully import tool parser Qwen3CoderToolParser !
+[1;36m(APIServer pid=4)[0;0m INFO 09-15 05:35:53 [qwen3coder_tool_parser.py:76] vLLM Successfully import tool parser Qwen3CoderToolParser !
+[1;36m(APIServer pid=4)[0;0m INFO:     172.20.22.147:20230 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+   POST /v1/chat/completions -> 200 OK  (duration: 1.43 s, execution: 1.39 s)
+[1;36m(APIServer pid=4)[0;0m INFO 09-15 05:35:57 [qwen3coder_tool_parser.py:76] vLLM Successfully import tool parser Qwen3CoderToolParser !
+[1;36m(APIServer pid=4)[0;0m INFO 09-15 05:35:58 [qwen3coder_tool_parser.py:76] vLLM Successfully import tool parser Qwen3CoderToolParser !
+[1;36m(APIServer pid=4)[0;0m INFO:     172.20.22.147:25440 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+   POST /v1/chat/completions -> 200 OK  (duration: 908.8 ms, execution: 873.2 ms)
+[1;36m(APIServer pid=4)[0;0m INFO 09-15 05:35:59 [qwen3coder_tool_parser.py:76] vLLM Successfully import tool parser Qwen3CoderToolParser !
+[1;36m(APIServer pid=4)[0;0m INFO 09-15 05:36:01 [loggers.py:127] Engine 000: Avg prompt throughput: 6150.8 tokens/s, Avg generation throughput: 40.3 tokens/s, Running: 1 reqs, Waiting: 0 reqs, GPU KV cache usage: 5.4%, Prefix cache hit rate: 97.0%
+[1;36m(APIServer pid=4)[0;0m INFO 09-15 05:36:06 [qwen3coder_tool_parser.py:76] vLLM Successfully import tool parser Qwen3CoderToolParser !
+[1;36m(APIServer pid=4)[0;0m INFO:     172.20.22.147:54257 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+   POST /v1/chat/completions -> 200 OK  (duration: 7.03 s, execution: 6.99 s)
+[1;36m(APIServer pid=4)[0;0m INFO 09-15 05:36:09 [qwen3coder_tool_parser.py:76] vLLM Successfully import tool parser Qwen3CoderToolParser !
+[1;36m(APIServer pid=4)[0;0m INFO 09-15 05:36:09 [qwen3coder_tool_parser.py:76] vLLM Successfully import tool parser Qwen3CoderToolParser !
+[1;36m(APIServer pid=4)[0;0m INFO:     172.20.22.147:56376 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+   POST /v1/chat/completions -> 200 OK  (duration: 717.4 ms, execution: 675.3 ms)
+[1;36m(APIServer pid=4)[0;0m INFO 09-15 05:36:10 [qwen3coder_tool_parser.py:76] vLLM Successfully import tool parser Qwen3CoderToolParser !
+[1;36m(APIServer pid=4)[0;0m INFO 09-15 05:36:11 [qwen3coder_tool_parser.py:76] vLLM Successfully import tool parser Qwen3CoderToolParser !
+[1;36m(APIServer pid=4)[0;0m INFO:     172.20.22.147:36685 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+   POST /v1/chat/completions -> 200 OK  (duration: 565.1 ms, execution: 524.8 ms)
+[1;36m(APIServer pid=4)[0;0m INFO 09-15 05:36:11 [loggers.py:127] Engine 000: Avg prompt throughput: 5003.5 tokens/s, Avg generation throughput: 73.8 tokens/s, Running: 0 reqs, Waiting: 0 reqs, GPU KV cache usage: 0.0%, Prefix cache hit rate: 97.0%
+[1;36m(APIServer pid=4)[0;0m INFO 09-15 05:36:11 [qwen3coder_tool_parser.py:76] vLLM Successfully import tool parser Qwen3CoderToolParser !
+[1;36m(APIServer pid=4)[0;0m INFO 09-15 05:36:12 [qwen3coder_tool_parser.py:76] vLLM Successfully import tool parser Qwen3CoderToolParser !
+[1;36m(APIServer pid=4)[0;0m INFO:     172.20.22.147:46195 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+   POST /v1/chat/completions -> 200 OK  (duration: 517.1 ms, execution: 464.6 ms)
+[1;36m(APIServer pid=4)[0;0m INFO 09-15 05:36:12 [qwen3coder_tool_parser.py:76] vLLM Successfully import tool parser Qwen3CoderToolParser !
+[1;36m(APIServer pid=4)[0;0m INFO 09-15 05:36:13 [qwen3coder_tool_parser.py:76] vLLM Successfully import tool parser Qwen3CoderToolParser !
+[1;36m(APIServer pid=4)[0;0m INFO:     172.20.22.147:40578 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+   POST /v1/chat/completions -> 200 OK  (duration: 662.5 ms, execution: 626.8 ms)
+[1;36m(APIServer pid=4)[0;0m INFO 09-15 05:36:13 [qwen3coder_tool_parser.py:76] vLLM Successfully import tool parser Qwen3CoderToolParser !
+[1;36m(APIServer pid=4)[0;0m INFO 09-15 05:36:16 [qwen3coder_tool_parser.py:76] vLLM Successfully import tool parser Qwen3CoderToolParser !
+[1;36m(APIServer pid=4)[0;0m INFO:     172.20.22.147:30869 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+   POST /v1/chat/completions -> 200 OK  (duration: 3.38 s, execution: 3.34 s)
+[1;36m(APIServer pid=4)[0;0m INFO 09-15 05:36:17 [qwen3coder_tool_parser.py:76] vLLM Successfully import tool parser Qwen3CoderToolParser !
+[1;36m(APIServer pid=4)[0;0m INFO 09-15 05:36:18 [qwen3coder_tool_parser.py:76] vLLM Successfully import tool parser Qwen3CoderToolParser !
+[1;36m(APIServer pid=4)[0;0m INFO:     172.20.22.147:59310 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+   POST /v1/chat/completions -> 200 OK  (duration: 1.05 s, execution: 1.01 s)
+[1;36m(APIServer pid=4)[0;0m INFO 09-15 05:36:19 [qwen3coder_tool_parser.py:76] vLLM Successfully import tool parser Qwen3CoderToolParser !
+[1;36m(APIServer pid=4)[0;0m INFO 09-15 05:36:20 [qwen3coder_tool_parser.py:76] vLLM Successfully import tool parser Qwen3CoderToolParser !
+[1;36m(APIServer pid=4)[0;0m INFO:     172.20.22.147:25967 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+   POST /v1/chat/completions -> 200 OK  (duration: 979.2 ms, execution: 935.6 ms)
+[1;36m(APIServer pid=4)[0;0m INFO 09-15 05:36:21 [qwen3coder_tool_parser.py:76] vLLM Successfully import tool parser Qwen3CoderToolParser !
+[1;36m(APIServer pid=4)[0;0m INFO 09-15 05:36:21 [loggers.py:127] Engine 000: Avg prompt throughput: 15614.0 tokens/s, Avg generation throughput: 67.6 tokens/s, Running: 1 reqs, Waiting: 0 reqs, GPU KV cache usage: 6.0%, Prefix cache hit rate: 97.0%
+[1;36m(APIServer pid=4)[0;0m INFO 09-15 05:36:22 [qwen3coder_tool_parser.py:76] vLLM Successfully import tool parser Qwen3CoderToolParser !
+[1;36m(APIServer pid=4)[0;0m INFO:     172.20.22.147:58162 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+   POST /v1/chat/completions -> 200 OK  (duration: 1.10 s, execution: 1.07 s)
+[1;36m(APIServer pid=4)[0;0m INFO 09-15 05:36:23 [qwen3coder_tool_parser.py:76] vLLM Successfully import tool parser Qwen3CoderToolParser !
+[1;36m(APIServer pid=4)[0;0m INFO 09-15 05:36:28 [qwen3coder_tool_parser.py:76] vLLM Successfully import tool parser Qwen3CoderToolParser !
+[1;36m(APIServer pid=4)[0;0m INFO:     172.20.22.147:25868 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+   POST /v1/chat/completions -> 200 OK  (duration: 4.92 s, execution: 4.88 s)

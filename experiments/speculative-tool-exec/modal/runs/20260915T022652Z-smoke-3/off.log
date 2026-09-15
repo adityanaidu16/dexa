@@ -1,0 +1,9 @@
+Traceback (most recent call last):
+  File "/home/runner/work/dexa/dexa/experiments/speculative-tool-exec/modal/live_agent_modal.py", line 377, in <module>
+    main()
+  File "/home/runner/work/dexa/dexa/experiments/speculative-tool-exec/modal/live_agent_modal.py", line 355, in main
+    ready_s = wait_for_server(args.base_url, args.api_key)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/dexa/dexa/experiments/speculative-tool-exec/modal/live_agent_modal.py", line 59, in wait_for_server
+    raise RuntimeError(f"server not ready after {max_wait}s: {last}")
+RuntimeError: server not ready after 1800s: TimeoutError('The read operation timed out')

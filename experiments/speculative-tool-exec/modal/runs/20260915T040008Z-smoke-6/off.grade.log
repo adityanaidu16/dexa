@@ -1,0 +1,4 @@
+grading 3 of 3 records in experiments/speculative-tool-exec/modal/runs/20260915T040008Z-smoke-6/off.jsonl (concurrency 8)
+django__django-10880 arm=off resolved=True applied=True tests={'FAIL_TO_PASS': {'success': 1, 'failure': 0}, 'PASS_TO_PASS': {'success': 55, 'failure': 0}, 'FAIL_TO_FAIL': {'success': 0, 'failure': 0}, 'PASS_TO_FAIL': {'success': 0, 'failure': 0}} err=
+django__django-10914 arm=off resolved=True applied=True tests={'FAIL_TO_PASS': {'success': 1, 'failure': 0}, 'PASS_TO_PASS': {'success': 98, 'failure': 0}, 'FAIL_TO_FAIL': {'success': 0, 'failure': 0}, 'PASS_TO_FAIL': {'success': 0, 'failure': 0}} err=
+django__django-10097 arm=off resolved=False applied=True tests={'FAIL_TO_PASS': {'success': 438, 'failure': 0}, 'PASS_TO_PASS': {'success': 1427, 'failure': 5}, 'FAIL_TO_FAIL': {'success': 0, 'failure': 0}, 'PASS_TO_FAIL': {'success': 0, 'failure': 0}} err=

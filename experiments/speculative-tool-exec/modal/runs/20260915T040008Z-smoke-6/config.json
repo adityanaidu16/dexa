@@ -1,0 +1,1 @@
+{"phase":"smoke","start":0,"count":3,"concurrency":1,"arms":"off,harness","gpu":"H100","model":"Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8","vllm_version":"0.11.0","max_steps":40,"run_id":"20260915T040008Z-smoke-6"}

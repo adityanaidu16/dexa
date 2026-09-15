@@ -1,0 +1,5 @@
+server ready after 0s; arm=harness tasks=3 concurrency=1
+django__django-10097 arm=harness wall=87s model=43s tool=21s steps=40 hits=0 misses=0 saved=0s tokens={'prompt': 301546, 'completion': 4575} patch_chars=73344 err=
+django__django-10880 arm=harness wall=116s model=71s tool=14s steps=40 hits=1 misses=5 saved=0s tokens={'prompt': 401757, 'completion': 7920} patch_chars=11657 err=
+django__django-10914 arm=harness wall=92s model=50s tool=14s steps=35 hits=0 misses=4 saved=0s tokens={'prompt': 285850, 'completion': 5591} patch_chars=706 err=
+arm=harness done: 3 tasks in 295s

@@ -1,0 +1,5 @@
+server ready after 274s; arm=off tasks=3 concurrency=1
+django__django-10097 arm=off wall=94s model=55s tool=16s steps=40 hits=0 misses=0 saved=0s tokens={'prompt': 364802, 'completion': 5845} patch_chars=21490 err=
+django__django-10880 arm=off wall=198s model=150s tool=18s steps=40 hits=0 misses=0 saved=0s tokens={'prompt': 729223, 'completion': 17249} patch_chars=6189 err=
+django__django-10914 arm=off wall=74s model=41s tool=12s steps=31 hits=0 misses=0 saved=0s tokens={'prompt': 229989, 'completion': 4504} patch_chars=11121 err=
+arm=off done: 3 tasks in 366s

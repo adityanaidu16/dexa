@@ -1,0 +1,4 @@
+grading 3 of 3 records in experiments/speculative-tool-exec/modal/runs/20260915T040008Z-smoke-6/harness.jsonl (concurrency 8)
+django__django-10914 arm=harness resolved=True applied=True tests={'FAIL_TO_PASS': {'success': 1, 'failure': 0}, 'PASS_TO_PASS': {'success': 98, 'failure': 0}, 'FAIL_TO_FAIL': {'success': 0, 'failure': 0}, 'PASS_TO_FAIL': {'success': 0, 'failure': 0}} err=
+django__django-10097 arm=harness resolved=False applied=True tests={'FAIL_TO_PASS': {'success': 0, 'failure': 438}, 'PASS_TO_PASS': {'success': 0, 'failure': 1432}, 'FAIL_TO_FAIL': {'success': 0, 'failure': 0}, 'PASS_TO_FAIL': {'success': 0, 'failure': 0}} err=
+django__django-10880 arm=harness resolved=False applied=True tests={'FAIL_TO_PASS': {'success': 1, 'failure': 0}, 'PASS_TO_PASS': {'success': 54, 'failure': 1}, 'FAIL_TO_FAIL': {'success': 0, 'failure': 0}, 'PASS_TO_FAIL': {'success': 0, 'failure': 0}} err=

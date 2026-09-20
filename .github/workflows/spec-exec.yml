@@ -196,6 +196,8 @@ jobs:
           fi
           pkill -f "modal app logs" || true
           echo "=== server log: $(wc -l < "$OUT/server.log") lines ==="
+          grep -cE "POST /v1/chat/completions" "$OUT/server.log" || true
+          gzip -9 "$OUT/server.log" || true
           for ARM in $ARMS; do
             if [ ! -f "$OUT/$ARM.jsonl" ]; then echo "no results for arm $ARM, skipping grading"; continue; fi
             echo "=== grading arm $ARM ==="

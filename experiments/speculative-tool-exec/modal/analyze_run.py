@@ -44,6 +44,9 @@ def main(run_dir):
     conc = max(r.get("concurrency", 1) for r in off.values())
     W(f"\nPer-task ratio harness/off of the boot-corrected loop: median {st.median(ratios):.3f}, IQR {p(ratios, .25):.2f} to {p(ratios, .75):.2f}.")
     W(f"Tasks per GPU-hour on the paired tasks at concurrency {conc}, boot excluded: off {n * 3600 / (so / conc):.0f}, harness {n * 3600 / (sh / conc):.0f}, ratio {so / sh:.3f}.")
+    if any(r.get("arm_order") is not None for r in har.values()):
+        first_h = [(o, h) for o, h in pairs if h.get("arm_order") == 0]; first_o = [(o, h) for o, h in pairs if h.get("arm_order") == 1]
+        W(f"Interleaved run: the absolute figures assume each arm had the server alone; the ratio is the number to read. Order check, ratio when harness ran first (n={len(first_h)}): {sum(loop(h) for o, h in first_h) / max(1e-9, sum(loop(o) for o, h in first_h)):.3f}; when off ran first (n={len(first_o)}): {sum(loop(h) for o, h in first_o) / max(1e-9, sum(loop(o) for o, h in first_o)):.3f}.")
     k = 3; so_t = sum(sorted(loop(o) for o, h in pairs)[:-k]); sh_t = sum(sorted(loop(h) for o, h in pairs)[:-k])
     W(f"Dropping the {k} slowest tasks in each arm: ratio {so_t / sh_t:.3f}.\n")
     # speculation accounting

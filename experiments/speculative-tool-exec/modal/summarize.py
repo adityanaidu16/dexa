@@ -50,6 +50,18 @@ def summarize(run_dir):
         }
         conc = arms[arm]["concurrency"]
         arms[arm]["tasks_per_gpu_hour_steady"] = (len(ok) * 3600 / (arms[arm]["agent_sum_s"] / conc)) if arms[arm]["agent_sum_s"] else 0
+    # interleaved runs: the two arms' spans overlap almost entirely
+    spans = {}
+    for arm in arms:
+        recs = load(os.path.join(run_dir, f"{arm}.jsonl"))
+        starts = [datetime.fromisoformat(r["started_at"]) for r in recs if r.get("started_at")]; ends = [datetime.fromisoformat(r["ended_at"]) for r in recs if r.get("ended_at")]
+        if starts and ends: spans[arm] = (min(starts), max(ends))
+    if "off" in spans and "harness" in spans:
+        a, b = spans["off"], spans["harness"]
+        overlap = (min(a[1], b[1]) - max(a[0], b[0])).total_seconds()
+        shorter = min((a[1] - a[0]).total_seconds(), (b[1] - b[0]).total_seconds())
+        if shorter > 0 and overlap / shorter > 0.5:
+            for arm in arms: arms[arm]["interleaved"] = True
     return arms
 
 
@@ -69,7 +81,10 @@ def render(arms):
         ratio = arms["harness"]["tasks_per_gpu_hour"] / arms["off"]["tasks_per_gpu_hour"]
         ratio2 = (arms["harness"]["tasks_per_gpu_hour_steady"] / arms["off"]["tasks_per_gpu_hour_steady"]) if arms["off"]["tasks_per_gpu_hour_steady"] else 0
         out.append("")
-        out.append(f"harness / off throughput ratio: {ratio:.3f} by arm span, {ratio2:.3f} steady state  (gate: >= 1.30 continue, < 1.15 kill; judged only at equal resolve rate)")
+        if arms.get("off", {}).get("interleaved"):
+            out.append(f"interleaved run: both arms shared the server for the whole span, so arm-span throughput is not meaningful and the absolute steady-state figures assume each arm had the server alone; the ratio is the number to read. harness / off ratio of summed agent loop: {ratio2:.3f}  (gate: >= 1.30 continue, < 1.15 kill; judged only at equal resolve rate; see analysis.md for the paired, boot-corrected version)")
+        else:
+            out.append(f"harness / off throughput ratio: {ratio:.3f} by arm span, {ratio2:.3f} steady state  (gate: >= 1.30 continue, < 1.15 kill; judged only at equal resolve rate)")
     return "\n".join(out)
 
 

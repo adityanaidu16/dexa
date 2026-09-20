@@ -168,7 +168,8 @@ jobs:
           if [ "${{ inputs.arms }}" = "both" ]; then CONC=$(( CONC )); fi
           echo "{\"phase\":\"${{ inputs.phase }}\",\"start\":${{ inputs.start }},\"count\":$COUNT,\"concurrency\":$CONC,\"arms\":\"${{ inputs.arms }}\",\"gpu\":\"$SPEC_GPU\",\"model\":\"$SPEC_MODEL\",\"vllm_version\":\"$SPEC_VLLM_VERSION\",\"max_steps\":${{ inputs.max_steps }},\"run_id\":\"$RUN_ID\"}" > "$OUT/config.json"
           FAILED=0
-          (modal app logs spec-exec-vllm > "$OUT/server.log" 2>&1 &) ; sleep 2
+          nohup setsid modal app logs --timestamps spec-exec-vllm > "$OUT/server.log" 2>&1 < /dev/null &
+          LOGPID=$!; sleep 15; echo "server log stream pid $LOGPID, $(wc -l < "$OUT/server.log") lines so far"
           snapshot_metrics() { curl -sS -m 30 -H "Authorization: Bearer $SPEC_VLLM_API_KEY" "$VLLM_URL/metrics" > "$OUT/$1.metrics.txt" 2>/dev/null || true; }
           if [ "${{ inputs.arms }}" = "both" ]; then
             echo "=== interleaved arms ==="
@@ -194,7 +195,7 @@ jobs:
               if [ "$RC" != "0" ]; then echo "::error::arm $ARM exited with $RC"; FAILED=1; break; fi
             done
           fi
-          pkill -f "modal app logs" || true
+          kill $LOGPID 2>/dev/null || true; pkill -f "modal app logs" || true
           echo "=== server log: $(wc -l < "$OUT/server.log") lines ==="
           grep -cE "POST /v1/chat/completions" "$OUT/server.log" || true
           gzip -9 "$OUT/server.log" || true

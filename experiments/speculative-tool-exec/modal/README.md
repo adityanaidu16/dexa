@@ -53,10 +53,11 @@ modal app stop spec-exec-vllm
 
 ## Results so far
 
-- Smoke (run 6, 3 django tasks per arm, concurrency 1): pipeline verified end to end; exposed a matcher defect (absolute against relative paths) that was fixed before the full run.
-- Phase 1 (run 7, 50 tasks per arm, concurrency 8, arms in sequence): **gate result kill.** Harness/off tasks per GPU-hour 0.69 by arm span, 0.89 steady state, 0.68 on the 41 paired tasks with sandbox boot removed, 0.77 with the three slowest tasks per arm dropped. Rules hit 76 percent (rule B 97, rule A 30) and saved 2.3 s per task against a ceiling of 10.9 s and a median loop of 115 s. Resolve rate 24 against 22 on the paired tasks. Nine harness records errored at the arm switch (a gateway non-completion body, now retried), the off arm paid 41 s per task of image pulls, and 14 model calls stalled for over 120 s; the full reading, with the per-task table, is in `runs/20260915T044016Z-harness-7/analysis.md` and in `docs/experiments/speculative-test-execution.md`.
+- Smoke (run 6, 3 django tasks per arm, concurrency 1): pipeline verified end to end; exposed a matcher defect (absolute against relative paths) that was fixed before the full runs.
+- Run 7 (50 tasks per arm, arms in sequence): ratio 0.69 by span, 0.68 paired and boot-corrected, confounded by an outage at the arm switch (nine errored harness records), the first arm's image pulls, and 14 stalls. Kept as the first attempt; see `runs/20260915T044016Z-harness-7/analysis.md`.
+- **Run 9 (50 tasks, both arms per task in the same worker, alternating order): gate result kill, arms at parity.** Throughput ratio harness/off 0.87 raw and 0.99 with stall time removed, typical task 3 percent slower with speculation on; resolve 27 against 24; rules hit 76 percent (rule B 92, rule A 32) and saved 2.1 s per task against a median loop of 138 s. vLLM's counters: prefix-cache hit rate 97 percent, zero preemptions, prefill 155 s against decode 8,599 s, no server-side call over 60 s while five client-side calls stalled 311 to 910 s (transport, not inference). See `runs/20260920T012018Z-harness-9/analysis.md` and `metrics_summary.md`, and the write-up in `docs/experiments/speculative-test-execution.md`.
 
-Changes since run 7, for any rerun: `--spec both` runs every task in both arms inside the same worker with alternating order (removes arm-order and image-cache confounds; the workflow's default `arms=both`), the whole server log is streamed for the run, vLLM `/metrics` is snapshotted per arm (prefix-cache hits and queries, preemptions, prefill and decode time), and a non-completion body from the gateway is retried.
+Next run worth doing: a concurrency sweep on the vanilla arm (8, 16, 32, 64 sessions on one H100) with the metrics snapshot per level, to find where prefix-cache hits fall and preemptions begin, which is where the residency lever starts to have something to work on.
 
 ## Cost
 

@@ -18,6 +18,8 @@ Per-task ratio harness/off of the boot-corrected loop: median 1.029, IQR 0.82 to
 Tasks per GPU-hour on the paired tasks at concurrency 8, boot excluded: off 168, harness 146, ratio 0.868.
 Interleaved run: the absolute figures assume each arm had the server alone; the ratio is the number to read. Order check, ratio when harness ran first (n=25): 1.701; when off ran first (n=25): 0.820.
 Dropping the 3 slowest tasks in each arm: ratio 0.948.
+Removing the part of any single model call beyond 120 s (stalls): sum ratio 0.986, per-task median 1.029.
+Order check on medians, stall-free: harness ran first (n=25) median ratio 1.079; off ran first (n=25) 0.969. Second run of a task against its first run, any arm: median 0.926.
 
 ## Speculation accounting (harness arm, paired tasks)
 

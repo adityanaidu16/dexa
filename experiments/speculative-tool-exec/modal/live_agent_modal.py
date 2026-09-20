@@ -385,7 +385,7 @@ def main():
                 except Exception:
                     pass
     tasks = [t for t in tasks if t["instance_id"] not in done]
-    client = OpenAI(base_url=args.base_url.rstrip("/") + "/v1", api_key=args.api_key, timeout=900, max_retries=2)
+    client = OpenAI(base_url=args.base_url.rstrip("/") + "/v1", api_key=args.api_key, timeout=300, max_retries=3)
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
 
     ready_s = wait_for_server(args.base_url, args.api_key)

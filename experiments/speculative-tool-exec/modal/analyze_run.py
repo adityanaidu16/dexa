@@ -48,7 +48,14 @@ def main(run_dir):
         first_h = [(o, h) for o, h in pairs if h.get("arm_order") == 0]; first_o = [(o, h) for o, h in pairs if h.get("arm_order") == 1]
         W(f"Interleaved run: the absolute figures assume each arm had the server alone; the ratio is the number to read. Order check, ratio when harness ran first (n={len(first_h)}): {sum(loop(h) for o, h in first_h) / max(1e-9, sum(loop(o) for o, h in first_h)):.3f}; when off ran first (n={len(first_o)}): {sum(loop(h) for o, h in first_o) / max(1e-9, sum(loop(o) for o, h in first_o)):.3f}.")
     k = 3; so_t = sum(sorted(loop(o) for o, h in pairs)[:-k]); sh_t = sum(sorted(loop(h) for o, h in pairs)[:-k])
-    W(f"Dropping the {k} slowest tasks in each arm: ratio {so_t / sh_t:.3f}.\n")
+    W(f"Dropping the {k} slowest tasks in each arm: ratio {so_t / sh_t:.3f}.")
+    def stall_free(r): return loop(r) - sum(max(0, s["model_s"] - 120) for s in r["steps"] if "model_s" in s)
+    W(f"Removing the part of any single model call beyond 120 s (stalls): sum ratio {sum(stall_free(o) for o, h in pairs) / sum(stall_free(h) for o, h in pairs):.3f}, per-task median {st.median(stall_free(h) / stall_free(o) for o, h in pairs):.3f}.")
+    if any(h.get("arm_order") is not None for o, h in pairs):
+        hf = [(o, h) for o, h in pairs if h.get("arm_order") == 0]; of = [(o, h) for o, h in pairs if h.get("arm_order") == 1]
+        if hf and of:
+            W(f"Order check on medians, stall-free: harness ran first (n={len(hf)}) median ratio {st.median(stall_free(h) / stall_free(o) for o, h in hf):.3f}; off ran first (n={len(of)}) {st.median(stall_free(h) / stall_free(o) for o, h in of):.3f}. Second run of a task against its first run, any arm: median {st.median((stall_free(h) / stall_free(o)) if h.get('arm_order') == 1 else (stall_free(o) / stall_free(h)) for o, h in pairs):.3f}.")
+    W("")
     # speculation accounting
     hits = [e for o, h in pairs for e in h.get("spec_events", []) if e["kind"] == "hit"]
     misses = [e for o, h in pairs for e in h.get("spec_events", []) if e["kind"] == "miss"]

@@ -1,6 +1,6 @@
 # Speculative test execution after edits: a replay experiment
 
-*Final. Code, raw per-session records, and the aggregation script: `experiments/speculative-tool-exec/`. Replayed 2026-09-03 to 2026-09-04; live phase-1 run on Modal 2026-09-15, records under `experiments/speculative-tool-exec/modal/runs/`.*
+*Final. Code, raw per-session records, and the aggregation script: `experiments/speculative-tool-exec/`. Replayed 2026-09-03 to 2026-09-04; live runs on Modal 2026-09-15 to 2026-09-21, records under `experiments/speculative-tool-exec/modal/runs/`.*
 
 ## Question
 
@@ -69,6 +69,8 @@ Per hit, a coding agent on today's model speeds saves about 5 to 8 seconds on a 
 2. **A hit is safe.** In 97.5% of 442 hits the speculative output equalled a real run on the same tree; the inspected remainder differed only in stdout/stderr interleaving. Speculating on read-only tools in between costs nothing, and a miss wastes 0.5 s of container CPU on average.
 3. **The saving is set by the test, not by the harness.** Sessions contain 2.6 predictable post-edit runs on average. Inside these SWE-smith repositories the runs last 0.3 s at the median, so the benchmark itself saves seconds per task. On the production distribution the same hit is worth roughly 5 s on a pytest rerun and 3 s on a script rerun at today's median model step, rising to 12 s and 6 s at the p90 step, and falling to about a second if model steps drop to 1.5 s. Per task that is tens of seconds today against a median task of several minutes, and it shrinks as inference gets faster, which is the opposite of the tool-aware residency lever, whose value grows as inference gets faster.
 4. **The live run confirms the ceiling and fails the gate.** Fifty SWE-bench Verified tasks, each run in both arms with an open coder model on one H100 (section below): the rules hit 76 percent of the time, saved 2.1 s per task against a median loop of 138 s, and the arms came out at parity (throughput ratio 0.99 with transport stalls removed, typical task 3 percent slower with speculation on, resolve 27 against 24) against a kill line of 1.15. The server's counters add the finding that at eight agent sessions per GPU the prefix cache already holds 97 percent of every prompt with no evictions, so the residency lever has nothing to work on until sessions per GPU rise; the concurrency sweep that finds that point is the next run.
+
+5. **One H100 holds about 32 of these agent sessions before the KV cache thrashes.** At 64 the prefix-cache hit rate fell from 96.5 to 31 percent, 1,517 sequences were preempted, time to first token went from 74 ms to 6 s, and tasks per GPU-hour fell 26 percent while GPU cost per task rose 35 percent. The knee is set by sessions times context against the KV budget, which puts it at three or four sessions for 128-thousand-token contexts. Whether a host-memory KV tier moves the knee is the next measurement.
 
 **Product reading.** This is a harness feature, not an inference feature: two rules in the agent loop, verifiable by a buyer on their own traces in an afternoon, with a ceiling of a few percent of task time on today's tests. It belongs in an agent SDK or a sandbox product's tool layer, where the sandbox already sees every edit and every command, rather than in a serving engine. The engine-side counterpart, keeping the session's KV resident through the now-overlapped test run, is what turns the same event into a capacity gain; the live run measured the harness half and found it at parity, and its server counters (97 percent prefix-cache hit rate, no preemptions, prefill under 2 percent of engine time at eight sessions per GPU) say the residency half only starts to matter at higher session density, which is the next measurement.
 
@@ -152,6 +154,67 @@ which is what the interleaved design was built to check.
 
 **Cost.** Run 9 took 65 minutes of H100 time end to end including grading, about $5 at list price plus sandbox CPU;
 all runs together about three H100-hours.
+
+## Phase 2: how many agent sessions one GPU holds
+
+Run 9 said the residency lever has nothing to work on at eight sessions per GPU. This run asks where it starts to.
+Same model, tasks, harness and server, vanilla arm only, and the number of sessions in flight stepped through 8, 16,
+32 and 64 on the one H100, one level after another, with the task list repeated at the higher levels so each level
+runs at least two full waves (50, 50, 100 and 150 task runs). vLLM's counters are differenced across each level.
+Records and the per-level analysis: `experiments/speculative-tool-exec/modal/runs/20260921T003645Z-sweep-10/`.
+
+**The agent's view.**
+
+| sessions in flight | task runs | loop per task, median (s) | model call median (s) | model call p90 (s) | tasks per GPU-hour, level span | GPU cost per task at $4 per hour |
+|---|---|---|---|---|---|---|
+| 8 | 50 | 131 | 1.1 | 7.4 | 174 | $0.023 |
+| 16 | 50 | 187 | 1.6 | 11.7 | 231 | $0.017 |
+| 32 | 100 | 222 | 2.1 | 15.0 | 295 | $0.014 |
+| 64 | 150 | 693 | 13.6 | 48.5 | 218 | $0.018 |
+
+**The engine's view** (vLLM counters, deltas per level).
+
+| sessions in flight | model calls | prompt tokens per call | prefix-cache hit rate | uncached prompt tokens per call | preemptions | prefill time, all calls (s) | time to first token, mean | time per output token, mean (ms) | generated tokens per second |
+|---|---|---|---|---|---|---|---|---|---|
+| 8 | 1,638 | 11,120 | 96.9 percent | 343 | 0 | 69 | 54 ms | 12.9 | 313 |
+| 16 | 1,678 | 11,695 | 96.8 percent | 373 | 0 | 80 | 63 ms | 19.4 | 462 |
+| 32 | 3,188 | 10,932 | 96.5 percent | 380 | 0 | 170 | 74 ms | 26.8 | 516 |
+| 64 | 4,882 | 11,026 | 31.4 percent | 38,669 | 1,517 | 2,225 | 6.0 s | 72.0 | 392 |
+
+**Reading.** Between 32 and 64 sessions the server falls off a cliff, and the counters say exactly which one. Contexts
+are the same at every level (about 11 thousand prompt tokens per call, 21 thousand by the end of a task, 32 steps),
+so it is density, not longer contexts. The KV cache holds 452 thousand tokens (28,282 blocks of 16; 96 KB per token
+for this model in bf16, 44.5 GB). Thirty-two sessions at 11 thousand tokens average is 332 thousand, and the prefix
+cache still served 96.5 percent of every prompt with no preemptions. Sixty-four sessions is 678 thousand on average
+and 1.36 million late in tasks: the cache thrashes (hit rate 31 percent, 38.7 thousand uncached tokens per call, a
+hundred times more), running sequences get evicted and recomputed (1,517 preemptions), time to first token goes from
+74 ms to 6 s, and per-call latency is 13.6 s at the median at every context depth, against 2.1 s one level down.
+Throughput peaks at 32 sessions (295 tasks per GPU-hour, $0.014 of GPU per task) and falls 26 percent at 64 while
+cost per task rises 35 percent, even though the generated-token rate only fell from 516 to 392 per second: the engine
+spent its time re-prefilling 189 million tokens it had already computed once.
+
+So on this hardware and model the knee is between 32 and 64 concurrent agent sessions, and the number that sets it is
+sessions times context against the GPU's KV budget. The same arithmetic for 128-thousand-token contexts, the size a
+production coding agent runs at, gives three or four sessions per H100 before the cliff, which is why the residency
+question is a product question for long-context agents at any concurrency and not only a scale question for short
+ones. That figure is arithmetic on the measured budget, not a measurement.
+
+**What a residency tier would have to do**, stated as the next measurement rather than a claim. The 189 million
+re-prefilled tokens at 64 sessions are KV that was resident minutes earlier and was dropped. Sixty-four sessions of
+21 thousand tokens is 129 GB of KV, which fits in the host memory of an H100 node several times over. Restoring 38.7
+thousand tokens of KV over PCIe is a fraction of a second against the recompute the engine did instead, and vLLM 0.11
+ships a CPU-offloading KV connector that does exactly this. The test is the 64-session level again with offloading
+on: if per-call latency and throughput come back toward the 32-level numbers, the lever is real and measured, and the
+gap is roughly two times the sessions per GPU at equal latency, or half the GPU cost per task; if they do not, the
+64-session loss is decode contention rather than residency and the lever is smaller than the cliff suggests. One
+H100-hour.
+
+**Caveats for this run.** One model and one server; levels ran in sequence so the server was warm for every level
+after the first; no grading in this phase (submit rates were 68, 64, 68 and 71 percent across the levels, so the
+agent's behaviour did not degrade with density); the gauge sampler that was to record KV usage every 15 s failed
+after one sample, so KV occupancy is inferred from the counters and the budget rather than observed; the
+steady-state throughput figure over-credits levels whose last wave ran under-saturated, so the level-span figure is
+the one quoted.
 
 ## Caveats
 

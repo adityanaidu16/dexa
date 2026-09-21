@@ -8,9 +8,9 @@ on:
   workflow_dispatch:
     inputs:
       phase:
-        description: "smoke (3 tasks, both arms) | harness (full arms) | deploy-only | logs (print the server's Modal logs) | stop"
+        description: "smoke (3 tasks, both arms) | harness (full arms) | sweep (vanilla arm at several concurrency levels) | deploy-only | logs | stop"
         type: choice
-        options: [smoke, harness, deploy-only, logs, stop]
+        options: [smoke, harness, sweep, deploy-only, logs, stop]
         default: smoke
       start:
         description: "first task index in tasks_verified_50.json"
@@ -39,6 +39,12 @@ on:
       environment:
         description: "GitHub environment holding the Modal secrets (repository secrets also work)"
         default: "spec-exec"
+      levels:
+        description: "sweep only: comma-separated sessions-in-flight levels"
+        default: "8,16,32,64"
+      repeats:
+        description: "sweep only: comma-separated task-list repeats per level (same length as levels)"
+        default: "1,1,2,3"
 
 permissions:
   contents: write
@@ -158,6 +164,39 @@ jobs:
           echo "vLLM endpoint: $URL"
           echo "VLLM_URL=$URL" >> "$GITHUB_ENV"
 
+      - name: Run the concurrency sweep
+        if: inputs.phase == 'sweep'
+        run: |
+          OUT="$EXP_DIR/runs/$RUN_ID"
+          mkdir -p "$OUT"
+          echo "{\"phase\":\"sweep\",\"start\":${{ inputs.start }},\"count\":${{ inputs.count }},\"levels\":\"${{ inputs.levels }}\",\"repeats\":\"${{ inputs.repeats }}\",\"gpu\":\"$SPEC_GPU\",\"model\":\"$SPEC_MODEL\",\"vllm_version\":\"$SPEC_VLLM_VERSION\",\"max_steps\":${{ inputs.max_steps }},\"run_id\":\"$RUN_ID\"}" > "$OUT/config.json"
+          nohup setsid modal app logs --timestamps spec-exec-vllm > "$OUT/server.log" 2>&1 < /dev/null &
+          LOGPID=$!
+          # gauge sampler: KV usage, running and waiting requests, cumulative counters, every 15 s
+          ( while true; do echo "=== $(date -u +%Y-%m-%dT%H:%M:%SZ)"; curl -sS -m 10 -H "Authorization: Bearer $SPEC_VLLM_API_KEY" "$VLLM_URL/metrics" 2>/dev/null | grep -E "^vllm:(kv_cache_usage_perc|num_requests_running|num_requests_waiting|prefix_cache_(hits|queries)_total|num_preemptions_total|prompt_tokens_total|generation_tokens_total)\{"; sleep 15; done ) > "$OUT/metrics_samples.txt" 2>/dev/null &
+          SAMPLERPID=$!
+          snap() { curl -sS -m 30 -H "Authorization: Bearer $SPEC_VLLM_API_KEY" "$VLLM_URL/metrics" > "$2" 2>/dev/null || true; }
+          IFS=',' read -ra LEVELS <<< "${{ inputs.levels }}"; IFS=',' read -ra REPEATS <<< "${{ inputs.repeats }}"
+          FAILED=0
+          for i in "${!LEVELS[@]}"; do
+            C="${LEVELS[$i]}"; R="${REPEATS[$i]:-1}"
+            echo "=== level $C sessions in flight, task list x$R ==="
+            snap before "$OUT/c$C.before.txt"
+            set +e
+            python "$EXP_DIR/live_agent_modal.py" --base-url "$VLLM_URL" --api-key "$SPEC_VLLM_API_KEY" \
+              --model "$SPEC_MODEL" --spec off --start "${{ inputs.start }}" --count "${{ inputs.count }}" --repeat "$R" \
+              --concurrency "$C" --max-steps "${{ inputs.max_steps }}" --out "$OUT/c$C.jsonl" 2>&1 | tee "$OUT/c$C.log"
+            RC=${PIPESTATUS[0]}; set -e
+            snap after "$OUT/c$C.after.txt"
+            if [ "$RC" != "0" ]; then echo "::error::level $C exited with $RC"; FAILED=1; break; fi
+            sleep 20
+          done
+          kill $SAMPLERPID 2>/dev/null || true; kill $LOGPID 2>/dev/null || true; pkill -f "modal app logs" || true
+          gzip -9 "$OUT/server.log" || true
+          echo "=== sweep summary ==="
+          python "$EXP_DIR/sweep_analysis.py" "$OUT" | tee "$OUT/sweep.md" || FAILED=1
+          exit $FAILED
+
       - name: Run the arms
         if: inputs.phase == 'smoke' || inputs.phase == 'harness'
         run: |
@@ -213,7 +252,7 @@ jobs:
           exit $FAILED
 
       - name: Upload results
-        if: always() && (inputs.phase == 'smoke' || inputs.phase == 'harness')
+        if: always() && (inputs.phase == 'smoke' || inputs.phase == 'harness' || inputs.phase == 'sweep')
         uses: actions/upload-artifact@v4
         with:
           name: spec-exec-${{ env.RUN_ID }}
@@ -221,7 +260,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Commit results to the branch
-        if: always() && (inputs.phase == 'smoke' || inputs.phase == 'harness')
+        if: always() && (inputs.phase == 'smoke' || inputs.phase == 'harness' || inputs.phase == 'sweep')
         run: |
           OUT="$EXP_DIR/runs/$RUN_ID"
           [ -d "$OUT" ] || exit 0

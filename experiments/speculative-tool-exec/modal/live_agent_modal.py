@@ -180,9 +180,9 @@ def chat(client, model, messages):
 
 
 def run_task(inst, client, model, spec, app, max_steps=40, per_cmd_timeout=300):
-    iid = inst["instance_id"]
-    image = f"{IMAGE_PREFIX}{iid.replace('__', '_1776_')}:latest"
-    rec = {"instance_id": iid, "repo": inst["repo"], "model": model, "arm": "harness" if spec else "off", "image": image,
+    iid = inst["instance_id"]; base = inst.get("task_id", iid)
+    image = f"{IMAGE_PREFIX}{base.replace('__', '_1776_')}:latest"
+    rec = {"instance_id": iid, "task_id": base, "repo": inst["repo"], "model": model, "arm": "harness" if spec else "off", "image": image,
            "started_at": now_iso(), "steps": [], "spec_events": [], "tokens": {"prompt": 0, "completion": 0}}
     t_start = time.time(); model_s = 0.0; tool_s = 0.0; env = None; submitted = False
     try:
@@ -333,7 +333,7 @@ def grade_file(path, tasks_by_id, model, app, concurrency):
     lock = threading.Lock()
 
     def one(r):
-        g = grade(tasks_by_id[r["instance_id"]], r.get("model_patch", ""), model, app)
+        g = grade(tasks_by_id[r.get("task_id", r["instance_id"].split("#")[0])], r.get("model_patch", ""), model, app)
         with lock:
             r["grade"] = g
         print(f"{r['instance_id']} arm={r.get('arm')} resolved={g.get('resolved')} applied={g.get('patch_applied')} tests={g.get('tests')} err={g.get('error', '')}", flush=True)
@@ -362,6 +362,7 @@ def main():
     ap.add_argument("--spec", choices=["off", "harness", "both"], default="harness",
                     help="both: run every task in both arms in the same worker, alternating which arm goes first, and write <out>.off.jsonl / <out>.harness.jsonl")
     ap.add_argument("--concurrency", type=int, default=1)
+    ap.add_argument("--repeat", type=int, default=1, help="run the selected task list this many times (records carry instance_id#k for k>=1 and task_id without the suffix)")
     ap.add_argument("--out", required=True)
     ap.add_argument("--max-steps", type=int, default=40)
     args = ap.parse_args()
@@ -374,6 +375,14 @@ def main():
     if not args.base_url:
         ap.error("--base-url is required in run mode")
     tasks = all_tasks[args.start:args.start + args.count]
+    if args.repeat > 1:
+        expanded = []
+        for k in range(args.repeat):
+            for t in tasks:
+                t2 = dict(t); t2["task_id"] = t["instance_id"]
+                if k: t2["instance_id"] = f"{t['instance_id']}#{k}"
+                expanded.append(t2)
+        tasks = expanded
     interleave = args.spec == "both"
     outs = {"off": args.out + ".off.jsonl", "harness": args.out + ".harness.jsonl"} if interleave else {args.spec: args.out}
     done = set()
